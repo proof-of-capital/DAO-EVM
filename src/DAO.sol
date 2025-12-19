@@ -559,6 +559,21 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
                 emit RewardClaimed(vaultId, token, rewards);
             }
         }
+
+        // Loop through LP tokens to claim rewards
+        for (uint256 i = 0; i < lpTokens.length; i++) {
+            address lpToken = lpTokens[i];
+            uint256 rewards = earnedRewards[vaultId][lpToken];
+
+            if (rewards > 0) {
+                earnedRewards[vaultId][lpToken] = 0;
+                accountedBalance[lpToken] -= rewards;
+
+                IERC20(lpToken).safeTransfer(msg.sender, rewards);
+
+                emit RewardClaimed(vaultId, lpToken, rewards);
+            }
+        }
     }
 
     /// @notice Request to exit DAO by selling all shares
@@ -1156,6 +1171,18 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             }
 
             vaultRewardIndex[vaultId][token] = rewardPerShareStored[token];
+        }
+
+        // Update rewards for LP tokens
+        for (uint256 i = 0; i < lpTokens.length; i++) {
+            address lpToken = lpTokens[i];
+            uint256 pending = _calculatePendingRewards(vaultId, lpToken);
+
+            if (pending > 0) {
+                earnedRewards[vaultId][lpToken] += pending;
+            }
+
+            vaultRewardIndex[vaultId][lpToken] = rewardPerShareStored[lpToken];
         }
     }
 
