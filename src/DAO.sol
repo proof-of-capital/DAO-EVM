@@ -382,11 +382,15 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Deposit mainCollateral during fundraising stage
     /// @param amount Amount of mainCollateral to deposit (18 decimals)
-    function depositFundraising(uint256 amount) external nonReentrant fundraisingActive {
+    /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
+    function depositFundraising(uint256 amount, uint256 vaultId) external nonReentrant fundraisingActive {
         require(amount > 0, AmountMustBeGreaterThanZero());
         require(amount >= fundraisingConfig.minDeposit, DepositBelowMinimum());
 
-        uint256 vaultId = addressToVaultId[msg.sender];
+        // If vaultId is 0, use sender's vault, otherwise use provided vaultId
+        if (vaultId == 0) {
+            vaultId = addressToVaultId[msg.sender];
+        }
         require(vaultId > 0 && vaultId < nextVaultId, NoVaultFound());
 
         DataTypes.Vault storage vault = vaults[vaultId];
@@ -425,11 +429,15 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Deposit launch tokens during active stage to receive shares
     /// @dev New participants can enter by depositing launches; price is fixed at entry
     /// @param launchAmount Amount of launch tokens to deposit
-    function depositLaunches(uint256 launchAmount) external nonReentrant atStage(DataTypes.Stage.Active) {
+    /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
+    function depositLaunches(uint256 launchAmount, uint256 vaultId) external nonReentrant atStage(DataTypes.Stage.Active) {
         require(launchAmount >= fundraisingConfig.minLaunchDeposit, BelowMinLaunchDeposit());
         require(pocContracts.length > 0, NoPOCContractsConfigured());
 
-        uint256 vaultId = addressToVaultId[msg.sender];
+        // If vaultId is 0, use sender's vault, otherwise use provided vaultId
+        if (vaultId == 0) {
+            vaultId = addressToVaultId[msg.sender];
+        }
         require(vaultId > 0 && vaultId < nextVaultId, NoVaultFound());
 
         DataTypes.Vault storage vault = vaults[vaultId];
