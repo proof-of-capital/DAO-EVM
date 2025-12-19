@@ -1288,10 +1288,12 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             } else {
                 uint256 partialShares = (availableFunds * request.shares) / exitValue;
                 if (partialShares > 0) {
-                    request.shares -= partialShares;
-
-                    _executePartialExit(request.vaultId, partialShares, availableFunds, token);
-                    availableFunds = 0;
+                    uint256 partialExitValue = _calculateExitValue(request.vaultId, partialShares);
+                    if (partialExitValue > 0 && partialExitValue <= availableFunds) {
+                        request.shares -= partialShares;
+                        _executePartialExit(request.vaultId, partialShares, partialExitValue, token);
+                        availableFunds -= partialExitValue;
+                    }
                 }
             }
         }
