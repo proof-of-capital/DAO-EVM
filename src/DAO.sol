@@ -422,33 +422,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         emit FundraisingDeposit(vaultId, msg.sender, amount, shares);
     }
 
-    /// @notice Deposit mainCollateral during active stage
-    /// @param mainCollateralAmount Amount of mainCollateral to deposit
-    function depositActive(uint256 mainCollateralAmount) external nonReentrant atStage(DataTypes.Stage.Active) {
-        require(mainCollateralAmount > 0, AmountMustBeGreaterThanZero());
-        require(mainCollateral != address(0), InvalidAddress());
-        require(totalSupplyAtFundraising > 0, InvalidState());
-
-        uint256 vaultId = addressToVaultId[msg.sender];
-        require(vaultId < nextVaultId, NoVaultFound());
-
-        DataTypes.Vault storage vault = vaults[vaultId];
-        require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
-
-        uint256 shares = (mainCollateralAmount * totalSharesSupply) / totalSupplyAtFundraising;
-
-        _updateVaultRewards(vaultId);
-
-        vault.shares += shares;
-        totalSharesSupply += shares;
-
-        vaultMainCollateralDeposit[vaultId] += mainCollateralAmount;
-
-        IERC20(mainCollateral).safeTransferFrom(msg.sender, address(this), mainCollateralAmount);
-
-        emit VaultDeposited(vaultId, mainCollateralAmount, shares);
-    }
-
     /// @notice Deposit launch tokens during active stage to receive shares
     /// @dev New participants can enter by depositing launches; price is fixed at entry
     /// @param launchAmount Amount of launch tokens to deposit
