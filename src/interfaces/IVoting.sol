@@ -61,22 +61,7 @@ interface IVoting {
     function execute(uint256 proposalId) external;
 
     // Admin Functions
-    function setCategoryThresholds(
-        DataTypes.VotingCategory category,
-        uint256 quorumPercentage,
-        uint256 approvalThreshold
-    ) external;
-
-    function setAllCategoryThresholds(
-        uint256 governanceQuorum,
-        uint256 governanceApproval,
-        uint256 pocQuorum,
-        uint256 pocApproval,
-        uint256 financialQuorum,
-        uint256 financialApproval,
-        uint256 otherQuorum,
-        uint256 otherApproval
-    ) external;
+    // Note: Category thresholds are set only in constructor and cannot be changed
 
     // View functions
     function getProposal(uint256 proposalId) external view returns (DataTypes.ProposalCore memory);

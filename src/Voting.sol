@@ -299,69 +299,6 @@ contract Voting is IVoting {
         admin = newAdmin;
     }
 
-    /// @notice Set voting thresholds for a specific category
-    /// @param category Voting category to configure
-    /// @param _quorumPercentage Minimum participation rate (0-100%)
-    /// @param _approvalThreshold Minimum approval rate (0-100%)
-    function setCategoryThresholds(
-        DataTypes.VotingCategory category,
-        uint256 _quorumPercentage,
-        uint256 _approvalThreshold
-    ) external onlyAdmin {
-        require(_quorumPercentage > 0 && _quorumPercentage <= 100, InvalidQuorum());
-        require(_approvalThreshold > 0 && _approvalThreshold <= 100, InvalidThreshold());
-
-        categoryThresholds[category] =
-            DataTypes.VotingThresholds({quorumPercentage: _quorumPercentage, approvalThreshold: _approvalThreshold});
-
-        emit CategoryThresholdsUpdated(category, _quorumPercentage, _approvalThreshold);
-    }
-
-    /// @notice Set voting thresholds for all categories at once
-    /// @param governanceQuorum Governance category quorum percentage
-    /// @param governanceApproval Governance category approval threshold
-    /// @param pocQuorum POC category quorum percentage
-    /// @param pocApproval POC category approval threshold
-    /// @param financialQuorum Financial category quorum percentage
-    /// @param financialApproval Financial category approval threshold
-    /// @param otherQuorum Other category quorum percentage
-    /// @param otherApproval Other category approval threshold
-    function setAllCategoryThresholds(
-        uint256 governanceQuorum,
-        uint256 governanceApproval,
-        uint256 pocQuorum,
-        uint256 pocApproval,
-        uint256 financialQuorum,
-        uint256 financialApproval,
-        uint256 otherQuorum,
-        uint256 otherApproval
-    ) external onlyAdmin {
-        require(governanceQuorum > 0 && governanceQuorum <= 100, InvalidQuorum());
-        require(governanceApproval > 0 && governanceApproval <= 100, InvalidThreshold());
-        require(pocQuorum > 0 && pocQuorum <= 100, InvalidQuorum());
-        require(pocApproval > 0 && pocApproval <= 100, InvalidThreshold());
-        require(financialQuorum > 0 && financialQuorum <= 100, InvalidQuorum());
-        require(financialApproval > 0 && financialApproval <= 100, InvalidThreshold());
-        require(otherQuorum > 0 && otherQuorum <= 100, InvalidQuorum());
-        require(otherApproval > 0 && otherApproval <= 100, InvalidThreshold());
-
-        categoryThresholds[DataTypes.VotingCategory.Governance] =
-            DataTypes.VotingThresholds({quorumPercentage: governanceQuorum, approvalThreshold: governanceApproval});
-        emit CategoryThresholdsUpdated(DataTypes.VotingCategory.Governance, governanceQuorum, governanceApproval);
-
-        categoryThresholds[DataTypes.VotingCategory.POC] =
-            DataTypes.VotingThresholds({quorumPercentage: pocQuorum, approvalThreshold: pocApproval});
-        emit CategoryThresholdsUpdated(DataTypes.VotingCategory.POC, pocQuorum, pocApproval);
-
-        categoryThresholds[DataTypes.VotingCategory.Financial] =
-            DataTypes.VotingThresholds({quorumPercentage: financialQuorum, approvalThreshold: financialApproval});
-        emit CategoryThresholdsUpdated(DataTypes.VotingCategory.Financial, financialQuorum, financialApproval);
-
-        categoryThresholds[DataTypes.VotingCategory.Other] =
-            DataTypes.VotingThresholds({quorumPercentage: otherQuorum, approvalThreshold: otherApproval});
-        emit CategoryThresholdsUpdated(DataTypes.VotingCategory.Other, otherQuorum, otherApproval);
-    }
-
     // ============================================
     // VIEW FUNCTIONS
     // ============================================
