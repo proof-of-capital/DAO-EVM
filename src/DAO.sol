@@ -1131,7 +1131,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         uint256 participantsShare = remainingAfterRoyalty - creatorShare;
         uint256 usedForExits = 0;
 
-        if (exitQueue.length > 0 && !_isExitQueueEmpty() && participantsShare > 0) {
+        if (!_isExitQueueEmpty() && participantsShare > 0) {
             uint256 balanceBefore = IERC20(lpToken).balanceOf(address(this));
             _processExitQueue(participantsShare, lpToken);
             uint256 balanceAfter = IERC20(lpToken).balanceOf(address(this));

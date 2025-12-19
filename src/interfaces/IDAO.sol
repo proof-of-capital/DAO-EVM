@@ -203,7 +203,6 @@ interface IDAO {
 
     function createVault(address backup, address emergency) external returns (uint256 vaultId);
     function depositFundraising(uint256 amount, uint256 vaultId) external;
-    function depositActive(uint256 mainCollateralAmount) external;
     function depositLaunches(uint256 launchAmount, uint256 vaultId) external;
     function updatePrimaryAddress(uint256 vaultId, address newPrimary) external;
     function updateBackupAddress(uint256 vaultId, address newBackup) external;
