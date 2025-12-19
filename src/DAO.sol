@@ -631,7 +631,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Allocate launch tokens to creator, reducing their profit share proportionally
     /// @dev Can only be done once per ALLOCATION_PERIOD; max MAX_CREATOR_ALLOCATION_PERCENT per period
     /// @param launchAmount Amount of launch tokens to allocate
-    function allocateLaunchesToCreator(uint256 launchAmount) external onlyAdmin atStage(DataTypes.Stage.Active) {
+    function allocateLaunchesToCreator(uint256 launchAmount) external onlyAdmin atStage(DataTypes.Stage.Active) {//???
         require(block.timestamp >= lastCreatorAllocation + ALLOCATION_PERIOD, AllocationTooSoon());
         require(launchAmount > 0, AmountMustBeGreaterThanZero());
 
@@ -1090,11 +1090,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         // 4. Distribute remaining to DAO participants
         uint256 remainingForParticipants = participantsShare - usedForExits;
 
-        if (!isRewardToken[token]) {
-            rewardTokens.push(token);
-            isRewardToken[token] = true;
-        }
-
         if (remainingForParticipants > 0 && totalSharesSupply > 0) {
             rewardPerShareStored[token] += (remainingForParticipants * PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
         }
@@ -1395,13 +1390,15 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     }
 
     /// @notice Calculate price deviation in basis points
+    /// @dev Only checks deviation when actual < expected (unfavorable rate)
     /// @param expected Expected amount
     /// @param actual Actual amount
-    /// @return Deviation in basis points
+    /// @return Deviation in basis points (0 if actual >= expected)
     function _calculateDeviation(uint256 expected, uint256 actual) internal pure returns (uint256) {
         if (expected == 0) return BASIS_POINTS;
+        // Only check deviation when selling at less favorable rate (actual < expected)
         if (actual >= expected) {
-            return ((actual - expected) * BASIS_POINTS) / expected;
+            return 0;
         } else {
             return ((expected - actual) * BASIS_POINTS) / expected;
         }
