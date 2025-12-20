@@ -77,6 +77,7 @@ interface IDAO {
     error InvalidVolume();
     error NoProfitToDistribute();
     error NoShares();
+    error RewardPerShareTooLow();
     error LPTokenUsesDifferentDistribution();
     error NotBoardMemberOrAdmin();
     error BelowMinLaunchDeposit();
@@ -119,6 +120,7 @@ interface IDAO {
     error ExecutionFailed(string reason);
     error UpgradeNotAuthorized();
     error TokenNotAdded();
+    error POCLockPeriodNotEnded();
 
     // ============================================
     // EVENTS
