@@ -432,7 +432,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
     function depositLaunches(uint256 launchAmount, uint256 vaultId) external nonReentrant atStage(DataTypes.Stage.Active) {
         require(launchAmount >= fundraisingConfig.minLaunchDeposit, BelowMinLaunchDeposit());
-        require(pocContracts.length > 0, NoPOCContractsConfigured());
 
         // If vaultId is 0, use sender's vault, otherwise use provided vaultId
         if (vaultId == 0) {
@@ -586,7 +585,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
         require(vault.shares > 0, AmountMustBeGreaterThanZero());
         require(vaultExitRequestIndex[vaultId] == 0, AlreadyInExitQueue());
-        require(pocContracts.length > 0, NoPOCContractsConfigured());
 
         uint256 sharesToExit = vault.shares; // Exit with all shares
         uint256 launchPriceNow = _getLaunchPriceFromPOC();
@@ -811,7 +809,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Finalize fundraising collection and move to exchange stage
     function finalizeFundraisingCollection() external onlyAdmin atStage(DataTypes.Stage.Fundraising) {
         require(totalCollectedMainCollateral >= fundraisingConfig.targetAmountMainCollateral, TargetNotReached());
-        require(pocContracts.length > 0, NoPOCContractsConfigured());
 
         totalSupplyAtFundraising = totalSharesSupply;
         currentStage = DataTypes.Stage.FundraisingExchange;
@@ -1055,45 +1052,64 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         _distributeProfit(token);
     }
 
+    /// @notice Internal function to distribute royalty share
+    /// @param token Token address
+    /// @param totalAmount Total amount to distribute
+    /// @return royaltyShare Amount distributed as royalty
+    function _distributeRoyaltyShare(address token, uint256 totalAmount) internal returns (uint256 royaltyShare) {
+        royaltyShare = (totalAmount * royaltyPercent) / BASIS_POINTS;
+        if (royaltyShare > 0 && royaltyRecipient != address(0)) {
+            IERC20(token).safeTransfer(royaltyRecipient, royaltyShare);
+            emit RoyaltyDistributed(token, royaltyRecipient, royaltyShare);
+        }
+    }
+
+    /// @notice Internal function to distribute creator share
+    /// @param token Token address
+    /// @param amount Amount to calculate creator share from
+    /// @return creatorShare Amount distributed to creator
+    function _distributeCreatorShare(address token, uint256 amount) internal returns (uint256 creatorShare) {
+        creatorShare = (amount * creatorProfitPercent) / BASIS_POINTS;
+        if (creatorShare > 0) {
+            IERC20(token).safeTransfer(creator, creatorShare);
+            emit CreatorProfitDistributed(token, creator, creatorShare);
+        }
+    }
+
+    /// @notice Internal function to distribute to participants (process exit queue and update rewards)
+    /// @param token Token address
+    /// @param participantsShare Amount available for participants
+    /// @return remainingForParticipants Amount remaining after exit queue processing
+    function _distributeToParticipants(address token, uint256 participantsShare) internal returns (uint256 remainingForParticipants) {
+        uint256 usedForExits = 0;
+
+        if (exitQueue.length > 0 && !_isExitQueueEmpty() && participantsShare > 0 && !isLPToken[token]) {
+            uint256 balanceBefore = IERC20(token).balanceOf(address(this));
+            _processExitQueue(participantsShare, token);
+            uint256 balanceAfter = IERC20(token).balanceOf(address(this));
+            usedForExits = balanceBefore - balanceAfter;
+        }
+
+        remainingForParticipants = participantsShare - usedForExits;
+
+        if (remainingForParticipants > 0 && totalSharesSupply > 0) {
+            rewardPerShareStored[token] += (remainingForParticipants * PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
+        }
+    }
+
     /// @notice Internal function to distribute unaccounted balance of a token as profit
     /// @param token Token address to distribute
     function _distributeProfit(address token) internal {
         uint256 unaccounted = IERC20(token).balanceOf(address(this)) - accountedBalance[token];
         if (unaccounted == 0) return; // No profit to distribute, skip silently
 
-        // 1. Calculate and transfer royalty share (e.g., 10% to POC1)
-        uint256 royaltyShare = (unaccounted * royaltyPercent) / BASIS_POINTS;
-        if (royaltyShare > 0 && royaltyRecipient != address(0)) {
-            IERC20(token).safeTransfer(royaltyRecipient, royaltyShare);
-            emit RoyaltyDistributed(token, royaltyRecipient, royaltyShare);
-        }
+        uint256 royaltyShare = _distributeRoyaltyShare(token, unaccounted);
+        uint256 creatorShare = _distributeCreatorShare(token, unaccounted);
+        
+        uint256 participantsShare = unaccounted - royaltyShare - creatorShare;
+        uint256 remainingForParticipants = _distributeToParticipants(token, participantsShare);
 
-        // 2. Calculate and transfer creator share (N% of remaining after royalty)
-        uint256 remainingAfterRoyalty = unaccounted - royaltyShare;
-        uint256 creatorShare = (remainingAfterRoyalty * creatorProfitPercent) / BASIS_POINTS;
-        if (creatorShare > 0) {
-            IERC20(token).safeTransfer(creator, creatorShare);
-            emit CreatorProfitDistributed(token, creator, creatorShare);
-        }
-
-        // 3. Process exit queue first (buyback shares from exiting participants)
-        uint256 participantsShare = remainingAfterRoyalty - creatorShare;
-        uint256 usedForExits = 0;
-
-        if (exitQueue.length > 0 && !_isExitQueueEmpty() && participantsShare > 0) {
-            uint256 balanceBefore = IERC20(token).balanceOf(address(this));
-            _processExitQueue(participantsShare, token);
-            uint256 balanceAfter = IERC20(token).balanceOf(address(this));
-            usedForExits = balanceBefore > balanceAfter ? balanceBefore - balanceAfter : 0;
-        }
-
-        // 4. Distribute remaining to DAO participants
-        uint256 remainingForParticipants = participantsShare - usedForExits;
-
-        if (remainingForParticipants > 0 && totalSharesSupply > 0) {
-            rewardPerShareStored[token] += (remainingForParticipants * PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
-        }
-        accountedBalance[token] += unaccounted;
+        accountedBalance[token] += remainingForParticipants;
 
         emit ProfitDistributed(token, unaccounted);
     }
@@ -1113,36 +1129,15 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(toDistribute > 0, NoProfitToDistribute());
 
         // 1. Calculate and transfer royalty share
-        uint256 royaltyShare = (toDistribute * royaltyPercent) / BASIS_POINTS;
-        if (royaltyShare > 0 && royaltyRecipient != address(0)) {
-            IERC20(lpToken).safeTransfer(royaltyRecipient, royaltyShare);
-            emit RoyaltyDistributed(lpToken, royaltyRecipient, royaltyShare);
-        }
+        uint256 royaltyShare = _distributeRoyaltyShare(lpToken, toDistribute);
 
-        // 2. Calculate and transfer creator share
+        // 2. Calculate and transfer creator share (from remaining after royalty)
         uint256 remainingAfterRoyalty = toDistribute - royaltyShare;
-        uint256 creatorShare = (remainingAfterRoyalty * creatorProfitPercent) / BASIS_POINTS;
-        if (creatorShare > 0) {
-            IERC20(lpToken).safeTransfer(creator, creatorShare);
-            emit CreatorProfitDistributed(lpToken, creator, creatorShare);
-        }
+        uint256 creatorShare = _distributeCreatorShare(lpToken, remainingAfterRoyalty);
 
-        // 3. Process exit queue if any
+        // 3. Process exit queue and distribute remaining to participants
         uint256 participantsShare = remainingAfterRoyalty - creatorShare;
-        uint256 usedForExits = 0;
-
-        if (!_isExitQueueEmpty() && participantsShare > 0) {
-            uint256 balanceBefore = IERC20(lpToken).balanceOf(address(this));
-            _processExitQueue(participantsShare, lpToken);
-            uint256 balanceAfter = IERC20(lpToken).balanceOf(address(this));
-            usedForExits = balanceBefore > balanceAfter ? balanceBefore - balanceAfter : 0;
-        }
-
-        // 4. Distribute remaining to participants
-        uint256 remainingForParticipants = participantsShare - usedForExits;
-        if (remainingForParticipants > 0) {
-            rewardPerShareStored[lpToken] += (remainingForParticipants * PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
-        }
+        _distributeToParticipants(lpToken, participantsShare);
 
         // Update accounting - reduce the tracked balance
         accountedBalance[lpToken] -= toDistribute;
@@ -1223,14 +1218,42 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             (entry.weightedAvgSharePrice * vault.shares + fundraisingConfig.sharePrice * newShares) / totalShares;
     }
 
-    /// @notice Get launch token price from first POC contract
-    /// @return Launch price in USD (18 decimals)
+    /// @notice Get weighted average launch token price from all active POC contracts
+    /// @return Weighted average launch price in USD (18 decimals)
     function _getLaunchPriceFromPOC() internal view returns (uint256) {
-        require(pocContracts.length > 0, NoPOCContractsConfigured());
-        uint256 launchPriceInCollateral = IProofOfCapital(pocContracts[0].pocContract).currentPrice();
-        uint256 collateralPriceUSD = _getPOCCollateralPrice(0);
-
-        return (launchPriceInCollateral * collateralPriceUSD) / PRICE_DECIMALS_MULTIPLIER;
+        uint256 totalWeightedPrice = 0;
+        uint256 totalSharePercent = 0;
+        
+        for (uint256 i = 0; i < pocContracts.length; i++) {
+            DataTypes.POCInfo storage poc = pocContracts[i];
+            
+            if (!poc.active) {
+                continue;
+            }
+            
+            uint256 launchPriceInCollateral = IProofOfCapital(poc.pocContract).currentPrice();
+            
+            if (launchPriceInCollateral == 0) {
+                continue;
+            }
+            
+            uint256 collateralPriceUSD = _getPOCCollateralPrice(i);
+            
+            if (collateralPriceUSD == 0) {
+                continue;
+            }
+            
+            uint256 launchPriceUSD = (launchPriceInCollateral * collateralPriceUSD) / PRICE_DECIMALS_MULTIPLIER;
+            
+            if (launchPriceUSD == 0) {
+                continue;
+            }
+            
+            totalWeightedPrice += (launchPriceUSD * poc.sharePercent);
+            totalSharePercent += poc.sharePercent;
+        }
+        
+        return totalWeightedPrice / totalSharePercent;
     }
 
     /// @notice Calculate exit value for a participant
@@ -1361,13 +1384,32 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         emit PartialExitProcessed(vaultId, shares, payoutAmount, token);
     }
 
+    /// @notice Get price from Chainlink aggregator and normalize to 18 decimals
+    /// @param priceFeed Address of Chainlink price feed aggregator
+    /// @return Price in USD (18 decimals)
+    function _getChainlinkPrice(address priceFeed) internal view returns (uint256) {
+        IAggregatorV3 aggregator = IAggregatorV3(priceFeed);
+        (, int256 price,,,) = aggregator.latestRoundData();
+        require(price > 0, InvalidPrice());
+
+        uint8 decimals = aggregator.decimals();
+
+        // Normalize to 18 decimals
+        if (decimals < 18) {
+            return uint256(price) * (10 ** (18 - decimals));
+        } else if (decimals > 18) {
+            return uint256(price) / (10 ** (decimals - 18));
+        }
+        return uint256(price);
+    }
+
     /// @notice Get oracle price for a collateral token
     /// @param token Collateral token address
     /// @return Price in USD (18 decimals)
     function _getOraclePrice(address token) internal view returns (uint256) {
         DataTypes.CollateralInfo storage info = sellableCollaterals[token];
         require(info.active, CollateralNotActive());
-        return Orderbook.getCollateralPrice(info);
+        return _getChainlinkPrice(info.priceFeed);
     }
 
     /// @notice Get POC collateral price from its oracle
@@ -1375,18 +1417,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @return Price in USD (18 decimals)
     function _getPOCCollateralPrice(uint256 pocIdx) internal view returns (uint256) {
         DataTypes.POCInfo storage poc = pocContracts[pocIdx];
-        IAggregatorV3 priceFeed = IAggregatorV3(poc.priceFeed);
-        (, int256 price,,,) = priceFeed.latestRoundData();
-        require(price > 0, InvalidPrice());
-
-        uint8 decimals = priceFeed.decimals();
-
-        if (decimals < 18) {
-            return uint256(price) * (10 ** (18 - decimals));
-        } else if (decimals > 18) {
-            return uint256(price) / (10 ** (decimals - 18));
-        }
-        return uint256(price);
+        return _getChainlinkPrice(poc.priceFeed);
     }
 
     /// @notice Calculate price deviation in basis points
