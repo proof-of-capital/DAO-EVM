@@ -259,6 +259,7 @@ interface IDAO {
 
     function dissolve() external;
     function claimDissolution(address[] calldata tokens) external;
+    function claimCreatorDissolution() external;
     function executeProposal(address targetContract, bytes calldata callData) external;
 
     // ============================================
@@ -293,7 +294,6 @@ interface IDAO {
     function royaltyPercent() external view returns (uint256);
 
     // Shares and supply
-    function totalSupplyAtFundraising() external view returns (uint256);
     function totalSharesSupply() external view returns (uint256);
     function nextVaultId() external view returns (uint256);
     function totalLaunchTokensSold() external view returns (uint256);
@@ -320,15 +320,13 @@ interface IDAO {
 
     // Routers and tokens
     function availableRouterByAdmin(address) external view returns (bool);
-    function availableTokensByAdmin(address) external view returns (bool);
+    function sellableCollaterals(address) external view returns (address token, address priceFeed, bool active);
 
     // Rewards
     function accountedBalance(address) external view returns (uint256);
     function rewardPerShareStored(address) external view returns (uint256);
     function vaultRewardIndex(uint256, address) external view returns (uint256);
     function earnedRewards(uint256, address) external view returns (uint256);
-    function rewardTokens(uint256) external view returns (address);
-    function isRewardToken(address) external view returns (bool);
 
     // LP tokens
     function lpTokens(uint256) external view returns (address);

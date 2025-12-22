@@ -213,11 +213,8 @@ library DataTypes {
     /// @notice Participant entry information for tracking deposits and fixed prices
     struct ParticipantEntry {
         uint256 depositedMainCollateral; // Total mainCollateral deposited by participant
-        uint256 depositedLaunches; // Total launch tokens deposited by participant
         uint256 fixedSharePrice; // Fixed share price at entry time (USD, 18 decimals)
         uint256 fixedLaunchPrice; // Fixed launch price at entry time (USD, 18 decimals)
-        uint256 fixedLaunchPriceAtActive; // Fixed launch price when entering during Active stage (USD, 18 decimals)
-        uint256 fixedCollateralPrice; // Fixed collateral price at entry time (USD, 18 decimals)
         uint256 entryTimestamp; // Timestamp of first entry
         uint256 weightedAvgSharePrice; // Weighted average share price across all deposits (USD, 18 decimals)
         uint256 weightedAvgLaunchPrice; // Weighted average launch price across all deposits (USD, 18 decimals)
@@ -230,6 +227,52 @@ library DataTypes {
         uint256 requestTimestamp; // When exit was requested
         uint256 fixedLaunchPriceAtRequest; // Launch price at time of request
         bool processed; // Whether exit has been processed
+    }
+
+    // ============================================
+    // CONSTRUCTOR PARAMETERS STRUCTURES
+    // ============================================
+
+    /// @notice POC contract parameters for constructor
+    struct POCConstructorParams {
+        address pocContract;
+        address collateralToken;
+        address priceFeed;
+        uint256 sharePercent;
+    }
+
+    /// @notice Orderbook parameters for constructor (without cache fields)
+    struct OrderbookConstructorParams {
+        uint256 initialPrice; // Initial price in USD (18 decimals)
+        uint256 initialVolume; // Initial volume per level (18 decimals)
+        uint256 priceStepPercent; // Price step percentage in basis points (500 = 5%)
+        int256 volumeStepPercent; // Volume step percentage in basis points (-100 = -1%, can be negative)
+        uint256 proportionalityCoefficient; // Proportionality coefficient (7500 = 0.75, in basis points)
+        uint256 totalSupply; // Total supply (1e27 = 1 billion with 18 decimals)
+    }
+
+    /// @notice Constructor parameters struct to avoid stack too deep
+    struct ConstructorParams {
+        address launchToken;
+        address mainCollateral;
+        address creator;
+        uint256 creatorProfitPercent;
+        uint256 creatorInfraPercent;
+        address royaltyRecipient; // Address to receive royalty (e.g., POC1)
+        uint256 royaltyPercent; // Royalty percentage in basis points (1000 = 10%)
+        uint256 minDeposit;
+        uint256 minLaunchDeposit; // Minimum launch token deposit for Active stage entry (e.g., 10000e18)
+        uint256 sharePrice;
+        uint256 launchPrice;
+        uint256 targetAmountMainCollateral;
+        uint256 fundraisingDuration;
+        uint256 extensionPeriod;
+        address[] collateralTokens;
+        address[] priceFeeds;
+        address[] routers;
+        address[] tokens;
+        POCConstructorParams[] pocParams;
+        OrderbookConstructorParams orderbookParams;
     }
 }
 

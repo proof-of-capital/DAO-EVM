@@ -67,7 +67,6 @@ library Orderbook {
     /// @param sellableCollaterals Collaterals mapping from storage
     /// @param accountedBalance Accounted balance mapping from storage
     /// @param availableRouterByAdmin Router whitelist mapping from storage
-    /// @param availableTokensByAdmin Token whitelist mapping from storage
     /// @param totalShares Total shares supply
     /// @param sharePrice Share price in USD (18 decimals)
     /// @return result Sell operation result
@@ -79,7 +78,6 @@ library Orderbook {
         mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
         mapping(address => uint256) storage accountedBalance,
         mapping(address => bool) storage availableRouterByAdmin,
-        mapping(address => bool) storage availableTokensByAdmin,
         uint256 totalShares,
         uint256 sharePrice
     ) internal returns (DataTypes.SellResult memory result) {
@@ -109,12 +107,8 @@ library Orderbook {
         // Transfer launch tokens from seller
         launchToken.safeTransferFrom(params.seller, contractAddress, params.launchTokenAmount);
 
-        // Verify router and tokens are available before swap
+        // Verify router is available before swap
         require(availableRouterByAdmin[params.router], OrderbookSwapLibrary.RouterNotAvailable());
-        require(
-            availableTokensByAdmin[address(launchToken)] && availableTokensByAdmin[params.collateral],
-            OrderbookSwapLibrary.TokenNotAvailable()
-        );
 
         // Execute swap using router
         uint256 receivedCollateral = OrderbookSwapLibrary.executeSwap(

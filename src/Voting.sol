@@ -505,11 +505,6 @@ contract Voting is IVoting {
             return true;
         }
 
-        // Check if it's a reward token
-        if (dao.isRewardToken(target)) {
-            return true;
-        }
-
         // Check if it's an LP token
         if (dao.isLPToken(target)) {
             return true;
@@ -520,8 +515,9 @@ contract Voting is IVoting {
             return true;
         }
 
-        // Check if it's an available token by admin
-        if (dao.availableTokensByAdmin(target)) {
+        // Check if it's a sellable collateral (reward tokens are now sellable collaterals)
+        (,, bool isActive) = dao.sellableCollaterals(target);
+        if (isActive) {
             return true;
         }
 

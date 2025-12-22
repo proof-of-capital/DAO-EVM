@@ -90,14 +90,14 @@ contract DeployDAO is Script {
         }
 
         // Prepare POC contracts for constructor
-        DAO.POCConstructorParams[] memory pocParams;
+        DataTypes.POCConstructorParams[] memory pocParams;
 
         // Optional: Load POC contracts if configured
         // Note: POC params should be loaded from environment if needed
         // For now, using empty array - POC contracts can be added later via addPOCContract
 
         // Orderbook parameters (required)
-        DAO.OrderbookConstructorParams memory orderbookParams = DAO.OrderbookConstructorParams({
+        DataTypes.OrderbookConstructorParams memory orderbookParams = DataTypes.OrderbookConstructorParams({
             initialPrice: vm.envOr("ORDERBOOK_INITIAL_PRICE", uint256(0.1e18)), // $0.1
             initialVolume: vm.envOr("ORDERBOOK_INITIAL_VOLUME", uint256(1000e18)), // 1000 tokens
             priceStepPercent: vm.envOr("ORDERBOOK_PRICE_STEP_PERCENT", uint256(500)), // 5% = 500 basis points
@@ -107,7 +107,7 @@ contract DeployDAO is Script {
         });
 
         // Build constructor params
-        DAO.ConstructorParams memory params = DAO.ConstructorParams({
+        DataTypes.ConstructorParams memory params = DataTypes.ConstructorParams({
             launchToken: launchTokenAddress,
             mainCollateral: mainCollateralAddress,
             creator: creatorAddress,
