@@ -246,27 +246,6 @@ library Orderbook {
         state.levelEndVolume = state.cumulativeVolumeBeforeLevel + state.adjustedLevelVolume;
     }
 
-    /// @notice Get cumulative volume up to a specific level (exclusive)
-    /// @param orderbookParams Orderbook parameters from storage
-    /// @param level Level number (exclusive, so volume up to but not including this level)
-    /// @param totalShares Total shares supply
-    /// @param sharePrice Share price in USD (18 decimals)
-    /// @return Cumulative volume up to the level
-    function _getCumulativeVolumeUpToLevel(
-        DataTypes.OrderbookParams storage orderbookParams,
-        uint256 level,
-        uint256 totalShares,
-        uint256 sharePrice
-    ) internal view returns (uint256) {
-        if (level == 0) return 0;
-
-        uint256 cumulativeVolume = 0;
-        for (uint256 i = 0; i < level; i++) {
-            cumulativeVolume += calculateVolumeAtLevelWithShares(orderbookParams, i, totalShares, sharePrice);
-        }
-        return cumulativeVolume;
-    }
-
     /// @notice Get current price based on orderbook state
     /// @param orderbookParams Orderbook parameters from storage
     /// @param totalShares Total shares supply
@@ -565,38 +544,6 @@ library Orderbook {
         }
 
         return (orderbookParams.initialVolume * multiplier) / PRICE_DECIMALS_MULTIPLIER;
-    }
-
-    /// @notice Calculate volume at level with shares adjustment
-    /// @dev Formula: adjustedLevelVolume = baseLevelVolume * proportionalityCoefficient * totalShares * sharePrice / totalSupply
-    ///      This calculates the number of tokens available at this level considering shares
-    /// @param orderbookParams Orderbook parameters from storage
-    /// @param level Level number
-    /// @param totalShares Total shares supply
-    /// @param sharePrice Share price in USD (18 decimals)
-    /// @return Adjusted volume at the level considering shares (adjustedLevelVolume)
-    function calculateVolumeAtLevelWithShares(
-        DataTypes.OrderbookParams storage orderbookParams,
-        uint256 level,
-        uint256 totalShares,
-        uint256 sharePrice
-    ) internal view returns (uint256) {
-        // Get base volume at level (baseLevelVolume)
-        uint256 baseLevelVolume = getVolumeAtLevel(orderbookParams, level);
-
-        // Calculate adjusted volume at level with shares
-        // Formula: adjustedLevelVolume = baseLevelVolume * proportionalityCoefficient * totalShares * sharePrice / totalSupply
-        // where:
-        //   baseLevelVolume = base level volume (ТРУ)
-        //   proportionalityCoefficient = proportionality coefficient in basis points (7500 = 0.75) (КП)
-        //   totalShares = total shares supply (КШ)
-        //   sharePrice = share price in USD (18 decimals) (СШ)
-        //   totalSupply = total token supply (1e27 = 1 billion with 18 decimals) (С)
-
-        uint256 numerator = baseLevelVolume * orderbookParams.proportionalityCoefficient * totalShares * sharePrice;
-        uint256 denominator = orderbookParams.totalSupply * 10000; // 10000 for basis points
-
-        return numerator / denominator;
     }
 }
 
