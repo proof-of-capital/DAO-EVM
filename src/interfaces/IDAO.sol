@@ -82,6 +82,7 @@ interface IDAO {
     error AlreadyInExitQueue();
     error NotInExitQueue();
     error ExitAlreadyProcessed();
+    error ExitQueueNotEmpty();
     error AllocationTooSoon();
     error ExceedsMaxAllocation();
     error CreatorShareTooLow();
@@ -99,6 +100,8 @@ interface IDAO {
     error NoPOCContractsConfigured();
     error POCSharesNot100Percent();
     error NoDepositToWithdraw();
+    error ActiveStageNotSet();
+    error CancelPeriodNotPassed();
     error InvalidPercentage();
     error InvalidSharePrice();
     error InvalidTargetAmount();
@@ -118,6 +121,7 @@ interface IDAO {
     error AmountExceedsRemaining();
     error ExecutionFailed(string reason);
     error UpgradeNotAuthorized();
+    error UpgradeDelayNotPassed();
     error TokenNotAdded();
     error POCLockPeriodNotEnded();
 

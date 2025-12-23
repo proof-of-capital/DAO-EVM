@@ -60,6 +60,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     uint256 public constant LP_DISTRIBUTION_PERIOD = 30 days; // Monthly LP distribution period
     uint256 public constant LP_DISTRIBUTION_PERCENT = 100; // 1% of LP tokens distributed per month
     uint256 public constant MIN_REWARD_PER_SHARE = 10; // Minimum reward per share in minimal units
+    uint256 public constant UPGRADE_DELAY = 5 days; // Delay required before upgrade can be authorized
+    uint256 public constant CANCEL_AFTER_ACTIVE_PERIOD = 100 days; // Period after Active stage when anyone with shares can cancel
 
     address public admin;
     address public votingContract;
@@ -119,9 +121,11 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     uint256 public lastCreatorAllocation; // Timestamp of last launch allocation to creator
     mapping(address => uint256) public lastLPDistribution; // lpToken => timestamp of last distribution
     mapping(address => uint256) public lpTokenAddedAt; // lpToken => timestamp when LP was provided
+    uint256 public activeStageTimestamp; // Timestamp when DAO transitioned to Active stage
 
     // Upgrade authorization - two-factor approval required
     address public pendingUpgradeFromVoting; // New implementation address approved by voting contract
+    uint256 public pendingUpgradeFromVotingTimestamp; // Timestamp when pending upgrade from voting was set
     address public pendingUpgradeFromCreator; // New implementation address approved by creator
 
     bool public doNotExtendPOCLock;
@@ -805,20 +809,38 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         DataTypes.Vault storage vault = vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
 
-        DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
-        uint256 depositedAmount = entry.depositedMainCollateral;
-        require(depositedAmount > 0, NoDepositToWithdraw());
-
         uint256 shares = vault.shares;
+        require(shares > 0, NoSharesToClaim());
+        require(totalSharesSupply > 0, NoShares());
+
+        uint256 mainCollateralAmount = (totalCollectedMainCollateral * shares) / totalSharesSupply;
+        require(mainCollateralAmount > 0, NoDepositToWithdraw());
+
+        uint256 launchTokenAmount = 0;
+        if (totalLaunchBalance > 0) {
+            launchTokenAmount = (totalLaunchBalance * shares) / totalSharesSupply;
+        }
+
+        // Update state
         vault.shares = 0;
         totalSharesSupply -= shares;
-        totalCollectedMainCollateral -= depositedAmount;
+        totalCollectedMainCollateral -= mainCollateralAmount;
+
+        DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
         entry.depositedMainCollateral = 0;
         vaultMainCollateralDeposit[vaultId] = 0;
 
-        IERC20(mainCollateral).safeTransfer(msg.sender, depositedAmount);
+        // Transfer main collateral
+        IERC20(mainCollateral).safeTransfer(msg.sender, mainCollateralAmount);
 
-        emit FundraisingWithdrawal(vaultId, msg.sender, depositedAmount);
+        // Transfer launch tokens if any
+        if (launchTokenAmount > 0) {
+            totalLaunchBalance -= launchTokenAmount;
+            accountedBalance[address(launchToken)] -= launchTokenAmount;
+            launchToken.safeTransfer(msg.sender, launchTokenAmount);
+        }
+
+        emit FundraisingWithdrawal(vaultId, msg.sender, mainCollateralAmount);
     }
 
     /// @notice Extend fundraising deadline (only once)
@@ -832,14 +854,31 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         emit FundraisingExtended(fundraisingConfig.deadline);
     }
 
-    /// @notice Cancel fundraising (admin only, if target not reached after deadline)
-    function cancelFundraising() external onlyAdmin atStage(DataTypes.Stage.Fundraising) {
-        require(block.timestamp >= fundraisingConfig.deadline + 1 days, FundraisingNotExpiredYet());
+    /// @notice Cancel fundraising
+    /// @dev In Fundraising stage: admin or participant can cancel if target not reached after deadline
+    /// @dev In Active or Dissolved stage: admin or participant can cancel after 100 days in Active stage
+    function cancelFundraising() external onlyParticipantOrAdmin {
+        if (currentStage == DataTypes.Stage.Fundraising) {
+            require(block.timestamp >= fundraisingConfig.deadline + 1 days, FundraisingNotExpiredYet());
 
-        currentStage = DataTypes.Stage.FundraisingCancelled;
+            currentStage = DataTypes.Stage.FundraisingCancelled;
 
-        emit FundraisingCancelled(totalCollectedMainCollateral);
-        emit StageChanged(DataTypes.Stage.Fundraising, DataTypes.Stage.FundraisingCancelled);
+            emit FundraisingCancelled(totalCollectedMainCollateral);
+            emit StageChanged(DataTypes.Stage.Fundraising, DataTypes.Stage.FundraisingCancelled);
+        } else if (currentStage == DataTypes.Stage.FundraisingExchange || currentStage == DataTypes.Stage.WaitingForLP)
+        {
+            // Check that 100 days have passed since Active stage
+            require(activeStageTimestamp > 0, ActiveStageNotSet());
+            require(block.timestamp >= activeStageTimestamp + CANCEL_AFTER_ACTIVE_PERIOD, CancelPeriodNotPassed());
+
+            DataTypes.Stage oldStage = currentStage;
+            currentStage = DataTypes.Stage.FundraisingCancelled;
+
+            emit FundraisingCancelled(totalCollectedMainCollateral);
+            emit StageChanged(oldStage, DataTypes.Stage.FundraisingCancelled);
+        } else {
+            revert InvalidStage();
+        }
     }
 
     /// @notice Finalize fundraising collection and move to exchange stage
@@ -992,6 +1031,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         }
 
         currentStage = DataTypes.Stage.Active;
+        activeStageTimestamp = block.timestamp;
 
         emit StageChanged(DataTypes.Stage.WaitingForLP, DataTypes.Stage.Active);
     }
@@ -1652,6 +1692,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function setPendingUpgradeFromVoting(address newImplementation) external onlyVoting {
         require(newImplementation != address(0), InvalidAddress());
         pendingUpgradeFromVoting = newImplementation;
+        pendingUpgradeFromVotingTimestamp = block.timestamp;
         emit PendingUpgradeSetFromVoting(newImplementation);
     }
 
@@ -1671,10 +1712,13 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             pendingUpgradeFromVoting == newImplementation && pendingUpgradeFromCreator == newImplementation,
             UpgradeNotAuthorized()
         );
+        require(block.timestamp >= pendingUpgradeFromVotingTimestamp + UPGRADE_DELAY, UpgradeDelayNotPassed());
+        require(_isExitQueueEmpty(), ExitQueueNotEmpty());
 
         // Reset pending upgrades after successful authorization
         pendingUpgradeFromVoting = address(0);
         pendingUpgradeFromCreator = address(0);
+        pendingUpgradeFromVotingTimestamp = 0;
     }
 }
 
