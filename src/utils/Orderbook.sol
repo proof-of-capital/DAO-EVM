@@ -45,6 +45,7 @@ library Orderbook {
     // Constants
     uint256 public constant PRICE_DECIMALS = 18;
     uint256 public constant PRICE_DECIMALS_MULTIPLIER = 1e18; // 10 ** PRICE_DECIMALS
+    uint256 public constant BASIS_POINTS = 10000; // 100% = 10000 basis points (e.g., 500 = 5%, 7500 = 75%)
 
     // Custom errors
     error CollateralNotSellable();
@@ -52,6 +53,7 @@ library Orderbook {
     error SlippageExceeded();
     error OrderbookNotInitialized();
     error InvalidPrice();
+    error InsufficientCollateralReceived(uint256 expected, uint256 received);
 
     // Events
     event LaunchTokenSold(
@@ -69,7 +71,6 @@ library Orderbook {
     /// @param availableRouterByAdmin Router whitelist mapping from storage
     /// @param totalShares Total shares supply
     /// @param sharePrice Share price in USD (18 decimals)
-    /// @return result Sell operation result
     function executeSell(
         DataTypes.SellParams memory params,
         address contractAddress,
@@ -80,7 +81,7 @@ library Orderbook {
         mapping(address => bool) storage availableRouterByAdmin,
         uint256 totalShares,
         uint256 sharePrice
-    ) internal returns (DataTypes.SellResult memory result) {
+    ) internal {
         // Get collateral info from storage
         DataTypes.CollateralInfo storage collateralInfo = sellableCollaterals[params.collateral];
 
@@ -92,26 +93,9 @@ library Orderbook {
         uint256 collateralPriceUSD = getCollateralPrice(collateralInfo);
         require(collateralPriceUSD > 0, InvalidCollateralPrice());
 
-        // Calculate collateral amount considering different prices at each level
-        uint256 collateralAmount = calculateCollateralAmountWithLevels(
-            orderbookParams,
-            orderbookParams.totalSold,
-            params.launchTokenAmount,
-            collateralPriceUSD,
-            totalShares,
-            sharePrice
-        );
-
-        require(collateralAmount >= params.minCollateralAmount, SlippageExceeded());
-
-        // Transfer launch tokens from seller
-        launchToken.safeTransferFrom(params.seller, contractAddress, params.launchTokenAmount);
-
-        // Verify router is available before swap
         require(availableRouterByAdmin[params.router], OrderbookSwapLibrary.RouterNotAvailable());
-
-        // Execute swap using router
-        uint256 receivedCollateral = OrderbookSwapLibrary.executeSwap(
+        uint256 balanceBefore = IERC20(params.collateral).balanceOf(address(this));
+        OrderbookSwapLibrary.executeSwap(
             params.router,
             params.swapType,
             params.swapData,
@@ -122,145 +106,20 @@ library Orderbook {
             contractAddress
         );
 
-        // Track accounted balance (will be distributed via distributeProfit)
+        uint256 balanceAfter = IERC20(params.collateral).balanceOf(address(this));
+        uint256 receivedCollateral = balanceAfter - balanceBefore;
+
         accountedBalance[params.collateral] += receivedCollateral;
+
+        // Calculate received collateral in USD using price from getCollateralPrice
+        uint256 receivedCollateralInUsd = (receivedCollateral * collateralPriceUSD) / PRICE_DECIMALS_MULTIPLIER;
 
         // Update total sold and current level (all in one place)
         orderbookParams.totalSold += params.launchTokenAmount;
-        updateCurrentLevel(orderbookParams, orderbookParams.totalSold, totalShares, sharePrice);
+        updateCurrentLevel(orderbookParams, receivedCollateralInUsd, params.launchTokenAmount, totalShares, sharePrice);
 
         // Emit event
         emit LaunchTokenSold(params.seller, params.collateral, params.launchTokenAmount, receivedCollateral);
-
-        // Return result with actual collateral amount received
-        result = DataTypes.SellResult({
-            collateralAmount: receivedCollateral,
-            currentPrice: 0 // Price is not relevant, we return collateral amount
-        });
-
-        return result;
-    }
-
-    /// @notice Calculate collateral amount considering different prices at each level
-    /// @dev Optimized to O(L) where L is number of levels traversed (uses incremental calculation)
-    /// @param orderbookParams Orderbook parameters from storage
-    /// @param totalSold Total amount of tokens sold before this operation
-    /// @param launchTokenAmount Amount of launch tokens to sell
-    /// @param collateralPriceUSD Price of collateral in USD (18 decimals)
-    /// @param totalShares Total shares supply
-    /// @param sharePrice Share price in USD (18 decimals)
-    /// @return Total collateral amount that can be received (considering all levels)
-    function calculateCollateralAmountWithLevels(
-        DataTypes.OrderbookParams storage orderbookParams,
-        uint256 totalSold,
-        uint256 launchTokenAmount,
-        uint256 collateralPriceUSD,
-        uint256 totalShares,
-        uint256 sharePrice
-    ) internal view returns (uint256) {
-        // Use struct to avoid stack too deep
-        DataTypes.OrderbookCalcState memory state = _initCalcState(orderbookParams, totalSold, totalShares, sharePrice);
-
-        uint256 remainingTokens = launchTokenAmount;
-        uint256 totalValueUSD = 0;
-        uint256 currentSold = totalSold;
-
-        // Advance to correct starting level if needed (incremental, not from scratch)
-        while (currentSold >= state.levelEndVolume && remainingTokens > 0) {
-            _advanceToNextLevel(state);
-        }
-
-        // Iterate through levels until all tokens are sold
-        while (remainingTokens > 0) {
-            // Calculate how many tokens can be sold at this level
-            uint256 tokensSoldAtCurrentLevel =
-                currentSold > state.cumulativeVolumeBeforeLevel ? currentSold - state.cumulativeVolumeBeforeLevel : 0;
-            uint256 availableAtLevel = state.adjustedLevelVolume - tokensSoldAtCurrentLevel;
-            uint256 tokensAtCurrentLevel = remainingTokens < availableAtLevel ? remainingTokens : availableAtLevel;
-
-            // Calculate value in USD for tokens at this level
-            totalValueUSD += (tokensAtCurrentLevel * state.currentPrice) / PRICE_DECIMALS_MULTIPLIER;
-
-            remainingTokens -= tokensAtCurrentLevel;
-            currentSold += tokensAtCurrentLevel;
-
-            // Move to next level if current level is exhausted
-            if (currentSold >= state.levelEndVolume && remainingTokens > 0) {
-                _advanceToNextLevel(state);
-            }
-        }
-
-        // Convert total USD value to collateral amount
-        return (totalValueUSD * PRICE_DECIMALS_MULTIPLIER) / collateralPriceUSD;
-    }
-
-    /// @notice Initialize calculation state from cached values or from scratch
-    function _initCalcState(
-        DataTypes.OrderbookParams storage orderbookParams,
-        uint256 totalSold,
-        uint256 totalShares,
-        uint256 sharePrice
-    ) internal view returns (DataTypes.OrderbookCalcState memory state) {
-        // Prepare multipliers for incremental calculation
-        int256 volumeStep = orderbookParams.volumeStepPercent;
-        state.priceBase = 10000 + orderbookParams.priceStepPercent;
-        state.volumeBase = volumeStep >= 0 ? 10000 + uint256(volumeStep) : uint256(int256(10000) + volumeStep);
-
-        // Shares adjustment factor (calculated once)
-        state.sharesNumerator = orderbookParams.proportionalityCoefficient * totalShares * sharePrice;
-        state.sharesDenominator = orderbookParams.totalSupply * 10000;
-
-        // Try to use cached values if available and valid
-        if (orderbookParams.currentTotalSold > 0 && totalSold >= orderbookParams.currentCumulativeVolume) {
-            state.currentLevel = orderbookParams.currentLevel;
-            state.cumulativeVolumeBeforeLevel = orderbookParams.currentCumulativeVolume;
-            state.currentBaseVolume = orderbookParams.cachedBaseVolumeAtLevel;
-            state.currentPrice = orderbookParams.cachedPriceAtLevel;
-
-            // If cache is not initialized, calculate from scratch
-            if (state.currentBaseVolume == 0 || state.currentPrice == 0) {
-                state.currentBaseVolume = getVolumeAtLevel(orderbookParams, state.currentLevel);
-                state.currentPrice = getPriceAtLevel(orderbookParams, state.currentLevel);
-            }
-        } else {
-            // Start from level 0
-            state.currentLevel = 0;
-            state.cumulativeVolumeBeforeLevel = 0;
-            state.currentBaseVolume = orderbookParams.initialVolume;
-            state.currentPrice = orderbookParams.initialPrice;
-        }
-
-        state.adjustedLevelVolume = (state.currentBaseVolume * state.sharesNumerator) / state.sharesDenominator;
-        state.levelEndVolume = state.cumulativeVolumeBeforeLevel + state.adjustedLevelVolume;
-
-        return state;
-    }
-
-    /// @notice Advance calculation state to next level (incremental O(1) calculation)
-    function _advanceToNextLevel(DataTypes.OrderbookCalcState memory state) internal pure {
-        state.cumulativeVolumeBeforeLevel = state.levelEndVolume;
-        state.currentLevel++;
-        state.currentBaseVolume = (state.currentBaseVolume * state.volumeBase) / 10000;
-        state.currentPrice = (state.currentPrice * state.priceBase) / 10000;
-        state.adjustedLevelVolume = (state.currentBaseVolume * state.sharesNumerator) / state.sharesDenominator;
-        state.levelEndVolume = state.cumulativeVolumeBeforeLevel + state.adjustedLevelVolume;
-    }
-
-    /// @notice Get current price based on orderbook state
-    /// @param orderbookParams Orderbook parameters from storage
-    /// @param totalShares Total shares supply
-    /// @param sharePrice Share price in USD (18 decimals)
-    /// @return Current price in USD (18 decimals)
-    function getCurrentPrice(DataTypes.OrderbookParams storage orderbookParams, uint256 totalShares, uint256 sharePrice)
-        internal
-        view
-        returns (uint256)
-    {
-        if (orderbookParams.initialPrice == 0) return 0;
-
-        // Use cached level if totalSold matches currentTotalSold, otherwise recalculate
-        uint256 currentLevel = getCurrentLevel(orderbookParams, orderbookParams.totalSold, totalShares, sharePrice);
-        return getPriceAtLevel(orderbookParams, currentLevel);
     }
 
     /// @notice Get collateral price from Chainlink oracle
@@ -282,268 +141,115 @@ library Orderbook {
         return uint256(price);
     }
 
-    /// @notice Get current level based on total sold (uses cached value if totalSold matches currentTotalSold)
-    /// @dev Optimized to O(levels_advanced) using incremental calculation from cached values
-    /// @param orderbookParams Orderbook parameters from storage
-    /// @param totalSold Total amount of tokens sold (should match currentTotalSold for cache hit)
-    /// @param totalShares Total shares supply
-    /// @param sharePrice Share price in USD (18 decimals)
-    /// @return Current level
-    function getCurrentLevel(
-        DataTypes.OrderbookParams storage orderbookParams,
-        uint256 totalSold,
-        uint256 totalShares,
-        uint256 sharePrice
-    ) internal view returns (uint256) {
-        if (orderbookParams.initialVolume == 0) return 0;
-
-        // If currentTotalSold is set and matches totalSold, return cached level - O(1)
-        if (orderbookParams.currentTotalSold > 0 && totalSold == orderbookParams.currentTotalSold) {
-            return orderbookParams.currentLevel;
-        }
-
-        // Initialize from cached values or from scratch
-        uint256 level;
-        uint256 cumulativeVolume;
-        uint256 currentBaseVolume;
-
-        if (orderbookParams.currentTotalSold > 0 && totalSold > orderbookParams.currentTotalSold) {
-            // Continue from cached position - O(levels_advanced) instead of O(total_levels)
-            level = orderbookParams.currentLevel;
-            cumulativeVolume = orderbookParams.currentCumulativeVolume;
-            currentBaseVolume = orderbookParams.cachedBaseVolumeAtLevel;
-            if (currentBaseVolume == 0) {
-                currentBaseVolume = getVolumeAtLevel(orderbookParams, level);
-            }
-        } else {
-            // Start from beginning
-            level = 0;
-            cumulativeVolume = 0;
-            currentBaseVolume = orderbookParams.initialVolume;
-        }
-
-        // Prepare multipliers for incremental calculation
-        int256 volumeStep = orderbookParams.volumeStepPercent;
-        uint256 volumeBase = volumeStep >= 0 ? 10000 + uint256(volumeStep) : uint256(int256(10000) + volumeStep);
-
-        // Shares adjustment factor
-        uint256 sharesNumerator = orderbookParams.proportionalityCoefficient * totalShares * sharePrice;
-        uint256 sharesDenominator = orderbookParams.totalSupply * 10000;
-
-        // Calculate level using incremental volume calculation - O(levels_advanced)
-        while (cumulativeVolume < totalSold) {
-            uint256 adjustedLevelVolume = (currentBaseVolume * sharesNumerator) / sharesDenominator;
-            if (cumulativeVolume + adjustedLevelVolume > totalSold) {
-                break;
-            }
-            cumulativeVolume += adjustedLevelVolume;
-            level++;
-            // Calculate next base volume incrementally: O(1) per iteration
-            currentBaseVolume = (currentBaseVolume * volumeBase) / 10000;
-        }
-
-        return level;
-    }
-
-    /// @notice Update current level (should be called after totalSold changes)
-    /// @dev Optimized to O(levels_advanced) using incremental calculation from cached values
-    /// @param orderbookParams Orderbook parameters from storage
-    /// @param totalSold Total amount of tokens sold (should equal orderbookParams.totalSold)
-    /// @param totalShares Total shares supply
-    /// @param sharePrice Share price in USD (18 decimals)
+    /// @notice Update current level after selling launch tokens
+    /// @dev Calculates expected USD from selling tokens across levels and validates received amount
+    /// @param orderbookParams Orderbook parameters from storage (will be updated)
+    /// @param receivedCollateralInUsd Amount of USD received from the sale
+    /// @param launchTokenAmount Amount of launch tokens sold
+    /// @param totalShares Total shares supply (КШ - количество шейров)
+    /// @param sharePrice Share price in USD with 18 decimals (СШ - стоимость шейра)
     function updateCurrentLevel(
         DataTypes.OrderbookParams storage orderbookParams,
-        uint256 totalSold,
+        uint256 receivedCollateralInUsd,
+        uint256 launchTokenAmount,
         uint256 totalShares,
         uint256 sharePrice
     ) internal {
-        if (orderbookParams.initialVolume == 0) {
-            orderbookParams.currentLevel = 0;
-            orderbookParams.currentTotalSold = totalSold;
-            orderbookParams.currentCumulativeVolume = 0;
-            orderbookParams.cachedBaseVolumeAtLevel = 0;
-            orderbookParams.cachedPriceAtLevel = 0;
-            return;
+        uint256 proportionalityCoefficient = orderbookParams.proportionalityCoefficient; // КП in basis points (7500 = 0.75)
+        uint256 totalSupply = orderbookParams.totalSupply; // С - total supply
+        uint256 priceStepPercent = orderbookParams.priceStepPercent; // ШПЦ in basis points (500 = 5%)
+        int256 volumeStepPercent = orderbookParams.volumeStepPercent; // ШПРУ in basis points (-100 = -1%)
+
+        // Current level state
+        uint256 currentLevel = orderbookParams.currentLevel;
+        uint256 cumulativeVolume = orderbookParams.currentCumulativeVolume;
+        uint256 currentPrice = orderbookParams.cachedPriceAtLevel; // ЦУ - price at current level
+        uint256 currentBaseVolume = orderbookParams.cachedBaseVolumeAtLevel; // ТРУ - base volume at current level
+
+        // Track expected USD and remaining tokens to process
+        uint256 expectedUsd = 0;
+        uint256 remainingTokens = launchTokenAmount;
+
+        // Calculate tokens already sold on current level before this sale
+        // ТКПТУ = totalSold (before this sale) - cumulativeVolume
+        // Note: totalSold was already updated in executeSell, so we need to subtract launchTokenAmount
+        uint256 totalSoldBeforeSale = orderbookParams.totalSold - launchTokenAmount;
+        uint256 soldOnCurrentLevel = totalSoldBeforeSale > cumulativeVolume ? totalSoldBeforeSale - cumulativeVolume : 0;
+
+        // Process tokens level by level
+        while (remainingTokens > 0) {
+            // Calculate adjusted level volume: вТРУ = ТРУ * КП * КШ * СШ / С
+            // All values need to be scaled properly:
+            // - currentBaseVolume is in token units (18 decimals)
+            // - proportionalityCoefficient is in basis points (10000 = 100%)
+            // - sharePrice is in USD (18 decimals)
+            // - totalSupply is in token units (18 decimals)
+            uint256 adjustedLevelVolume = (currentBaseVolume * proportionalityCoefficient * totalShares * sharePrice)
+                / (totalSupply * BASIS_POINTS * PRICE_DECIMALS_MULTIPLIER);
+
+            // Tokens remaining on current level = adjustedLevelVolume - soldOnCurrentLevel
+            uint256 tokensRemainingOnLevel =
+                adjustedLevelVolume > soldOnCurrentLevel ? adjustedLevelVolume - soldOnCurrentLevel : 0;
+
+            if (remainingTokens <= tokensRemainingOnLevel) {
+                // All remaining tokens fit on current level
+                // expectedUsd += remainingTokens * currentPrice
+                expectedUsd += (remainingTokens * currentPrice) / PRICE_DECIMALS_MULTIPLIER;
+                soldOnCurrentLevel += remainingTokens;
+                remainingTokens = 0;
+            } else {
+                // Sell all remaining tokens on current level and move to next
+                if (tokensRemainingOnLevel > 0) {
+                    expectedUsd += (tokensRemainingOnLevel * currentPrice) / PRICE_DECIMALS_MULTIPLIER;
+                    remainingTokens -= tokensRemainingOnLevel;
+                }
+
+                // Move to next level
+                currentLevel += 1;
+                cumulativeVolume += adjustedLevelVolume;
+                soldOnCurrentLevel = 0; // New level starts fresh
+
+                // Update price: ЦУ1 = ЦУ0 * (1 + ШПЦ) = ЦУ0 * (10000 + priceStepPercent) / 10000
+                currentPrice = (currentPrice * (BASIS_POINTS + priceStepPercent)) / BASIS_POINTS;
+
+                // Update base volume: ТРУ1 = ТРУ0 * (1 + ШПРУ)
+                // Note: volumeStepPercent can be negative
+                if (volumeStepPercent >= 0) {
+                    currentBaseVolume = (currentBaseVolume * (BASIS_POINTS + uint256(volumeStepPercent))) / BASIS_POINTS;
+                } else {
+                    uint256 absVolumeStep = uint256(-volumeStepPercent);
+                    currentBaseVolume = (currentBaseVolume * (BASIS_POINTS - absVolumeStep)) / BASIS_POINTS;
+                }
+            }
         }
 
-        uint256 level;
-        uint256 cumulativeVolume;
-        uint256 currentBaseVolume;
-        uint256 currentPrice;
+        require(
+            receivedCollateralInUsd >= expectedUsd, InsufficientCollateralReceived(expectedUsd, receivedCollateralInUsd)
+        );
 
-        // Prepare multipliers for incremental calculation
-        int256 volumeStep = orderbookParams.volumeStepPercent;
-        uint256 volumeBase = volumeStep >= 0 ? 10000 + uint256(volumeStep) : uint256(int256(10000) + volumeStep);
-        uint256 priceBase = 10000 + orderbookParams.priceStepPercent;
-
-        // Shares adjustment factor
-        uint256 sharesNumerator = orderbookParams.proportionalityCoefficient * totalShares * sharePrice;
-        uint256 sharesDenominator = orderbookParams.totalSupply * 10000;
-
-        // Use existing current level if valid to optimize calculation - O(levels_advanced)
-        if (orderbookParams.currentTotalSold > 0 && totalSold >= orderbookParams.currentTotalSold) {
-            level = orderbookParams.currentLevel;
-            cumulativeVolume = orderbookParams.currentCumulativeVolume;
-            currentBaseVolume = orderbookParams.cachedBaseVolumeAtLevel;
-            currentPrice = orderbookParams.cachedPriceAtLevel;
-
-            if (currentBaseVolume == 0) {
-                currentBaseVolume = getVolumeAtLevel(orderbookParams, level);
-            }
-            if (currentPrice == 0) {
-                currentPrice = getPriceAtLevel(orderbookParams, level);
-            }
-
-            // Continue from current position using incremental calculation
-            while (cumulativeVolume < totalSold) {
-                uint256 adjustedLevelVolume = (currentBaseVolume * sharesNumerator) / sharesDenominator;
-                if (cumulativeVolume + adjustedLevelVolume > totalSold) {
-                    break;
-                }
-                cumulativeVolume += adjustedLevelVolume;
-                level++;
-                // Calculate next values incrementally: O(1) per iteration
-                currentBaseVolume = (currentBaseVolume * volumeBase) / 10000;
-                currentPrice = (currentPrice * priceBase) / 10000;
-            }
-        } else {
-            // Current level is invalid or not initialized, calculate from scratch
-            level = 0;
-            cumulativeVolume = 0;
-            currentBaseVolume = orderbookParams.initialVolume;
-            currentPrice = orderbookParams.initialPrice;
-
-            while (cumulativeVolume < totalSold) {
-                uint256 adjustedLevelVolume = (currentBaseVolume * sharesNumerator) / sharesDenominator;
-                if (cumulativeVolume + adjustedLevelVolume > totalSold) {
-                    break;
-                }
-                cumulativeVolume += adjustedLevelVolume;
-                level++;
-                // Calculate next values incrementally: O(1) per iteration
-                currentBaseVolume = (currentBaseVolume * volumeBase) / 10000;
-                currentPrice = (currentPrice * priceBase) / 10000;
-            }
-        }
-
-        // Update current level - ensure currentTotalSold always equals totalSold for synchronization
-        orderbookParams.currentLevel = level;
-        orderbookParams.currentTotalSold = totalSold;
+        orderbookParams.currentLevel = currentLevel;
         orderbookParams.currentCumulativeVolume = cumulativeVolume;
-
-        // Store cached values for O(1) access - already calculated in the loop above
-        orderbookParams.cachedBaseVolumeAtLevel = currentBaseVolume;
         orderbookParams.cachedPriceAtLevel = currentPrice;
+        orderbookParams.cachedBaseVolumeAtLevel = currentBaseVolume;
+        orderbookParams.currentTotalSold = orderbookParams.totalSold;
     }
 
-    /// @notice Get price at specific level
-    /// @dev Multiplicative formula: priceAtLevel(level) = initialPrice * (1 + priceStepPercent)^level
-    ///      Optimized to calculate from previous level if cached
+    /// @notice Get current price based on orderbook state
+    /// @dev Returns cached price at current level, which is updated on each sale
     /// @param orderbookParams Orderbook parameters from storage
-    /// @param level Level number
-    /// @return Price at the level
-    function getPriceAtLevel(DataTypes.OrderbookParams storage orderbookParams, uint256 level)
+    /// @return Current price in USD (18 decimals)
+    function getCurrentPrice(
+        DataTypes.OrderbookParams storage orderbookParams,
+        uint256,
+        /* totalShares */
+        uint256 /* sharePrice */
+    )
         internal
         view
         returns (uint256)
     {
-        if (level == 0) {
-            return orderbookParams.initialPrice;
-        }
-
-        // Prepare base multiplier for price step
-        uint256 priceBase = 10000 + orderbookParams.priceStepPercent;
-
-        // Optimization: use cached value if available and calculating next level
-        if (level == orderbookParams.currentLevel + 1 && orderbookParams.cachedPriceAtLevel > 0) {
-            // Calculate from previous level: priceAtLevel(level) = priceAtLevel(level-1) * (1 + priceStepPercent)
-            return (orderbookParams.cachedPriceAtLevel * priceBase) / 10000;
-        }
-
-        // Optimization: use cached value if calculating same level
-        if (level == orderbookParams.currentLevel && orderbookParams.cachedPriceAtLevel > 0) {
-            return orderbookParams.cachedPriceAtLevel;
-        }
-
-        // Calculate from cached level if possible (level > currentLevel)
-        if (level > orderbookParams.currentLevel && orderbookParams.cachedPriceAtLevel > 0) {
-            uint256 price = orderbookParams.cachedPriceAtLevel;
-            for (uint256 i = orderbookParams.currentLevel; i < level; i++) {
-                price = (price * priceBase) / 10000;
-            }
-            return price;
-        }
-
-        // Fallback: calculate from scratch
-        // Calculate (1 + priceStepPercent)^level
-        // priceStepPercent is in basis points (500 = 5%)
-        // Formula: initialPrice * (10000 + priceStepPercent)^level / 10000^level
-        uint256 multiplier = PRICE_DECIMALS_MULTIPLIER;
-
-        for (uint256 i = 0; i < level; i++) {
-            multiplier = (multiplier * priceBase) / 10000;
-        }
-
-        return (orderbookParams.initialPrice * multiplier) / PRICE_DECIMALS_MULTIPLIER;
-    }
-
-    /// @notice Get base volume at specific level (without shares adjustment)
-    /// @dev Multiplicative formula: baseLevelVolume(level) = initialVolume * (1 + volumeStepPercent)^level
-    ///      Optimized to calculate from previous level if cached
-    /// @param orderbookParams Orderbook parameters from storage
-    /// @param level Level number
-    /// @return Base volume at the level
-    function getVolumeAtLevel(DataTypes.OrderbookParams storage orderbookParams, uint256 level)
-        internal
-        view
-        returns (uint256)
-    {
-        if (level == 0) {
-            return orderbookParams.initialVolume;
-        }
-
-        // Prepare base multiplier for volume step
-        int256 volumeStep = orderbookParams.volumeStepPercent;
-        uint256 base;
-        if (volumeStep >= 0) {
-            base = 10000 + uint256(volumeStep);
-        } else {
-            // For negative, we need to handle it carefully
-            // (10000 + (-100)) = 9900, which represents 0.99
-            base = uint256(int256(10000) + volumeStep);
-        }
-
-        // Optimization: use cached value if available and calculating next level
-        if (level == orderbookParams.currentLevel + 1 && orderbookParams.cachedBaseVolumeAtLevel > 0) {
-            // Calculate from previous level: baseLevelVolume(level) = baseLevelVolume(level-1) * (1 + volumeStepPercent)
-            return (orderbookParams.cachedBaseVolumeAtLevel * base) / 10000;
-        }
-
-        // Optimization: use cached value if calculating same level
-        if (level == orderbookParams.currentLevel && orderbookParams.cachedBaseVolumeAtLevel > 0) {
-            return orderbookParams.cachedBaseVolumeAtLevel;
-        }
-
-        // Calculate from cached level if possible (level > currentLevel)
-        if (level > orderbookParams.currentLevel && orderbookParams.cachedBaseVolumeAtLevel > 0) {
-            uint256 volume = orderbookParams.cachedBaseVolumeAtLevel;
-            for (uint256 i = orderbookParams.currentLevel; i < level; i++) {
-                volume = (volume * base) / 10000;
-            }
-            return volume;
-        }
-
-        // Fallback: calculate from scratch
-        // Calculate (1 + volumeStepPercent)^level
-        // volumeStepPercent is in basis points and can be negative (-100 = -1%)
-        // Formula: initialVolume * (10000 + volumeStepPercent)^level / 10000^level
-        uint256 multiplier = PRICE_DECIMALS_MULTIPLIER;
-
-        for (uint256 i = 0; i < level; i++) {
-            multiplier = (multiplier * base) / 10000;
-        }
-
-        return (orderbookParams.initialVolume * multiplier) / PRICE_DECIMALS_MULTIPLIER;
+        require(orderbookParams.initialPrice > 0, OrderbookNotInitialized());
+        return orderbookParams.cachedPriceAtLevel;
     }
 }
 
