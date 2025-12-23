@@ -114,6 +114,7 @@ interface IDAO {
     error PriceDeviationTooHigh();
     error MainCollateralBalanceNotDepleted();
     error OnlyCreator();
+    error OnlyPOCContract();
     error AmountExceedsRemaining();
     error ExecutionFailed(string reason);
     error UpgradeNotAuthorized();
@@ -195,6 +196,7 @@ interface IDAO {
     event CreatorLaunchesAllocated(
         uint256 launchAmount, uint256 profitPercentReduction, uint256 newCreatorProfitPercent
     );
+    event CreatorLaunchesReturned(uint256 launchAmount, uint256 profitPercentIncrease, uint256 newCreatorProfitPercent);
     event LPProfitDistributed(address indexed lpToken, uint256 amount);
 
     // Upgrade events
@@ -214,7 +216,6 @@ interface IDAO {
     function setDelegate(address userAddress, address delegate) external;
     function claimReward(address[] calldata tokens) external;
     function requestExit() external;
-    function cancelExitRequest() external;
     function allocateLaunchesToCreator(uint256 launchAmount) external;
     function upgradeOwnerShare(uint256 amount) external;
 

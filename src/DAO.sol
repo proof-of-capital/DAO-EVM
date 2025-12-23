@@ -84,6 +84,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     DataTypes.POCInfo[] public pocContracts;
     mapping(address => uint256) public pocIndex; // poc address => index + 1 (0 means not found)
+    mapping(address => bool) public isPocContract;
 
     uint256 public totalLaunchBalance; // Total launch tokens after exchange
     uint256 public sharePriceInLaunches; // Share price denominated in launch tokens
@@ -253,6 +254,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             );
 
             pocIndex[poc.pocContract] = pocContracts.length; // index + 1
+            isPocContract[poc.pocContract] = true;
             totalPOCShare += poc.sharePercent;
 
             if (!rewardTokenInfo[poc.collateralToken].active) {
@@ -325,7 +327,11 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param emergency Emergency address for recovery
     /// @param delegate Delegate address for voting (if zero, primary is delegate)
     /// @return vaultId The ID of the created vault
-    function createVault(address backup, address emergency, address delegate) external nonReentrant returns (uint256 vaultId) {
+    function createVault(address backup, address emergency, address delegate)
+        external
+        nonReentrant
+        returns (uint256 vaultId)
+    {
         require(currentStage == DataTypes.Stage.Fundraising || currentStage == DataTypes.Stage.Active, InvalidStage());
         require(backup != address(0) && emergency != address(0), InvalidAddresses());
         require(addressToVaultId[msg.sender] == 0, VaultAlreadyExists());
@@ -622,7 +628,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         // Zero out voting shares for delegate
         address delegate = vault.delegate;
         uint256 vaultShares = vault.shares;
-        
+
         if (delegate != address(0) && delegate != vault.primary) {
             uint256 delegateVaultId = addressToVaultId[delegate];
             if (delegateVaultId > 0 && delegateVaultId < nextVaultId) {
@@ -654,7 +660,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Allocate launch tokens to creator, reducing their profit share proportionally
     /// @dev Can only be done once per ALLOCATION_PERIOD; max MAX_CREATOR_ALLOCATION_PERCENT per period
     /// @param launchAmount Amount of launch tokens to allocate
-    function allocateLaunchesToCreator(uint256 launchAmount) external onlyAdmin atStage(DataTypes.Stage.Active) {
+    function allocateLaunchesToCreator(uint256 launchAmount) external onlyVoting atStage(DataTypes.Stage.Active) {
         //???
         require(block.timestamp >= lastCreatorAllocation + ALLOCATION_PERIOD, AllocationTooSoon());
         require(launchAmount > 0, AmountMustBeGreaterThanZero());
@@ -786,6 +792,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         );
 
         pocIndex[pocContract] = pocContracts.length; // index + 1
+        isPocContract[pocContract] = true;
 
         emit POCContractAdded(pocContract, collateralToken, sharePercent);
     }
@@ -1065,6 +1072,36 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         totalSharesSupply -= shares;
     }
 
+    /// @notice Return launch tokens from POC contract, restoring creator's profit share
+    /// @dev POC contract returns launch tokens that were allocated to creator
+    /// @param amount Amount of launch tokens to return
+    function upgradeOwnerShare(uint256 amount) external {
+        require(isPocContract[msg.sender], OnlyPOCContract());
+        require(amount > 0, AmountMustBeGreaterThanZero());
+
+        // Transfer launch tokens from POC contract to DAO
+        launchToken.safeTransferFrom(msg.sender, address(this), amount);
+
+        // Calculate how many shares equivalent this represents
+        require(sharePriceInLaunches > 0, InvalidSharePrice());
+        uint256 sharesEquivalent = (amount * PRICE_DECIMALS_MULTIPLIER) / sharePriceInLaunches;
+
+        // Calculate what % of total shares this represents
+        require(totalSharesSupply > 0, NoShares());
+        uint256 profitPercentEquivalent = (sharesEquivalent * BASIS_POINTS) / totalSharesSupply;
+
+        // Restore creator's profit share by this percentage
+        // Ensure it doesn't exceed BASIS_POINTS (100%)
+        uint256 newCreatorProfitPercent = creatorProfitPercent + profitPercentEquivalent;
+        if (newCreatorProfitPercent > BASIS_POINTS) {
+            newCreatorProfitPercent = BASIS_POINTS;
+            profitPercentEquivalent = BASIS_POINTS - creatorProfitPercent;
+        }
+        creatorProfitPercent = newCreatorProfitPercent;
+
+        emit CreatorLaunchesReturned(amount, profitPercentEquivalent, creatorProfitPercent);
+    }
+
     /// @notice Set voting contract address
     /// @param _votingContract Voting contract address
     function setVotingContract(address _votingContract) external onlyAdmin {
@@ -1213,7 +1250,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function _updateDelegateVotingShares(uint256 vaultId, int256 sharesDelta) internal {
         DataTypes.Vault storage vault = vaults[vaultId];
         address delegate = vault.delegate;
-        
+
         // If no delegate or delegate is the vault itself, no need to update
         if (delegate == address(0) || delegate == vault.primary) {
             return;
@@ -1225,7 +1262,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         }
 
         DataTypes.Vault storage delegateVault = vaults[delegateVaultId];
-        
+
         if (sharesDelta > 0) {
             delegateVault.votingShares += uint256(sharesDelta);
         } else if (sharesDelta < 0) {
