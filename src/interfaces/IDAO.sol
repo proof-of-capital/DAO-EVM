@@ -131,6 +131,7 @@ interface IDAO {
     event PrimaryAddressUpdated(uint256 indexed vaultId, address oldPrimary, address newPrimary);
     event BackupAddressUpdated(uint256 indexed vaultId, address oldBackup, address newBackup);
     event EmergencyAddressUpdated(uint256 indexed vaultId, address oldEmergency, address newEmergency);
+    event DelegateUpdated(uint256 indexed vaultId, address oldDelegate, address newDelegate, uint256 delegateSetAt);
     event RewardClaimed(uint256 indexed vaultId, address indexed token, uint256 amount);
 
     // Trading events
@@ -204,16 +205,18 @@ interface IDAO {
     // VAULT MANAGEMENT
     // ============================================
 
-    function createVault(address backup, address emergency) external returns (uint256 vaultId);
+    function createVault(address backup, address emergency, address delegate) external returns (uint256 vaultId);
     function depositFundraising(uint256 amount, uint256 vaultId) external;
     function depositLaunches(uint256 launchAmount, uint256 vaultId) external;
     function updatePrimaryAddress(uint256 vaultId, address newPrimary) external;
     function updateBackupAddress(uint256 vaultId, address newBackup) external;
     function updateEmergencyAddress(uint256 vaultId, address newEmergency) external;
+    function setDelegate(address userAddress, address delegate) external;
     function claimReward(address[] calldata tokens) external;
     function requestExit() external;
     function cancelExitRequest() external;
     function allocateLaunchesToCreator(uint256 launchAmount) external;
+    function upgradeOwnerShare(uint256 amount) external;
 
     // ============================================
     // ORDERBOOK OPERATIONS
@@ -317,7 +320,16 @@ interface IDAO {
     function vaults(uint256)
         external
         view
-        returns (address primary, address backup, address emergency, uint256 shares, uint256 votingPausedUntil);
+        returns (
+            address primary,
+            address backup,
+            address emergency,
+            uint256 shares,
+            uint256 votingPausedUntil,
+            address delegate,
+            uint256 delegateSetAt,
+            uint256 votingShares
+        );
     function addressToVaultId(address) external view returns (uint256);
     function vaultMainCollateralDeposit(uint256) external view returns (uint256);
 

@@ -177,7 +177,7 @@ contract Voting is IVoting {
         uint256 vaultId = dao.addressToVaultId(msg.sender);
 
         if (vaultId > 0) {
-            (,,, uint256 shares,) = dao.vaults(vaultId);
+            (,,, uint256 shares,,,,) = dao.vaults(vaultId);
             // Board members need >= 10 shares to create proposals
             uint256 minShares = dao.BOARD_MEMBER_MIN_SHARES();
             require(isAdminUser || isCreator || shares >= minShares, InsufficientSharesToCreateProposal());
@@ -224,7 +224,7 @@ contract Voting is IVoting {
         // Get voter's vault
         uint256 vaultId = dao.addressToVaultId(msg.sender);
         require(vaultId > 0, NoVaultFound());
-        (address primary,,, uint256 shares, uint256 votingPausedUntil) = dao.vaults(vaultId);
+        (address primary,,, uint256 shares, uint256 votingPausedUntil,,,) = dao.vaults(vaultId);
         require(shares > 0, NoVotingPower());
         require(primary == msg.sender, OnlyPrimaryCanVote());
         require(block.timestamp >= votingPausedUntil, VotingIsPaused());

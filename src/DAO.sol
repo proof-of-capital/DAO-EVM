@@ -323,16 +323,27 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Create a new vault (without deposit)
     /// @param backup Backup address for recovery
     /// @param emergency Emergency address for recovery
+    /// @param delegate Delegate address for voting (if zero, primary is delegate)
     /// @return vaultId The ID of the created vault
-    function createVault(address backup, address emergency) external nonReentrant returns (uint256 vaultId) {
+    function createVault(address backup, address emergency, address delegate) external nonReentrant returns (uint256 vaultId) {
         require(currentStage == DataTypes.Stage.Fundraising || currentStage == DataTypes.Stage.Active, InvalidStage());
         require(backup != address(0) && emergency != address(0), InvalidAddresses());
         require(addressToVaultId[msg.sender] == 0, VaultAlreadyExists());
 
         vaultId = nextVaultId++;
 
+        // If delegate is zero, set primary as delegate
+        address finalDelegate = delegate == address(0) ? msg.sender : delegate;
+
         vaults[vaultId] = DataTypes.Vault({
-            primary: msg.sender, backup: backup, emergency: emergency, shares: 0, votingPausedUntil: 0
+            primary: msg.sender,
+            backup: backup,
+            emergency: emergency,
+            shares: 0,
+            votingPausedUntil: 0,
+            delegate: finalDelegate,
+            delegateSetAt: block.timestamp,
+            votingShares: 0
         });
 
         addressToVaultId[msg.sender] = vaultId;
@@ -385,6 +396,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         vault.shares += shares;
         totalSharesSupply += shares;
         totalCollectedMainCollateral += amount;
+
+        // Update voting shares for delegate
+        _updateDelegateVotingShares(vaultId, int256(shares));
 
         vaultMainCollateralDeposit[vaultId] += amount;
 
@@ -442,6 +456,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
         vault.shares += shares;
         totalSharesSupply += shares;
+
+        // Update voting shares for delegate
+        _updateDelegateVotingShares(vaultId, int256(shares));
 
         launchToken.safeTransferFrom(msg.sender, address(this), launchAmount);
         totalLaunchBalance += launchAmount;
@@ -501,6 +518,55 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         emit EmergencyAddressUpdated(vaultId, oldEmergency, newEmergency);
     }
 
+    /// @notice Set delegate address for voting (only callable by voting contract)
+    /// @param userAddress User address to find vault and set delegate
+    /// @param delegate New delegate address (if zero, primary is set as delegate)
+    function setDelegate(address userAddress, address delegate) external {
+        require(msg.sender == address(votingContract), OnlyVotingContract());
+        require(votingContract != address(0), InvalidAddress());
+        require(userAddress != address(0), InvalidAddress());
+
+        uint256 vaultId = addressToVaultId[userAddress];
+        require(vaultId > 0 && vaultId < nextVaultId, NoVaultFound());
+
+        DataTypes.Vault storage vault = vaults[vaultId];
+        require(vault.shares > 0, NoShares());
+
+        // If delegate is zero, set primary as delegate
+        address finalDelegate = delegate == address(0) ? vault.primary : delegate;
+
+        address oldDelegate = vault.delegate;
+        uint256 vaultShares = vault.shares;
+
+        // Update voting shares: remove from old delegate, add to new delegate
+        if (oldDelegate != address(0)) {
+            uint256 oldDelegateVaultId = addressToVaultId[oldDelegate];
+            if (oldDelegateVaultId > 0 && oldDelegateVaultId < nextVaultId) {
+                DataTypes.Vault storage oldDelegateVault = vaults[oldDelegateVaultId];
+                if (oldDelegateVault.votingShares >= vaultShares) {
+                    oldDelegateVault.votingShares -= vaultShares;
+                } else {
+                    oldDelegateVault.votingShares = 0;
+                }
+            }
+        }
+
+        // Update delegate
+        vault.delegate = finalDelegate;
+        vault.delegateSetAt = block.timestamp;
+
+        // Add voting shares to new delegate (only if delegate is different from primary)
+        if (finalDelegate != address(0) && finalDelegate != vault.primary) {
+            uint256 newDelegateVaultId = addressToVaultId[finalDelegate];
+            if (newDelegateVaultId > 0 && newDelegateVaultId < nextVaultId) {
+                DataTypes.Vault storage newDelegateVault = vaults[newDelegateVaultId];
+                newDelegateVault.votingShares += vaultShares;
+            }
+        }
+
+        emit DelegateUpdated(vaultId, oldDelegate, finalDelegate, block.timestamp);
+    }
+
     /// @notice Claim accumulated rewards for tokens
     /// @param tokens Array of token addresses to claim
     function claimReward(address[] calldata tokens) external nonReentrant {
@@ -553,6 +619,22 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(vault.shares >= MIN_EXIT_SHARES, AmountMustBeGreaterThanZero());
         require(vaultExitRequestIndex[vaultId] == 0, AlreadyInExitQueue());
 
+        // Zero out voting shares for delegate
+        address delegate = vault.delegate;
+        uint256 vaultShares = vault.shares;
+        
+        if (delegate != address(0) && delegate != vault.primary) {
+            uint256 delegateVaultId = addressToVaultId[delegate];
+            if (delegateVaultId > 0 && delegateVaultId < nextVaultId) {
+                DataTypes.Vault storage delegateVault = vaults[delegateVaultId];
+                if (delegateVault.votingShares >= vaultShares) {
+                    delegateVault.votingShares -= vaultShares;
+                } else {
+                    delegateVault.votingShares = 0;
+                }
+            }
+        }
+
         uint256 launchPriceNow = _getLaunchPriceFromPOC();
 
         exitQueue.push(
@@ -567,28 +649,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         vaultExitRequestIndex[vaultId] = exitQueue.length; // Store index + 1
 
         emit ExitRequested(vaultId, vault.shares, launchPriceNow);
-    }
-
-    /// @notice Cancel exit request
-    function cancelExitRequest() external nonReentrant atStage(DataTypes.Stage.Active) {
-        // ???
-        uint256 vaultId = addressToVaultId[msg.sender];
-        require(vaultId > 0 && vaultId < nextVaultId, NoVaultFound());
-
-        DataTypes.Vault storage vault = vaults[vaultId];
-        require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
-
-        uint256 queueIndex = vaultExitRequestIndex[vaultId];
-        require(queueIndex > 0, NotInExitQueue());
-
-        DataTypes.ExitRequest storage request = exitQueue[queueIndex - 1];
-        require(!request.processed, ExitAlreadyProcessed());
-
-        // Mark as processed (effectively cancelled)
-        request.processed = true;
-        vaultExitRequestIndex[vaultId] = 0;
-
-        emit ExitRequestCancelled(vaultId);
     }
 
     /// @notice Allocate launch tokens to creator, reducing their profit share proportionally
@@ -976,6 +1036,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         uint256 shares = vault.shares;
         vault.shares = 0;
 
+        // Update voting shares for delegate
+        _updateDelegateVotingShares(vaultId, -int256(shares));
+
         for (uint256 i = 0; i < tokens.length; i++) {
             address token = tokens[i];
             require(token != address(0), InvalidAddress());
@@ -1142,6 +1205,37 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         lastLPDistribution[lpToken] = block.timestamp;
 
         emit LPProfitDistributed(lpToken, toDistribute);
+    }
+
+    /// @notice Update voting shares for delegate when vault shares change
+    /// @param vaultId Vault ID whose shares changed
+    /// @param sharesDelta Change in shares (positive for increase, negative for decrease)
+    function _updateDelegateVotingShares(uint256 vaultId, int256 sharesDelta) internal {
+        DataTypes.Vault storage vault = vaults[vaultId];
+        address delegate = vault.delegate;
+        
+        // If no delegate or delegate is the vault itself, no need to update
+        if (delegate == address(0) || delegate == vault.primary) {
+            return;
+        }
+
+        uint256 delegateVaultId = addressToVaultId[delegate];
+        if (delegateVaultId == 0 || delegateVaultId >= nextVaultId) {
+            return;
+        }
+
+        DataTypes.Vault storage delegateVault = vaults[delegateVaultId];
+        
+        if (sharesDelta > 0) {
+            delegateVault.votingShares += uint256(sharesDelta);
+        } else if (sharesDelta < 0) {
+            uint256 decreaseAmount = uint256(-sharesDelta);
+            if (delegateVault.votingShares >= decreaseAmount) {
+                delegateVault.votingShares -= decreaseAmount;
+            } else {
+                delegateVault.votingShares = 0;
+            }
+        }
     }
 
     /// @notice Update vault rewards snapshot for all tokens
