@@ -6,7 +6,7 @@
 
 // (c) 2025 https://proofofcapital.org/
 
-// https://github.com/proof-of-capital/EVM
+// https://github.com/proof-of-capital/DAO-EVM
 
 // Proof of Capital is a technology for managing the issue of tokens that are backed by capital.
 // The contract allows you to block the desired part of the issue for a selected period with a
@@ -27,8 +27,6 @@
 // All royalties collected are automatically used to repurchase the project's core token, as
 // specified on the website, and are returned to the contract.
 
-// This is the third version of the contract. It introduces the following features: the ability to choose any jetcollateral as collateral, build collateral with an offset,
-// perform delayed withdrawals (and restrict them if needed), assign multiple market makers, modify royalty conditions, and withdraw profit on request.
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -140,6 +138,7 @@ interface IDAO {
         address indexed seller, address indexed collateral, uint256 launchAmount, uint256 collateralAmount
     );
     event SellableCollateralAdded(address indexed token, address indexed priceFeed);
+    event RewardTokenAdded(address indexed token, address indexed priceFeed);
     event ProfitDistributed(address indexed token, uint256 amount);
     event RoyaltyDistributed(address indexed token, address indexed recipient, uint256 amount);
     event CreatorProfitDistributed(address indexed token, address indexed creator, uint256 amount);
@@ -147,7 +146,9 @@ interface IDAO {
     // Lifecycle events
     event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
     event VotingContractSet(address indexed votingContract);
+    event AdminSet(address indexed oldAdmin, address indexed newAdmin);
     event MainCollateralSet(address indexed mainCollateral);
+    event DoNotExtendPOCLockSet(bool oldValue, bool newValue);
     event RouterAvailabilityChanged(address indexed router, bool isAvailable);
     event TokenAvailabilityChanged(address indexed token, bool isAvailable);
     event OrderbookParamsUpdated(
@@ -257,7 +258,7 @@ interface IDAO {
     // LIFECYCLE MANAGEMENT
     // ============================================
 
-    function dissolve() external;
+    function dissolveIfLocksEnded() external;
     function claimDissolution(address[] calldata tokens) external;
     function claimCreatorDissolution() external;
     function executeProposal(address targetContract, bytes calldata callData) external;
@@ -267,6 +268,8 @@ interface IDAO {
     // ============================================
 
     function setVotingContract(address votingContract) external;
+    function setAdmin(address newAdmin) external;
+    function setDoNotExtendPOCLock(bool value) external;
 
     // ============================================
     // PROFIT DISTRIBUTION
@@ -321,6 +324,8 @@ interface IDAO {
     // Routers and tokens
     function availableRouterByAdmin(address) external view returns (bool);
     function sellableCollaterals(address) external view returns (address token, address priceFeed, bool active);
+    function rewardTokens(uint256) external view returns (address);
+    function rewardTokenInfo(address) external view returns (address token, address priceFeed, bool active);
 
     // Rewards
     function accountedBalance(address) external view returns (uint256);

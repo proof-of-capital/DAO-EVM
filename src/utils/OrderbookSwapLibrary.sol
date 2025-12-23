@@ -6,7 +6,7 @@
 
 // (c) 2025 https://proofofcapital.org/
 
-// https://github.com/proof-of-capital/EVM
+// https://github.com/proof-of-capital/DAO-EVM
 
 // Proof of Capital is a technology for managing the issue of tokens that are backed by capital.
 // The contract allows you to block the desired part of the issue for a selected period with a
@@ -27,8 +27,6 @@
 // All royalties collected are automatically used to repurchase the project's core token, as
 // specified on the website, and are returned to the contract.
 
-// This is the third version of the contract. It introduces the following features: the ability to choose any jetcollateral as collateral, build collateral with an offset,
-// perform delayed withdrawals (and restrict them if needed), assign multiple market makers, modify royalty conditions, and withdraw profit on request.
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";

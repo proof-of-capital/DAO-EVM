@@ -6,7 +6,7 @@
 
 // (c) 2025 https://proofofcapital.org/
 
-// https://github.com/proof-of-capital/EVM
+// https://github.com/proof-of-capital/DAO-EVM
 
 // Proof of Capital is a technology for managing the issue of tokens that are backed by capital.
 // The contract allows you to block the desired part of the issue for a selected period with a
@@ -27,8 +27,6 @@
 // All royalties collected are automatically used to repurchase the project's core token, as
 // specified on the website, and are returned to the contract.
 
-// This is the third version of the contract. It introduces the following features: the ability to choose any jetcollateral as collateral, build collateral with an offset,
-// perform delayed withdrawals (and restrict them if needed), assign multiple market makers, modify royalty conditions, and withdraw profit on request.
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
@@ -75,18 +73,29 @@ contract DeployDAO is Script {
             require(collateralTokens.length == priceFeeds.length, "Collaterals and price feeds length mismatch");
         }
 
-        // Prepare routers and tokens for constructor
+        // Prepare routers and reward tokens for constructor
         address[] memory routers;
-        address[] memory tokens;
+        address[] memory tokens; // Deprecated: kept for backward compatibility
+        DataTypes.RewardTokenConstructorParams[] memory rewardTokenParams;
 
         // Optional: Load routers if configured
         if (vm.envOr("ADD_ROUTERS", false)) {
             routers = vm.envAddress("ROUTER_ADDRESSES", ",");
         }
 
-        // Optional: Load tokens if configured
-        if (vm.envOr("ADD_TOKENS", false)) {
-            tokens = vm.envAddress("TOKEN_ADDRESSES", ",");
+        // Optional: Load additional reward tokens if configured
+        // Format: REWARD_TOKEN_ADDRESSES=token1,token2,... REWARD_TOKEN_PRICE_FEEDS=feed1,feed2,...
+        if (vm.envOr("ADD_REWARD_TOKENS", false)) {
+            address[] memory rewardTokens = vm.envAddress("REWARD_TOKEN_ADDRESSES", ",");
+            address[] memory rewardPriceFeeds = vm.envAddress("REWARD_TOKEN_PRICE_FEEDS", ",");
+
+            require(rewardTokens.length == rewardPriceFeeds.length, "Reward tokens and price feeds length mismatch");
+
+            rewardTokenParams = new DataTypes.RewardTokenConstructorParams[](rewardTokens.length);
+            for (uint256 i = 0; i < rewardTokens.length; i++) {
+                rewardTokenParams[i] =
+                    DataTypes.RewardTokenConstructorParams({token: rewardTokens[i], priceFeed: rewardPriceFeeds[i]});
+            }
         }
 
         // Prepare POC contracts for constructor
@@ -125,8 +134,9 @@ contract DeployDAO is Script {
             collateralTokens: collateralTokens,
             priceFeeds: priceFeeds,
             routers: routers,
-            tokens: tokens,
+            tokens: tokens, // Deprecated: kept for backward compatibility
             pocParams: pocParams,
+            rewardTokenParams: rewardTokenParams,
             orderbookParams: orderbookParams
         });
 
@@ -157,8 +167,8 @@ contract DeployDAO is Script {
         if (routers.length > 0) {
             console.log("Routers added in constructor:", routers.length);
         }
-        if (tokens.length > 0) {
-            console.log("Tokens added in constructor:", tokens.length);
+        if (rewardTokenParams.length > 0) {
+            console.log("Additional reward tokens added in constructor:", rewardTokenParams.length);
         }
 
         vm.stopBroadcast();

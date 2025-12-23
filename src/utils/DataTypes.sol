@@ -6,7 +6,7 @@
 
 // (c) 2025 https://proofofcapital.org/
 
-// https://github.com/proof-of-capital/EVM
+// https://github.com/proof-of-capital/DAO-EVM
 
 // Proof of Capital is a technology for managing the issue of tokens that are backed by capital.
 // The contract allows you to block the desired part of the issue for a selected period with a
@@ -27,8 +27,6 @@
 // All royalties collected are automatically used to repurchase the project's core token, as
 // specified on the website, and are returned to the contract.
 
-// This is the third version of the contract. It introduces the following features: the ability to choose any jetcollateral as collateral, build collateral with an offset,
-// perform delayed withdrawals (and restrict them if needed), assign multiple market makers, modify royalty conditions, and withdraw profit on request.
 pragma solidity ^0.8.20;
 
 /// @title DataTypes
@@ -133,6 +131,13 @@ library DataTypes {
         bool active; // Whether collateral is active
     }
 
+    /// @notice Reward token information
+    struct RewardTokenInfo {
+        address token; // Reward token address
+        address priceFeed; // Chainlink price feed address
+        bool active; // Whether reward token is active
+    }
+
     /// @notice Parameters for sell operation
     struct SellParams {
         address collateral; // Collateral token address
@@ -223,7 +228,6 @@ library DataTypes {
     /// @notice Exit request for participant wanting to leave DAO
     struct ExitRequest {
         uint256 vaultId; // Vault ID requesting exit
-        uint256 shares; // Number of shares to exit
         uint256 requestTimestamp; // When exit was requested
         uint256 fixedLaunchPriceAtRequest; // Launch price at time of request
         bool processed; // Whether exit has been processed
@@ -239,6 +243,12 @@ library DataTypes {
         address collateralToken;
         address priceFeed;
         uint256 sharePercent;
+    }
+
+    /// @notice Reward token parameters for constructor
+    struct RewardTokenConstructorParams {
+        address token;
+        address priceFeed;
     }
 
     /// @notice Orderbook parameters for constructor (without cache fields)
@@ -270,8 +280,9 @@ library DataTypes {
         address[] collateralTokens;
         address[] priceFeeds;
         address[] routers;
-        address[] tokens;
+        address[] tokens; // Deprecated: use rewardTokenParams instead
         POCConstructorParams[] pocParams;
+        RewardTokenConstructorParams[] rewardTokenParams; // Additional reward tokens (POC collaterals are added automatically)
         OrderbookConstructorParams orderbookParams;
     }
 }
