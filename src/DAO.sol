@@ -96,7 +96,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     uint256 public pendingUpgradeFromVotingTimestamp;
     address public pendingUpgradeFromCreator;
 
-    bool public doNotExtendPOCLock;
+    bool public isVetoToCreator;
 
     modifier onlyAdmin() {
         _onlyAdmin();
@@ -650,13 +650,13 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         emit AdminSet(oldAdmin, newAdmin);
     }
 
-    /// @notice Set flag indicating DAO does not want to extend lock in POC contract (only callable by voting)
+    /// @notice Set flag indicating creator has veto power (only callable by voting)
     /// @param value New value for the flag
-    function setDoNotExtendPOCLock(bool value) external onlyVoting {
-        bool oldValue = doNotExtendPOCLock;
-        doNotExtendPOCLock = value;
+    function setIsVetoToCreator(bool value) external onlyVoting {
+        bool oldValue = isVetoToCreator;
+        isVetoToCreator = value;
 
-        emit DoNotExtendPOCLockSet(oldValue, value);
+        emit IsVetoToCreatorSet(oldValue, value);
     }
 
     /// @notice Push multisig to execute a proposal

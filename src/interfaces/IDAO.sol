@@ -155,7 +155,7 @@ interface IDAO {
     event VotingContractSet(address indexed votingContract);
     event AdminSet(address indexed oldAdmin, address indexed newAdmin);
     event MainCollateralSet(address indexed mainCollateral);
-    event DoNotExtendPOCLockSet(bool oldValue, bool newValue);
+    event IsVetoToCreatorSet(bool oldValue, bool newValue);
     event RouterAvailabilityChanged(address indexed router, bool isAvailable);
     event TokenAvailabilityChanged(address indexed token, bool isAvailable);
     event MultisigExecutionPushed(uint256 indexed proposalId, address indexed pusher);
@@ -286,7 +286,7 @@ interface IDAO {
 
     function setVotingContract(address votingContract) external;
     function setAdmin(address newAdmin) external;
-    function setDoNotExtendPOCLock(bool value) external;
+    function setIsVetoToCreator(bool value) external;
     function pushMultisigExecution(uint256 proposalId, IMultisig.ProposalCall[] calldata calls) external;
 
     // ============================================
