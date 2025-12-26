@@ -303,12 +303,9 @@ interface IDAO {
     function votingContract() external view returns (address);
     function launchToken() external view returns (IERC20);
     function mainCollateral() external view returns (address);
-    function currentStage() external view returns (DataTypes.Stage);
     function creator() external view returns (address);
-    function creatorProfitPercent() external view returns (uint256);
     function creatorInfraPercent() external view returns (uint256);
-    function royaltyRecipient() external view returns (address);
-    function royaltyPercent() external view returns (uint256);
+    function daoState() external view returns (DataTypes.DAOState memory);
 
     // Shares and supply
     function totalSharesSupply() external view returns (uint256);
@@ -323,24 +320,9 @@ interface IDAO {
     // POC contracts
     function pocIndex(address) external view returns (uint256);
 
-    // Launch tokens
-    function totalLaunchBalance() external view returns (uint256);
-    function sharePriceInLaunches() external view returns (uint256);
 
     // Vaults
-    function vaults(uint256)
-        external
-        view
-        returns (
-            address primary,
-            address backup,
-            address emergency,
-            uint256 shares,
-            uint256 votingPausedUntil,
-            address delegate,
-            uint256 delegateSetAt,
-            uint256 votingShares
-        );
+    function vaults(uint256 vaultId) external view returns (DataTypes.Vault memory);
     function addressToVaultId(address) external view returns (uint256);
     function vaultMainCollateralDeposit(uint256) external view returns (uint256);
 
@@ -348,9 +330,9 @@ interface IDAO {
     function availableRouterByAdmin(address) external view returns (bool);
     function sellableCollaterals(address) external view returns (address token, address priceFeed, bool active);
     function rewardTokens(uint256) external view returns (address);
-    function rewardTokenInfo(address) external view returns (address token, address priceFeed, bool active);
+    function rewardTokenInfo(address) external view returns (DataTypes.RewardTokenInfo memory);
 
-    // Rewards
+    // Rewards - mappings need separate getters
     function accountedBalance(address) external view returns (uint256);
     function rewardPerShareStored(address) external view returns (uint256);
     function vaultRewardIndex(uint256, address) external view returns (uint256);
@@ -359,12 +341,11 @@ interface IDAO {
     // V2 LP tokens
     function v2LPTokens(uint256) external view returns (address);
     function isV2LPToken(address) external view returns (bool);
+    function lastLPDistribution(address) external view returns (uint256);
+    function lpTokenAddedAt(address) external view returns (uint256);
 
     // V3 LP positions
-    function v3LPPositions(uint256)
-        external
-        view
-        returns (address positionManager, uint256 tokenId, address token0, address token1);
+    function v3LPPositions(uint256) external view returns (DataTypes.V3LPPositionInfo memory);
     function v3TokenIdToIndex(uint256) external view returns (uint256);
     function v3PositionManager() external view returns (address);
     function primaryLPTokenType() external view returns (DataTypes.LPTokenType);

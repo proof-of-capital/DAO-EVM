@@ -148,9 +148,9 @@ contract Voting is IVoting {
         uint256 vaultId = dao.addressToVaultId(msg.sender);
 
         if (vaultId > 0) {
-            (,,, uint256 shares,,,,) = dao.vaults(vaultId);
+            DataTypes.Vault memory vault = dao.vaults(vaultId);
             uint256 minShares = Constants.BOARD_MEMBER_MIN_SHARES;
-            require(isAdminUser || isCreator || shares >= minShares, InsufficientSharesToCreateProposal());
+            require(isAdminUser || isCreator || vault.shares >= minShares, InsufficientSharesToCreateProposal());
         } else {
             require(isAdminUser || isCreator, NotAuthorizedToCreateProposal());
         }
@@ -191,13 +191,13 @@ contract Voting is IVoting {
 
         uint256 vaultId = dao.addressToVaultId(msg.sender);
         require(vaultId > 0, NoVaultFound());
-        (address primary,,, uint256 shares, uint256 votingPausedUntil,,,) = dao.vaults(vaultId);
-        require(shares > 0, NoVotingPower());
-        require(primary == msg.sender, OnlyPrimaryCanVote());
-        require(block.timestamp >= votingPausedUntil, VotingIsPaused());
+        DataTypes.Vault memory vault = dao.vaults(vaultId);
+        require(vault.shares > 0, NoVotingPower());
+        require(vault.primary == msg.sender, OnlyPrimaryCanVote());
+        require(block.timestamp >= vault.votingPausedUntil, VotingIsPaused());
         require(!hasVotedMapping[proposalId][vaultId], AlreadyVoted());
 
-        uint256 votingPower = shares;
+        uint256 votingPower = vault.shares;
         require(votingPower > 0, NoVotingPower());
 
         hasVotedMapping[proposalId][vaultId] = true;

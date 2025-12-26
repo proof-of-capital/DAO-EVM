@@ -1,0 +1,152 @@
+// SPDX-License-Identifier: UNLICENSED
+// All rights reserved.
+
+// This source code is provided for reference purposes only.
+// You may not copy, reproduce, distribute, modify, deploy, or otherwise use this code in whole or in part without explicit written permission from the author.
+
+// (c) 2025 https://proofofcapital.org/
+
+// https://github.com/proof-of-capital/DAO-EVM
+
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "../interfaces/IProofOfCapital.sol";
+import "./DataTypes.sol";
+import "./Constants.sol";
+import "./VaultLibrary.sol";
+import "./LPTokenLibrary.sol";
+
+/// @title DissolutionLibrary
+/// @notice Library for DAO dissolution operations
+library DissolutionLibrary {
+    using SafeERC20 for IERC20;
+
+    error NoPOCContractsConfigured();
+    error POCLockPeriodNotEnded();
+    error NoVaultFound();
+    error OnlyPrimaryCanClaim();
+    error NoSharesToClaim();
+    error InvalidAddress();
+    error NoRewardsToClaim();
+
+    event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
+    event CreatorDissolutionClaimed(address indexed creator, uint256 launchAmount);
+
+    /// @notice Dissolve DAO if all POC contract locks have ended
+    /// @param daoState DAO state storage structure
+    /// @param pocContracts Array of POC contracts
+    /// @param isPocContract Mapping to check if address is POC contract
+    /// @param lpTokenStorage LP token storage structure
+    /// @param accountedBalance Mapping of accounted balances
+    function executeDissolveIfLocksEnded(
+        DataTypes.DAOState storage daoState,
+        DataTypes.POCInfo[] storage pocContracts,
+        mapping(address => bool) storage isPocContract,
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        mapping(address => uint256) storage accountedBalance
+    ) external {
+        require(pocContracts.length > 0, NoPOCContractsConfigured());
+
+        for (uint256 i = 0; i < pocContracts.length; i++) {
+            DataTypes.POCInfo storage poc = pocContracts[i];
+
+            if (poc.active) {
+                uint256 lockEndTime = IProofOfCapital(poc.pocContract).lockEndTime();
+                require(block.timestamp >= lockEndTime, POCLockPeriodNotEnded());
+
+                IProofOfCapital(poc.pocContract).withdrawAllLaunchTokens();
+                IProofOfCapital(poc.pocContract).withdrawAllCollateralTokens();
+            }
+        }
+
+        bool hasLPTokens = LPTokenLibrary.hasLPTokens(lpTokenStorage, accountedBalance);
+
+        if (hasLPTokens) {
+            daoState.currentStage = DataTypes.Stage.WaitingForLPDissolution;
+            emit StageChanged(DataTypes.Stage.Active, DataTypes.Stage.WaitingForLPDissolution);
+        } else {
+            daoState.currentStage = DataTypes.Stage.Dissolved;
+            emit StageChanged(DataTypes.Stage.Active, DataTypes.Stage.Dissolved);
+        }
+    }
+
+    /// @notice Claim share of assets after dissolution
+    /// @param vaultStorage Vault storage structure
+    /// @param rewardsStorage Rewards storage structure
+    /// @param accountedBalance Mapping of accounted balances
+    /// @param launchToken Launch token address
+    /// @param contractAddress Contract address
+    /// @param sender Sender address
+    /// @param tokens Array of token addresses to claim
+    /// @return shares Shares amount claimed
+    function executeClaimDissolution(
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.RewardsStorage storage rewardsStorage,
+        mapping(address => uint256) storage accountedBalance,
+        address launchToken,
+        address contractAddress,
+        address sender,
+        address[] calldata tokens
+    ) external returns (uint256 shares) {
+        uint256 vaultId = vaultStorage.addressToVaultId[sender];
+        require(vaultId < vaultStorage.nextVaultId, NoVaultFound());
+
+        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        require(vault.primary == sender, OnlyPrimaryCanClaim());
+        require(vault.shares > 0, NoSharesToClaim());
+
+        shares = vault.shares;
+        vault.shares = 0;
+
+        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, -int256(shares));
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            require(token != address(0), InvalidAddress());
+
+            uint256 tokenBalance = IERC20(token).balanceOf(contractAddress);
+            if (tokenBalance == 0) continue;
+
+            bool isValidToken = token == address(launchToken) || rewardsStorage.rewardTokenInfo[token].active;
+
+            require(isValidToken, InvalidAddress());
+
+            uint256 tokenShare = (tokenBalance * shares) / vaultStorage.totalSharesSupply;
+            if (tokenShare > 0) {
+                IERC20(token).safeTransfer(sender, tokenShare);
+                if (token == address(launchToken)) {
+                    accountedBalance[address(launchToken)] -= tokenShare;
+                }
+            }
+        }
+
+        vaultStorage.totalSharesSupply -= shares;
+    }
+
+    /// @notice Claim creator's share of launch tokens during dissolution
+    /// @param daoState DAO state storage
+    /// @param accountedBalance Mapping of accounted balances
+    /// @param launchToken Launch token address
+    /// @param creatorInfraPercent Creator infrastructure percent
+    /// @param contractAddress Contract address
+    /// @param creator Creator address
+    /// @return creatorLaunchShare Creator's launch share amount
+    function executeClaimCreatorDissolution(
+        DataTypes.DAOState storage daoState,
+        mapping(address => uint256) storage accountedBalance,
+        address launchToken,
+        uint256 creatorInfraPercent,
+        address contractAddress,
+        address creator
+    ) external returns (uint256 creatorLaunchShare) {
+        uint256 launchBalance = IERC20(launchToken).balanceOf(contractAddress);
+        creatorLaunchShare = (launchBalance * creatorInfraPercent) / Constants.BASIS_POINTS;
+        require(creatorLaunchShare > 0, NoRewardsToClaim());
+        IERC20(launchToken).safeTransfer(creator, creatorLaunchShare);
+        accountedBalance[address(launchToken)] -= creatorLaunchShare;
+        emit CreatorDissolutionClaimed(creator, creatorLaunchShare);
+    }
+}
+

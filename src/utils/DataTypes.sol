@@ -311,5 +311,59 @@ library DataTypes {
         LPTokenType primaryLPTokenType; // Primary LP token type (if specified, must be provided)
         V3LPPositionParams[] v3LPPositions; // V3 LP positions for initialization (optional)
     }
+
+    // ============================================
+    // STORAGE STRUCTURES FOR LIBRARIES
+    // ============================================
+
+    /// @notice Storage structure for Vault management
+    struct VaultStorage {
+        mapping(uint256 => Vault) vaults;
+        mapping(address => uint256) addressToVaultId;
+        mapping(uint256 => uint256) vaultMainCollateralDeposit;
+        uint256 nextVaultId;
+        uint256 totalSharesSupply;
+    }
+
+    /// @notice Storage structure for Rewards system
+    struct RewardsStorage {
+        address[] rewardTokens;
+        mapping(address => RewardTokenInfo) rewardTokenInfo;
+        mapping(address => uint256) rewardPerShareStored;
+        mapping(uint256 => mapping(address => uint256)) vaultRewardIndex;
+        mapping(uint256 => mapping(address => uint256)) earnedRewards;
+    }
+
+    /// @notice Storage structure for Exit Queue
+    struct ExitQueueStorage {
+        ExitRequest[] exitQueue;
+        mapping(uint256 => uint256) vaultExitRequestIndex;
+        uint256 nextExitQueueIndex;
+    }
+
+    /// @notice Storage structure for LP Tokens
+    struct LPTokenStorage {
+        address[] v2LPTokens;
+        mapping(address => bool) isV2LPToken;
+        V3LPPositionInfo[] v3LPPositions;
+        mapping(uint256 => uint256) v3TokenIdToIndex;
+        address v3PositionManager;
+        mapping(address => uint256) lastLPDistribution;
+        mapping(address => uint256) lpTokenAddedAt;
+        mapping(uint256 => uint256) v3LastLPDistribution;
+        mapping(uint256 => uint256) v3LPTokenAddedAt;
+    }
+
+    /// @notice Storage structure for DAO state
+    struct DAOState {
+        Stage currentStage;
+        uint256 totalLaunchBalance;
+        uint256 sharePriceInLaunches;
+        address royaltyRecipient;
+        uint256 royaltyPercent;
+        address creator;
+        uint256 creatorProfitPercent;
+        uint256 totalCollectedMainCollateral;
+    }
 }
 
