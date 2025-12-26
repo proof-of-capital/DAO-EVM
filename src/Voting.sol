@@ -32,6 +32,7 @@ pragma solidity ^0.8.20;
 import "./interfaces/IVoting.sol";
 import "./interfaces/IDAO.sol";
 import "./utils/DataTypes.sol";
+import "./utils/Constants.sol";
 
 /// @title Voting Contract
 /// @notice Manages proposals and voting for DAO governance
@@ -62,23 +63,6 @@ contract Voting is IVoting {
     error InvalidThreshold();
     error InvalidAddress();
     error InvalidCategory();
-
-    // Constants
-    uint256 public constant DEFAULT_VOTING_PERIOD = 7 days;
-    uint256 public constant DEFAULT_QUORUM_PERCENTAGE = 30;
-    uint256 public constant DEFAULT_APPROVAL_THRESHOLD = 51;
-
-    uint256 public constant DEFAULT_GOVERNANCE_QUORUM = 40;
-    uint256 public constant DEFAULT_GOVERNANCE_APPROVAL = 66;
-
-    uint256 public constant DEFAULT_POC_QUORUM = 35;
-    uint256 public constant DEFAULT_POC_APPROVAL = 60;
-
-    uint256 public constant DEFAULT_FINANCIAL_QUORUM = 35;
-    uint256 public constant DEFAULT_FINANCIAL_APPROVAL = 60;
-
-    uint256 public constant DEFAULT_OTHER_QUORUM = 30;
-    uint256 public constant DEFAULT_OTHER_APPROVAL = 51;
 
     // State variables
     IDAO public immutable dao;
@@ -125,23 +109,26 @@ contract Voting is IVoting {
         dao = IDAO(_dao);
         admin = msg.sender;
 
-        votingPeriod = DEFAULT_VOTING_PERIOD;
-        quorumPercentage = DEFAULT_QUORUM_PERCENTAGE;
-        approvalThreshold = DEFAULT_APPROVAL_THRESHOLD;
+        votingPeriod = Constants.DEFAULT_VOTING_PERIOD;
+        quorumPercentage = Constants.DEFAULT_QUORUM_PERCENTAGE;
+        approvalThreshold = Constants.DEFAULT_APPROVAL_THRESHOLD;
 
         categoryThresholds[DataTypes.VotingCategory.Governance] = DataTypes.VotingThresholds({
-            quorumPercentage: DEFAULT_GOVERNANCE_QUORUM, approvalThreshold: DEFAULT_GOVERNANCE_APPROVAL
+            quorumPercentage: Constants.DEFAULT_GOVERNANCE_QUORUM,
+            approvalThreshold: Constants.DEFAULT_GOVERNANCE_APPROVAL
         });
 
-        categoryThresholds[DataTypes.VotingCategory.POC] =
-            DataTypes.VotingThresholds({quorumPercentage: DEFAULT_POC_QUORUM, approvalThreshold: DEFAULT_POC_APPROVAL});
+        categoryThresholds[DataTypes.VotingCategory.POC] = DataTypes.VotingThresholds({
+            quorumPercentage: Constants.DEFAULT_POC_QUORUM, approvalThreshold: Constants.DEFAULT_POC_APPROVAL
+        });
 
         categoryThresholds[DataTypes.VotingCategory.Financial] = DataTypes.VotingThresholds({
-            quorumPercentage: DEFAULT_FINANCIAL_QUORUM, approvalThreshold: DEFAULT_FINANCIAL_APPROVAL
+            quorumPercentage: Constants.DEFAULT_FINANCIAL_QUORUM,
+            approvalThreshold: Constants.DEFAULT_FINANCIAL_APPROVAL
         });
 
         categoryThresholds[DataTypes.VotingCategory.Other] = DataTypes.VotingThresholds({
-            quorumPercentage: DEFAULT_OTHER_QUORUM, approvalThreshold: DEFAULT_OTHER_APPROVAL
+            quorumPercentage: Constants.DEFAULT_OTHER_QUORUM, approvalThreshold: Constants.DEFAULT_OTHER_APPROVAL
         });
     }
 
@@ -162,7 +149,7 @@ contract Voting is IVoting {
 
         if (vaultId > 0) {
             (,,, uint256 shares,,,,) = dao.vaults(vaultId);
-            uint256 minShares = dao.BOARD_MEMBER_MIN_SHARES();
+            uint256 minShares = Constants.BOARD_MEMBER_MIN_SHARES;
             require(isAdminUser || isCreator || shares >= minShares, InsufficientSharesToCreateProposal());
         } else {
             require(isAdminUser || isCreator, NotAuthorizedToCreateProposal());

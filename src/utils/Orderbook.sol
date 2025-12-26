@@ -34,15 +34,12 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "../interfaces/IAggregatorV3.sol";
 import "./DataTypes.sol";
 import "./OrderbookSwapLibrary.sol";
+import "./Constants.sol";
 
 /// @title Orderbook Library
 /// @notice Library for handling orderbook sell operations with storage parameters
 library Orderbook {
     using SafeERC20 for IERC20;
-
-    uint256 public constant PRICE_DECIMALS = 18;
-    uint256 public constant PRICE_DECIMALS_MULTIPLIER = 1e18;
-    uint256 public constant BASIS_POINTS = 10000;
 
     error CollateralNotSellable();
     error InvalidCollateralPrice();
@@ -102,7 +99,8 @@ library Orderbook {
 
         accountedBalance[params.collateral] += receivedCollateral;
 
-        uint256 receivedCollateralInUsd = (receivedCollateral * collateralPriceUSD) / PRICE_DECIMALS_MULTIPLIER;
+        uint256 receivedCollateralInUsd =
+            (receivedCollateral * collateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
         orderbookParams.totalSold += params.launchTokenAmount;
 
@@ -171,18 +169,18 @@ library Orderbook {
             // - sharePrice is in USD (18 decimals)
             // - totalSupply is in token units (18 decimals)
             uint256 adjustedLevelVolume = (currentBaseVolume * proportionalityCoefficient * totalShares * sharePrice)
-                / (totalSupply * BASIS_POINTS * PRICE_DECIMALS_MULTIPLIER);
+                / (totalSupply * Constants.BASIS_POINTS * Constants.PRICE_DECIMALS_MULTIPLIER);
 
             uint256 tokensRemainingOnLevel =
                 adjustedLevelVolume > soldOnCurrentLevel ? adjustedLevelVolume - soldOnCurrentLevel : 0;
 
             if (remainingTokens <= tokensRemainingOnLevel) {
-                expectedUsd += (remainingTokens * currentPrice) / PRICE_DECIMALS_MULTIPLIER;
+                expectedUsd += (remainingTokens * currentPrice) / Constants.PRICE_DECIMALS_MULTIPLIER;
                 soldOnCurrentLevel += remainingTokens;
                 remainingTokens = 0;
             } else {
                 if (tokensRemainingOnLevel > 0) {
-                    expectedUsd += (tokensRemainingOnLevel * currentPrice) / PRICE_DECIMALS_MULTIPLIER;
+                    expectedUsd += (tokensRemainingOnLevel * currentPrice) / Constants.PRICE_DECIMALS_MULTIPLIER;
                     remainingTokens -= tokensRemainingOnLevel;
                 }
 
@@ -191,15 +189,17 @@ library Orderbook {
                 soldOnCurrentLevel = 0;
 
                 // Update price: ЦУ1 = ЦУ0 * (1 + ШПЦ) = ЦУ0 * (10000 + priceStepPercent) / 10000
-                currentPrice = (currentPrice * (BASIS_POINTS + priceStepPercent)) / BASIS_POINTS;
+                currentPrice = (currentPrice * (Constants.BASIS_POINTS + priceStepPercent)) / Constants.BASIS_POINTS;
 
                 // Update base volume: ТРУ1 = ТРУ0 * (1 + ШПРУ)
                 // Note: volumeStepPercent can be negative
                 if (volumeStepPercent >= 0) {
-                    currentBaseVolume = (currentBaseVolume * (BASIS_POINTS + uint256(volumeStepPercent))) / BASIS_POINTS;
+                    currentBaseVolume = (currentBaseVolume * (Constants.BASIS_POINTS + uint256(volumeStepPercent)))
+                        / Constants.BASIS_POINTS;
                 } else {
                     uint256 absVolumeStep = uint256(-volumeStepPercent);
-                    currentBaseVolume = (currentBaseVolume * (BASIS_POINTS - absVolumeStep)) / BASIS_POINTS;
+                    currentBaseVolume =
+                        (currentBaseVolume * (Constants.BASIS_POINTS - absVolumeStep)) / Constants.BASIS_POINTS;
                 }
             }
         }

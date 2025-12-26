@@ -372,6 +372,5 @@ interface IDAO {
     function v3LPTokenAddedAt(uint256) external view returns (uint256);
 
     // Board member functions
-    function BOARD_MEMBER_MIN_SHARES() external view returns (uint256);
     function isBoardMember(address account) external view returns (bool);
 }

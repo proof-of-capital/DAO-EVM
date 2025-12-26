@@ -41,29 +41,12 @@ import "./interfaces/INonfungiblePositionManager.sol";
 import "./interfaces/IUniswapV2Pair.sol";
 import "./utils/Orderbook.sol";
 import "./utils/DataTypes.sol";
+import "./utils/Constants.sol";
 
 /// @title DAO Contract
 /// @notice Main DAO contract managing vaults, shares, orderbook and collateral trading
 contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     using SafeERC20 for IERC20;
-
-    uint256 public constant VOTING_PAUSE_DURATION = 7 days;
-    uint256 public constant PRICE_DECIMALS = 18;
-    uint256 public constant PRICE_DECIMALS_MULTIPLIER = 1e18; // 10 ** PRICE_DECIMALS
-    uint256 public constant BASIS_POINTS = 10000; // 100% in basis points
-    uint256 public constant PRICE_DEVIATION_MAX = 300; // 3% max deviation in basis points
-    uint256 public constant MIN_MAIN_COLLATERAL_BALANCE = 1e18; // $1 in 18 decimals
-    uint256 public constant BOARD_MEMBER_MIN_SHARES = 10 * 1e18; // Minimum shares to be a board member (10 shares)
-    uint256 public constant MIN_EXIT_SHARES = 1e18; // Minimum shares required to exit (1 share)
-    uint256 public constant EXIT_DISCOUNT_PERIOD = 365 days; // Period for early exit discount
-    uint256 public constant EXIT_DISCOUNT_PERCENT = 2000; // 20% discount for early exit
-    uint256 public constant MAX_CREATOR_ALLOCATION_PERCENT = 500; // 5% max launches per period
-    uint256 public constant ALLOCATION_PERIOD = 30 days; // Period between allocations
-    uint256 public constant LP_DISTRIBUTION_PERIOD = 30 days; // Monthly LP distribution period
-    uint256 public constant LP_DISTRIBUTION_PERCENT = 100; // 1% of LP tokens distributed per month
-    uint256 public constant MIN_REWARD_PER_SHARE = 10; // Minimum reward per share in minimal units
-    uint256 public constant UPGRADE_DELAY = 5 days; // Delay required before upgrade can be authorized
-    uint256 public constant CANCEL_AFTER_ACTIVE_PERIOD = 100 days; // Period after Active stage when anyone with shares can cancel
 
     address public admin;
     address public votingContract;
@@ -193,9 +176,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(params.launchToken != address(0), InvalidLaunchToken());
         require(params.mainCollateral != address(0), InvalidAddress());
         require(params.creator != address(0), InvalidAddress());
-        require(params.creatorProfitPercent <= BASIS_POINTS, InvalidPercentage());
-        require(params.creatorInfraPercent <= BASIS_POINTS, InvalidPercentage());
-        require(params.royaltyPercent <= BASIS_POINTS, InvalidPercentage());
+        require(params.creatorProfitPercent <= Constants.BASIS_POINTS, InvalidPercentage());
+        require(params.creatorInfraPercent <= Constants.BASIS_POINTS, InvalidPercentage());
+        require(params.royaltyPercent <= Constants.BASIS_POINTS, InvalidPercentage());
         require(params.sharePrice > 0, InvalidSharePrice());
         require(params.targetAmountMainCollateral > 0, InvalidTargetAmount());
         require(params.orderbookParams.initialPrice > 0, InvalidInitialPrice());
@@ -241,7 +224,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             require(poc.pocContract != address(0), InvalidAddress());
             require(poc.collateralToken != address(0), InvalidAddress());
             require(poc.priceFeed != address(0), InvalidAddress());
-            require(poc.sharePercent > 0 && poc.sharePercent <= BASIS_POINTS, InvalidPercentage());
+            require(poc.sharePercent > 0 && poc.sharePercent <= Constants.BASIS_POINTS, InvalidPercentage());
             require(pocIndex[poc.pocContract] == 0, POCAlreadyExists());
 
             if (!sellableCollaterals[poc.collateralToken].active) {
@@ -275,7 +258,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
             emit POCContractAdded(poc.pocContract, poc.collateralToken, poc.sharePercent);
         }
-        require(totalPOCShare == BASIS_POINTS || totalPOCShare == 0, POCSharesNot100Percent());
+        require(totalPOCShare == Constants.BASIS_POINTS || totalPOCShare == 0, POCSharesNot100Percent());
 
         for (uint256 i = 0; i < params.rewardTokenParams.length; i++) {
             DataTypes.RewardTokenConstructorParams memory reward = params.rewardTokenParams[i];
@@ -400,7 +383,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
         DataTypes.Vault storage vault = vaults[vaultId];
 
-        uint256 shares = (amount * PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
+        uint256 shares = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         require(shares > 0, SharesCalculationFailed());
 
         DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
@@ -449,7 +432,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         uint256 launchPriceUSD = _getLaunchPriceFromPOC();
         require(launchPriceUSD > 0, InvalidPrice());
 
-        uint256 shares = (launchAmount * PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
+        uint256 shares = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         require(shares > 0, SharesCalculationFailed());
 
         DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
@@ -622,7 +605,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
         DataTypes.Vault storage vault = vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
-        require(vault.shares >= MIN_EXIT_SHARES, AmountMustBeGreaterThanZero());
+        require(vault.shares >= Constants.MIN_EXIT_SHARES, AmountMustBeGreaterThanZero());
         require(vaultExitRequestIndex[vaultId] == 0, AlreadyInExitQueue());
 
         address delegate = vault.delegate;
@@ -660,19 +643,19 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Can only be done once per ALLOCATION_PERIOD; max MAX_CREATOR_ALLOCATION_PERCENT per period
     /// @param launchAmount Amount of launch tokens to allocate
     function allocateLaunchesToCreator(uint256 launchAmount) external onlyVoting atStage(DataTypes.Stage.Active) {
-        require(block.timestamp >= lastCreatorAllocation + ALLOCATION_PERIOD, AllocationTooSoon());
+        require(block.timestamp >= lastCreatorAllocation + Constants.ALLOCATION_PERIOD, AllocationTooSoon());
         require(launchAmount > 0, AmountMustBeGreaterThanZero());
 
-        uint256 maxAllocation = (totalLaunchBalance * MAX_CREATOR_ALLOCATION_PERCENT) / BASIS_POINTS;
+        uint256 maxAllocation = (totalLaunchBalance * Constants.MAX_CREATOR_ALLOCATION_PERCENT) / Constants.BASIS_POINTS;
         require(launchAmount <= maxAllocation, ExceedsMaxAllocation());
 
         // Calculate how many shares equivalent this represents
         require(sharePriceInLaunches > 0, InvalidSharePrice());
-        uint256 sharesEquivalent = (launchAmount * PRICE_DECIMALS_MULTIPLIER) / sharePriceInLaunches;
+        uint256 sharesEquivalent = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / sharePriceInLaunches;
 
         // Calculate what % of total shares this represents
         require(totalSharesSupply > 0, NoShares());
-        uint256 profitPercentEquivalent = (sharesEquivalent * BASIS_POINTS) / totalSharesSupply;
+        uint256 profitPercentEquivalent = (sharesEquivalent * Constants.BASIS_POINTS) / totalSharesSupply;
 
         require(creatorProfitPercent >= profitPercentEquivalent, CreatorShareTooLow());
         creatorProfitPercent -= profitPercentEquivalent;
@@ -757,14 +740,14 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(pocContract != address(0), InvalidAddress());
         require(collateralToken != address(0), InvalidAddress());
         require(priceFeed != address(0), InvalidAddress());
-        require(sharePercent > 0 && sharePercent <= BASIS_POINTS, InvalidPercentage());
+        require(sharePercent > 0 && sharePercent <= Constants.BASIS_POINTS, InvalidPercentage());
         require(pocIndex[pocContract] == 0, POCAlreadyExists());
 
         uint256 totalShare = sharePercent;
         for (uint256 i = 0; i < pocContracts.length; i++) {
             totalShare += pocContracts[i].sharePercent;
         }
-        require(totalShare <= BASIS_POINTS, TotalShareExceeds100Percent());
+        require(totalShare <= Constants.BASIS_POINTS, TotalShareExceeds100Percent());
 
         if (!sellableCollaterals[collateralToken].active) {
             sellableCollaterals[collateralToken] =
@@ -854,7 +837,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         } else if (currentStage == DataTypes.Stage.FundraisingExchange || currentStage == DataTypes.Stage.WaitingForLP)
         {
             require(activeStageTimestamp > 0, ActiveStageNotSet());
-            require(block.timestamp >= activeStageTimestamp + CANCEL_AFTER_ACTIVE_PERIOD, CancelPeriodNotPassed());
+            require(
+                block.timestamp >= activeStageTimestamp + Constants.CANCEL_AFTER_ACTIVE_PERIOD, CancelPeriodNotPassed()
+            );
 
             DataTypes.Stage oldStage = currentStage;
             currentStage = DataTypes.Stage.FundraisingCancelled;
@@ -895,7 +880,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(poc.active, POCNotActive());
         require(!poc.exchanged, POCAlreadyExchanged());
 
-        uint256 totalAllocationForPOC = (totalCollectedMainCollateral * poc.sharePercent) / BASIS_POINTS;
+        uint256 totalAllocationForPOC = (totalCollectedMainCollateral * poc.sharePercent) / Constants.BASIS_POINTS;
         require(totalAllocationForPOC > 0, AmountMustBeGreaterThanZero());
 
         uint256 remainingAmount = totalAllocationForPOC - poc.exchangedAmount;
@@ -937,7 +922,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             collateralAmount = balanceAfter - balanceBefore;
 
             uint256 deviation = _calculateDeviation(expectedCollateral, collateralAmount);
-            require(deviation <= PRICE_DEVIATION_MAX, PriceDeviationTooHigh());
+            require(deviation <= Constants.PRICE_DEVIATION_MAX, PriceDeviationTooHigh());
         }
 
         IERC20(poc.collateralToken).safeIncreaseAllowance(poc.pocContract, collateralAmount);
@@ -968,9 +953,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         }
 
         require(totalSharesSupply > 0, NoSharesIssued());
-        sharePriceInLaunches = (totalLaunchBalance * PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
+        sharePriceInLaunches = (totalLaunchBalance * Constants.PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
 
-        uint256 infraLaunches = (totalLaunchBalance * creatorInfraPercent) / BASIS_POINTS;
+        uint256 infraLaunches = (totalLaunchBalance * creatorInfraPercent) / Constants.BASIS_POINTS;
         if (infraLaunches > 0) {
             launchToken.safeTransfer(creator, infraLaunches);
             totalLaunchBalance -= infraLaunches;
@@ -1212,16 +1197,16 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
         // Calculate how many shares equivalent this represents
         require(sharePriceInLaunches > 0, InvalidSharePrice());
-        uint256 sharesEquivalent = (amount * PRICE_DECIMALS_MULTIPLIER) / sharePriceInLaunches;
+        uint256 sharesEquivalent = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / sharePriceInLaunches;
 
         // Calculate what % of total shares this represents
         require(totalSharesSupply > 0, NoShares());
-        uint256 profitPercentEquivalent = (sharesEquivalent * BASIS_POINTS) / totalSharesSupply;
+        uint256 profitPercentEquivalent = (sharesEquivalent * Constants.BASIS_POINTS) / totalSharesSupply;
 
         uint256 newCreatorProfitPercent = creatorProfitPercent + profitPercentEquivalent;
-        if (newCreatorProfitPercent > BASIS_POINTS) {
-            newCreatorProfitPercent = BASIS_POINTS;
-            profitPercentEquivalent = BASIS_POINTS - creatorProfitPercent;
+        if (newCreatorProfitPercent > Constants.BASIS_POINTS) {
+            newCreatorProfitPercent = Constants.BASIS_POINTS;
+            profitPercentEquivalent = Constants.BASIS_POINTS - creatorProfitPercent;
         }
         creatorProfitPercent = newCreatorProfitPercent;
 
@@ -1275,7 +1260,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param totalAmount Total amount to distribute
     /// @return royaltyShare Amount distributed as royalty
     function _distributeRoyaltyShare(address token, uint256 totalAmount) internal returns (uint256 royaltyShare) {
-        royaltyShare = (totalAmount * royaltyPercent) / BASIS_POINTS;
+        royaltyShare = (totalAmount * royaltyPercent) / Constants.BASIS_POINTS;
         if (royaltyShare > 0 && royaltyRecipient != address(0)) {
             IERC20(token).safeTransfer(royaltyRecipient, royaltyShare);
             emit RoyaltyDistributed(token, royaltyRecipient, royaltyShare);
@@ -1287,7 +1272,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param amount Amount to calculate creator share from
     /// @return creatorShare Amount distributed to creator
     function _distributeCreatorShare(address token, uint256 amount) internal returns (uint256 creatorShare) {
-        creatorShare = (amount * creatorProfitPercent) / BASIS_POINTS;
+        creatorShare = (amount * creatorProfitPercent) / Constants.BASIS_POINTS;
         if (creatorShare > 0) {
             IERC20(token).safeTransfer(creator, creatorShare);
             emit CreatorProfitDistributed(token, creator, creatorShare);
@@ -1315,10 +1300,12 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
         if (remainingForParticipants > 0 && totalSharesSupply > 0) {
             require(
-                (remainingForParticipants * PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply > MIN_REWARD_PER_SHARE,
+                (remainingForParticipants * Constants.PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply
+                    > Constants.MIN_REWARD_PER_SHARE,
                 RewardPerShareTooLow()
             );
-            rewardPerShareStored[token] += (remainingForParticipants * PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
+            rewardPerShareStored[token] += (remainingForParticipants * Constants.PRICE_DECIMALS_MULTIPLIER)
+                / totalSharesSupply;
         }
     }
 
@@ -1353,12 +1340,15 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         if (lpType == DataTypes.LPTokenType.V2) {
             address lpToken = lpTokenOrTokenId;
             require(isV2LPToken[lpToken], NotLPToken());
-            require(block.timestamp >= lastLPDistribution[lpToken] + LP_DISTRIBUTION_PERIOD, LPDistributionTooSoon());
+            require(
+                block.timestamp >= lastLPDistribution[lpToken] + Constants.LP_DISTRIBUTION_PERIOD,
+                LPDistributionTooSoon()
+            );
 
             uint256 lpBalance = accountedBalance[lpToken];
             require(lpBalance > 0, NoProfitToDistribute());
 
-            uint256 toDistribute = (lpBalance * LP_DISTRIBUTION_PERCENT) / BASIS_POINTS;
+            uint256 toDistribute = (lpBalance * Constants.LP_DISTRIBUTION_PERCENT) / Constants.BASIS_POINTS;
             require(toDistribute > 0, NoProfitToDistribute());
 
             uint256 royaltyShare = _distributeRoyaltyShare(lpToken, toDistribute);
@@ -1375,7 +1365,10 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         } else if (lpType == DataTypes.LPTokenType.V3) {
             uint256 tokenId = uint256(uint160(lpTokenOrTokenId));
             require(v3TokenIdToIndex[tokenId] > 0, NotLPToken());
-            require(block.timestamp >= v3LastLPDistribution[tokenId] + LP_DISTRIBUTION_PERIOD, LPDistributionTooSoon());
+            require(
+                block.timestamp >= v3LastLPDistribution[tokenId] + Constants.LP_DISTRIBUTION_PERIOD,
+                LPDistributionTooSoon()
+            );
 
             DataTypes.V3LPPositionInfo memory positionInfo = _getV3PositionInfo(tokenId);
             INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
@@ -1383,7 +1376,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
             require(liquidity > 0, NoProfitToDistribute());
 
-            uint128 liquidityToDecrease = uint128((uint256(liquidity) * LP_DISTRIBUTION_PERCENT) / BASIS_POINTS);
+            uint128 liquidityToDecrease =
+                uint128((uint256(liquidity) * Constants.LP_DISTRIBUTION_PERCENT) / Constants.BASIS_POINTS);
             require(liquidityToDecrease > 0, NoProfitToDistribute());
 
             (uint256 amount0, uint256 amount1) = _decreaseV3Liquidity(tokenId, liquidityToDecrease);
@@ -1609,7 +1603,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         if (currentIndex <= userIndex) return 0;
 
         uint256 indexDelta = currentIndex - userIndex;
-        return (vault.shares * indexDelta) / PRICE_DECIMALS_MULTIPLIER;
+        return (vault.shares * indexDelta) / Constants.PRICE_DECIMALS_MULTIPLIER;
     }
 
     /// @notice Update weighted average prices when participant adds more shares
@@ -1659,7 +1653,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
                 continue;
             }
 
-            uint256 launchPriceUSD = (launchPriceInCollateral * collateralPriceUSD) / PRICE_DECIMALS_MULTIPLIER;
+            uint256 launchPriceUSD =
+                (launchPriceInCollateral * collateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
             if (launchPriceUSD == 0) {
                 continue;
@@ -1685,8 +1680,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             shareValue = fundraisingConfig.sharePrice;
         }
 
-        if (block.timestamp < entry.entryTimestamp + EXIT_DISCOUNT_PERIOD) {
-            shareValue = (shareValue * (BASIS_POINTS - EXIT_DISCOUNT_PERCENT)) / BASIS_POINTS;
+        if (block.timestamp < entry.entryTimestamp + Constants.EXIT_DISCOUNT_PERIOD) {
+            shareValue =
+                (shareValue * (Constants.BASIS_POINTS - Constants.EXIT_DISCOUNT_PERCENT)) / Constants.BASIS_POINTS;
         }
 
         uint256 launchPriceNow = _getLaunchPriceFromPOC();
@@ -1696,7 +1692,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             shareValue = (shareValue * launchPriceNow) / fixedLaunchPrice;
         }
 
-        return (shareValue * shares) / PRICE_DECIMALS_MULTIPLIER;
+        return (shareValue * shares) / Constants.PRICE_DECIMALS_MULTIPLIER;
     }
 
     /// @notice Check if exit queue is empty (all processed)
@@ -1836,11 +1832,11 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param actual Actual amount
     /// @return Deviation in basis points (0 if actual >= expected)
     function _calculateDeviation(uint256 expected, uint256 actual) internal pure returns (uint256) {
-        if (expected == 0) return BASIS_POINTS;
+        if (expected == 0) return Constants.BASIS_POINTS;
         if (actual >= expected) {
             return 0;
         } else {
-            return ((expected - actual) * BASIS_POINTS) / expected;
+            return ((expected - actual) * Constants.BASIS_POINTS) / expected;
         }
     }
 
@@ -1880,7 +1876,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Only launch tokens can be claimed, other tokens are not available in this function
     function claimCreatorDissolution() external onlyCreator nonReentrant atStage(DataTypes.Stage.Dissolved) {
         uint256 launchBalance = launchToken.balanceOf(address(this));
-        uint256 creatorLaunchShare = (launchBalance * creatorInfraPercent) / BASIS_POINTS;
+        uint256 creatorLaunchShare = (launchBalance * creatorInfraPercent) / Constants.BASIS_POINTS;
         require(creatorLaunchShare > 0, NoRewardsToClaim());
         launchToken.safeTransfer(creator, creatorLaunchShare);
         accountedBalance[address(launchToken)] -= creatorLaunchShare;
@@ -1889,7 +1885,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     function _onlyBoardMemberOrAdmin() internal view {
         uint256 vaultId = addressToVaultId[msg.sender];
-        bool isMemberOfBoard = vaultId > 0 && vaults[vaultId].shares >= BOARD_MEMBER_MIN_SHARES;
+        bool isMemberOfBoard = vaultId > 0 && vaults[vaultId].shares >= Constants.BOARD_MEMBER_MIN_SHARES;
         require(isMemberOfBoard || msg.sender == admin || msg.sender == votingContract, NotBoardMemberOrAdmin());
     }
 
@@ -1915,7 +1911,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @return True if account is a board member
     function isBoardMember(address account) external view returns (bool) {
         uint256 vaultId = addressToVaultId[account];
-        return vaultId > 0 && vaults[vaultId].shares >= BOARD_MEMBER_MIN_SHARES;
+        return vaultId > 0 && vaults[vaultId].shares >= Constants.BOARD_MEMBER_MIN_SHARES;
     }
 
     /// @notice Set pending upgrade address (only voting contract can call)
@@ -1943,7 +1939,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             pendingUpgradeFromVoting == newImplementation && pendingUpgradeFromCreator == newImplementation,
             UpgradeNotAuthorized()
         );
-        require(block.timestamp >= pendingUpgradeFromVotingTimestamp + UPGRADE_DELAY, UpgradeDelayNotPassed());
+        require(block.timestamp >= pendingUpgradeFromVotingTimestamp + Constants.UPGRADE_DELAY, UpgradeDelayNotPassed());
         require(_isExitQueueEmpty(), ExitQueueNotEmpty());
 
         pendingUpgradeFromVoting = address(0);
