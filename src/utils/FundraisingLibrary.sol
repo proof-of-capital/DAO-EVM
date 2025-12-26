@@ -211,7 +211,8 @@ library FundraisingLibrary {
         }
 
         require(totalSharesSupply > 0, NoSharesIssued());
-        daoState.sharePriceInLaunches = (daoState.totalLaunchBalance * Constants.PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
+        daoState.sharePriceInLaunches =
+            (daoState.totalLaunchBalance * Constants.PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
 
         uint256 infraLaunches = (daoState.totalLaunchBalance * creatorInfraPercent) / Constants.BASIS_POINTS;
         if (infraLaunches > 0) {

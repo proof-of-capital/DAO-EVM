@@ -91,15 +91,13 @@ library LPTokenLibrary {
 
         require(rewardsStorage.rewardTokenInfo[token0].active, TokenNotAdded());
         require(rewardsStorage.rewardTokenInfo[token1].active, TokenNotAdded());
-        
-        lpTokenStorage.v3LPPositions.push(
-            DataTypes.V3LPPositionInfo({
-                positionManager: lpTokenStorage.v3PositionManager,
-                tokenId: tokenId,
-                token0: token0,
-                token1: token1
-            })
-        );
+
+        lpTokenStorage.v3LPPositions
+            .push(
+                DataTypes.V3LPPositionInfo({
+                    positionManager: lpTokenStorage.v3PositionManager, tokenId: tokenId, token0: token0, token1: token1
+                })
+            );
 
         lpTokenStorage.v3TokenIdToIndex[tokenId] = lpTokenStorage.v3LPPositions.length;
         lpTokenStorage.v3LPTokenAddedAt[tokenId] = block.timestamp;
@@ -177,11 +175,10 @@ library LPTokenLibrary {
     /// @param liquidity Amount of liquidity to decrease
     /// @return amount0 Amount of token0 accounted for the decrease
     /// @return amount1 Amount of token1 accounted for the decrease
-    function decreaseV3Liquidity(
-        DataTypes.LPTokenStorage storage lpTokenStorage,
-        uint256 tokenId,
-        uint128 liquidity
-    ) internal returns (uint256 amount0, uint256 amount1) {
+    function decreaseV3Liquidity(DataTypes.LPTokenStorage storage lpTokenStorage, uint256 tokenId, uint128 liquidity)
+        internal
+        returns (uint256 amount0, uint256 amount1)
+    {
         DataTypes.V3LPPositionInfo memory positionInfo = getV3PositionInfo(lpTokenStorage, tokenId);
         INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
 
@@ -198,10 +195,10 @@ library LPTokenLibrary {
     /// @param tokenId NFT token ID of the position
     /// @return amount0 Amount of token0 collected
     /// @return amount1 Amount of token1 collected
-    function collectV3Tokens(
-        DataTypes.LPTokenStorage storage lpTokenStorage,
-        uint256 tokenId
-    ) internal returns (uint256 amount0, uint256 amount1) {
+    function collectV3Tokens(DataTypes.LPTokenStorage storage lpTokenStorage, uint256 tokenId)
+        internal
+        returns (uint256 amount0, uint256 amount1)
+    {
         DataTypes.V3LPPositionInfo memory positionInfo = getV3PositionInfo(lpTokenStorage, tokenId);
         INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
 
@@ -216,10 +213,11 @@ library LPTokenLibrary {
     /// @param lpTokenStorage LP token storage structure
     /// @param tokenId NFT token ID of the position
     /// @return Position info struct
-    function getV3PositionInfo(
-        DataTypes.LPTokenStorage storage lpTokenStorage,
-        uint256 tokenId
-    ) internal view returns (DataTypes.V3LPPositionInfo memory) {
+    function getV3PositionInfo(DataTypes.LPTokenStorage storage lpTokenStorage, uint256 tokenId)
+        internal
+        view
+        returns (DataTypes.V3LPPositionInfo memory)
+    {
         uint256 index = lpTokenStorage.v3TokenIdToIndex[tokenId];
         require(index > 0, NotLPToken());
         return lpTokenStorage.v3LPPositions[index - 1];
@@ -241,7 +239,8 @@ library LPTokenLibrary {
 
         for (uint256 i = 0; i < lpTokenStorage.v3LPPositions.length; i++) {
             uint256 tokenId = lpTokenStorage.v3LPPositions[i].tokenId;
-            INonfungiblePositionManager positionManager = INonfungiblePositionManager(lpTokenStorage.v3LPPositions[i].positionManager);
+            INonfungiblePositionManager positionManager =
+                INonfungiblePositionManager(lpTokenStorage.v3LPPositions[i].positionManager);
             (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
             if (liquidity > 0) {
                 return true;
@@ -270,19 +269,10 @@ library LPTokenLibrary {
 
         if (lpType == DataTypes.LPTokenType.V2) {
             address lpToken = lpTokenOrTokenId;
-            distributeV2LPProfit(
-                lpTokenStorage,
-                accountedBalance,
-                lpToken,
-                distributeProfit
-            );
+            distributeV2LPProfit(lpTokenStorage, accountedBalance, lpToken, distributeProfit);
         } else if (lpType == DataTypes.LPTokenType.V3) {
             uint256 tokenId = uint256(uint160(lpTokenOrTokenId));
-            distributeV3LPProfit(
-                lpTokenStorage,
-                tokenId,
-                distributeProfit
-            );
+            distributeV3LPProfit(lpTokenStorage, tokenId, distributeProfit);
         } else {
             revert InvalidAddress();
         }

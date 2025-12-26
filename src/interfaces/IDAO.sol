@@ -320,7 +320,6 @@ interface IDAO {
     // POC contracts
     function pocIndex(address) external view returns (uint256);
 
-
     // Vaults
     function vaults(uint256 vaultId) external view returns (DataTypes.Vault memory);
     function addressToVaultId(address) external view returns (uint256);

@@ -94,12 +94,7 @@ library RewardsLibrary {
         for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; i++) {
             address rewardToken = rewardsStorage.rewardTokens[i];
             if (rewardsStorage.rewardTokenInfo[rewardToken].active) {
-                uint256 pending = calculatePendingRewards(
-                    vaultStorage,
-                    rewardsStorage,
-                    vaultId,
-                    rewardToken
-                );
+                uint256 pending = calculatePendingRewards(vaultStorage, rewardsStorage, vaultId, rewardToken);
 
                 if (pending > 0) {
                     rewardsStorage.earnedRewards[vaultId][rewardToken] += pending;
@@ -111,12 +106,7 @@ library RewardsLibrary {
 
         for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; i++) {
             address lpToken = lpTokenStorage.v2LPTokens[i];
-            uint256 pending = calculatePendingRewards(
-                vaultStorage,
-                rewardsStorage,
-                vaultId,
-                lpToken
-            );
+            uint256 pending = calculatePendingRewards(vaultStorage, rewardsStorage, vaultId, lpToken);
 
             if (pending > 0) {
                 rewardsStorage.earnedRewards[vaultId][lpToken] += pending;

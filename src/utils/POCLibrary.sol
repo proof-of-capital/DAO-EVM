@@ -37,7 +37,11 @@ library POCLibrary {
     error NoShares();
 
     event POCExchangeCompleted(
-        uint256 indexed pocIdx, address indexed pocContract, uint256 collateralAmountForPOC, uint256 collateralAmount, uint256 launchReceived
+        uint256 indexed pocIdx,
+        address indexed pocContract,
+        uint256 collateralAmountForPOC,
+        uint256 collateralAmount,
+        uint256 launchReceived
     );
     event CreatorLaunchesReturned(uint256 amount, uint256 profitPercentEquivalent, uint256 newCreatorProfitPercent);
 
@@ -201,10 +205,11 @@ library POCLibrary {
     /// @param pocContracts Array of POC contracts
     /// @param pocIdx POC index
     /// @return Price in USD (18 decimals)
-    function getPOCCollateralPrice(
-        DataTypes.POCInfo[] storage pocContracts,
-        uint256 pocIdx
-    ) external view returns (uint256) {
+    function getPOCCollateralPrice(DataTypes.POCInfo[] storage pocContracts, uint256 pocIdx)
+        external
+        view
+        returns (uint256)
+    {
         DataTypes.POCInfo storage poc = pocContracts[pocIdx];
         return OracleLibrary.getChainlinkPrice(poc.priceFeed);
     }

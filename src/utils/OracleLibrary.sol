@@ -49,10 +49,11 @@ library OracleLibrary {
     /// @param sellableCollaterals Mapping of collateral info
     /// @param token Collateral token address
     /// @return Price in USD (18 decimals)
-    function getOraclePrice(
-        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
-        address token
-    ) external view returns (uint256) {
+    function getOraclePrice(mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals, address token)
+        external
+        view
+        returns (uint256)
+    {
         DataTypes.CollateralInfo storage info = sellableCollaterals[token];
         require(info.active, CollateralNotActive());
         return _getChainlinkPrice(info.priceFeed);

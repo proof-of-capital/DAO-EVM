@@ -31,7 +31,9 @@ library VaultLibrary {
     event PrimaryAddressUpdated(uint256 indexed vaultId, address indexed oldPrimary, address indexed newPrimary);
     event BackupAddressUpdated(uint256 indexed vaultId, address indexed oldBackup, address indexed newBackup);
     event EmergencyAddressUpdated(uint256 indexed vaultId, address indexed oldEmergency, address indexed newEmergency);
-    event DelegateUpdated(uint256 indexed vaultId, address indexed oldDelegate, address indexed newDelegate, uint256 timestamp);
+    event DelegateUpdated(
+        uint256 indexed vaultId, address indexed oldDelegate, address indexed newDelegate, uint256 timestamp
+    );
 
     /// @notice Create a new vault (without deposit)
     /// @param vaultStorage Vault storage structure
@@ -100,11 +102,9 @@ library VaultLibrary {
         address newPrimary
     ) external {
         require(vaultId < vaultStorage.nextVaultId && vaultStorage.vaults[vaultId].shares > 0, VaultDoesNotExist());
-        
+
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(
-            sender == vault.primary || sender == vault.backup || sender == vault.emergency, Unauthorized()
-        );
+        require(sender == vault.primary || sender == vault.backup || sender == vault.emergency, Unauthorized());
         require(newPrimary != address(0), InvalidAddress());
         require(vaultStorage.addressToVaultId[newPrimary] == 0, AddressAlreadyUsedInAnotherVault());
 
@@ -129,7 +129,7 @@ library VaultLibrary {
         address newBackup
     ) external {
         require(vaultId < vaultStorage.nextVaultId && vaultStorage.vaults[vaultId].shares > 0, VaultDoesNotExist());
-        
+
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(sender == vault.backup || sender == vault.emergency, Unauthorized());
         require(newBackup != address(0), InvalidAddress());
@@ -152,7 +152,7 @@ library VaultLibrary {
         address newEmergency
     ) external {
         require(vaultId < vaultStorage.nextVaultId && vaultStorage.vaults[vaultId].shares > 0, VaultDoesNotExist());
-        
+
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(sender == vault.emergency, Unauthorized());
         require(newEmergency != address(0), InvalidAddress());
@@ -167,11 +167,9 @@ library VaultLibrary {
     /// @param vaultStorage Vault storage structure
     /// @param userAddress User address to find vault and set delegate
     /// @param delegate New delegate address (if zero, primary is set as delegate)
-    function executeSetDelegate(
-        DataTypes.VaultStorage storage vaultStorage,
-        address userAddress,
-        address delegate
-    ) external {
+    function executeSetDelegate(DataTypes.VaultStorage storage vaultStorage, address userAddress, address delegate)
+        external
+    {
         require(userAddress != address(0), InvalidAddress());
 
         uint256 vaultId = vaultStorage.addressToVaultId[userAddress];

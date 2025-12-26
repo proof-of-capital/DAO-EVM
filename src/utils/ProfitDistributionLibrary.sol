@@ -97,11 +97,10 @@ library ProfitDistributionLibrary {
     /// @param token Token address
     /// @param totalAmount Total amount to distribute
     /// @return royaltyShare Amount distributed as royalty
-    function distributeRoyaltyShare(
-        DataTypes.DAOState storage daoState,
-        address token,
-        uint256 totalAmount
-    ) internal returns (uint256 royaltyShare) {
+    function distributeRoyaltyShare(DataTypes.DAOState storage daoState, address token, uint256 totalAmount)
+        internal
+        returns (uint256 royaltyShare)
+    {
         royaltyShare = (totalAmount * daoState.royaltyPercent) / Constants.BASIS_POINTS;
         if (royaltyShare > 0 && daoState.royaltyRecipient != address(0)) {
             IERC20(token).safeTransfer(daoState.royaltyRecipient, royaltyShare);
@@ -114,11 +113,10 @@ library ProfitDistributionLibrary {
     /// @param token Token address
     /// @param amount Amount to calculate creator share from
     /// @return creatorShare Amount distributed to creator
-    function distributeCreatorShare(
-        DataTypes.DAOState storage daoState,
-        address token,
-        uint256 amount
-    ) internal returns (uint256 creatorShare) {
+    function distributeCreatorShare(DataTypes.DAOState storage daoState, address token, uint256 amount)
+        internal
+        returns (uint256 creatorShare)
+    {
         creatorShare = (amount * daoState.creatorProfitPercent) / Constants.BASIS_POINTS;
         if (creatorShare > 0) {
             IERC20(token).safeTransfer(daoState.creator, creatorShare);
@@ -156,12 +154,12 @@ library ProfitDistributionLibrary {
         newTotalSharesSupply = totalSharesSupply;
         uint256 usedForExits = 0;
 
-        if (exitQueueStorage.exitQueue.length > 0 
-            && !ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage) 
-            && participantsShare > 0 
-            && !lpTokenStorage.isV2LPToken[token]) {
+        if (
+            exitQueueStorage.exitQueue.length > 0 && !ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage)
+                && participantsShare > 0 && !lpTokenStorage.isV2LPToken[token]
+        ) {
             uint256 balanceBefore = IERC20(token).balanceOf(contractAddress);
-            
+
             uint256 availableFunds = participantsShare;
             uint256 remainingFunds;
             (remainingFunds, newTotalSharesSupply) = ExitQueueLibrary.processExitQueue(
@@ -174,7 +172,7 @@ library ProfitDistributionLibrary {
                 token,
                 getLaunchPriceFromPOC
             );
-            
+
             uint256 balanceAfter = IERC20(token).balanceOf(contractAddress);
             usedForExits = balanceBefore - balanceAfter;
         }
@@ -187,8 +185,9 @@ library ProfitDistributionLibrary {
                     > Constants.MIN_REWARD_PER_SHARE,
                 RewardPerShareTooLow()
             );
-            rewardsStorage.rewardPerShareStored[token] += (remainingForParticipants * Constants.PRICE_DECIMALS_MULTIPLIER)
-                / newTotalSharesSupply;
+            rewardsStorage.rewardPerShareStored[
+                    token
+                ] += (remainingForParticipants * Constants.PRICE_DECIMALS_MULTIPLIER) / newTotalSharesSupply;
         }
     }
 }

@@ -66,14 +66,15 @@ library ExitQueueLibrary {
 
         uint256 launchPriceNow = getLaunchPriceFromPOC();
 
-        exitQueueStorage.exitQueue.push(
-            DataTypes.ExitRequest({
-                vaultId: vaultId,
-                requestTimestamp: block.timestamp,
-                fixedLaunchPriceAtRequest: launchPriceNow,
-                processed: false
-            })
-        );
+        exitQueueStorage.exitQueue
+            .push(
+                DataTypes.ExitRequest({
+                    vaultId: vaultId,
+                    requestTimestamp: block.timestamp,
+                    fixedLaunchPriceAtRequest: launchPriceNow,
+                    processed: false
+                })
+            );
 
         exitQueueStorage.vaultExitRequestIndex[vaultId] = exitQueueStorage.exitQueue.length;
 
@@ -103,12 +104,16 @@ library ExitQueueLibrary {
     ) external returns (uint256 remainingFunds, uint256 newTotalSharesSupply) {
         newTotalSharesSupply = totalSharesSupply;
         remainingFunds = availableFunds;
-        
+
         if (availableFunds == 0 || isExitQueueEmpty(exitQueueStorage)) {
             return (remainingFunds, newTotalSharesSupply);
         }
 
-        for (uint256 i = exitQueueStorage.nextExitQueueIndex; i < exitQueueStorage.exitQueue.length && remainingFunds > 0; i++) {
+        for (
+            uint256 i = exitQueueStorage.nextExitQueueIndex;
+            i < exitQueueStorage.exitQueue.length && remainingFunds > 0;
+            i++
+        ) {
             DataTypes.ExitRequest storage request = exitQueueStorage.exitQueue[i];
 
             if (request.processed) {
@@ -125,22 +130,12 @@ library ExitQueueLibrary {
             }
 
             uint256 exitValue = calculateExitValue(
-                participantEntries,
-                fundraisingConfig,
-                request.vaultId,
-                shares,
-                getLaunchPriceFromPOC
+                participantEntries, fundraisingConfig, request.vaultId, shares, getLaunchPriceFromPOC
             );
 
             if (remainingFunds >= exitValue) {
                 newTotalSharesSupply = executeExit(
-                    vaultStorage,
-                    exitQueueStorage,
-                    fundraisingConfig,
-                    i,
-                    exitValue,
-                    token,
-                    newTotalSharesSupply
+                    vaultStorage, exitQueueStorage, fundraisingConfig, i, exitValue, token, newTotalSharesSupply
                 );
                 remainingFunds -= exitValue;
                 exitQueueStorage.nextExitQueueIndex = i + 1;
@@ -148,11 +143,7 @@ library ExitQueueLibrary {
                 uint256 partialShares = (remainingFunds * shares) / exitValue;
                 if (partialShares > 0) {
                     uint256 partialExitValue = calculateExitValue(
-                        participantEntries,
-                        fundraisingConfig,
-                        request.vaultId,
-                        partialShares,
-                        getLaunchPriceFromPOC
+                        participantEntries, fundraisingConfig, request.vaultId, partialShares, getLaunchPriceFromPOC
                     );
                     if (partialExitValue > 0 && partialExitValue <= remainingFunds) {
                         newTotalSharesSupply = executePartialExit(

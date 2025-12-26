@@ -147,7 +147,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         _disableInitializers();
     }
 
-
     /// @notice Initialize the DAO contract (replaces constructor for upgradeable pattern)
     /// @param params Constructor parameters struct
     function initialize(DataTypes.ConstructorParams memory params) public initializer {
@@ -176,10 +175,10 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         _daoState.royaltyRecipient = params.royaltyRecipient;
         _daoState.royaltyPercent = params.royaltyPercent;
         _daoState.totalCollectedMainCollateral = 0;
-        
+
         _vaultStorage.nextVaultId = 1;
         _vaultStorage.totalSharesSupply = 0;
-        
+
         if (params.v3LPPositions.length > 0) {
             _lpTokenStorage.v3PositionManager = params.v3LPPositions[0].positionManager;
             require(_lpTokenStorage.v3PositionManager != address(0), InvalidAddress());
@@ -220,9 +219,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         );
 
         FundraisingLibrary.executeInitializeRewardTokens(
-            _rewardsStorage,
-            params.rewardTokenParams,
-            address(launchToken)
+            _rewardsStorage, params.rewardTokenParams, address(launchToken)
         );
 
         orderbookParams = DataTypes.OrderbookParams({
@@ -266,16 +263,13 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         nonReentrant
         returns (uint256 vaultId)
     {
-        require(_daoState.currentStage == DataTypes.Stage.Fundraising || _daoState.currentStage == DataTypes.Stage.Active, InvalidStage());
-        
+        require(
+            _daoState.currentStage == DataTypes.Stage.Fundraising || _daoState.currentStage == DataTypes.Stage.Active,
+            InvalidStage()
+        );
+
         vaultId = VaultLibrary.executeCreateVault(
-            _vaultStorage,
-            _rewardsStorage,
-            _lpTokenStorage,
-            msg.sender,
-            backup,
-            emergency,
-            delegate
+            _vaultStorage, _rewardsStorage, _lpTokenStorage, msg.sender, backup, emergency, delegate
         );
     }
 
@@ -359,7 +353,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             entryForAvg.weightedAvgLaunchPrice =
                 (entryForAvg.weightedAvgLaunchPrice * vaultForAvg.shares + (launchPriceUSD / 2) * shares) / totalShares;
             entryForAvg.weightedAvgSharePrice =
-                (entryForAvg.weightedAvgSharePrice * vaultForAvg.shares + fundraisingConfig.sharePrice * shares) / totalShares;
+                (entryForAvg.weightedAvgSharePrice * vaultForAvg.shares + fundraisingConfig.sharePrice * shares)
+                    / totalShares;
         }
 
         if (entry.entryTimestamp == 0) {
@@ -420,24 +415,14 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param tokens Array of token addresses to claim
     function claimReward(address[] calldata tokens) external nonReentrant {
         RewardsLibrary.executeClaimReward(
-            _vaultStorage,
-            _rewardsStorage,
-            _lpTokenStorage,
-            accountedBalance,
-            msg.sender,
-            tokens
+            _vaultStorage, _rewardsStorage, _lpTokenStorage, accountedBalance, msg.sender, tokens
         );
     }
 
     /// @notice Request to exit DAO by selling all shares
     /// @dev Participant exits with all their shares; adds request to exit queue for processing
     function requestExit() external nonReentrant atStage(DataTypes.Stage.Active) {
-        ExitQueueLibrary.executeRequestExit(
-            _vaultStorage,
-            _exitQueueStorage,
-            msg.sender,
-            this.getLaunchPriceFromPOC
-        );
+        ExitQueueLibrary.executeRequestExit(_vaultStorage, _exitQueueStorage, msg.sender, this.getLaunchPriceFromPOC);
     }
 
     /// @notice Allocate launch tokens to creator, reducing their profit share proportionally
@@ -447,7 +432,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(block.timestamp >= lastCreatorAllocation + Constants.ALLOCATION_PERIOD, AllocationTooSoon());
         require(launchAmount > 0, AmountMustBeGreaterThanZero());
 
-        uint256 maxAllocation = (_daoState.totalLaunchBalance * Constants.MAX_CREATOR_ALLOCATION_PERCENT) / Constants.BASIS_POINTS;
+        uint256 maxAllocation =
+            (_daoState.totalLaunchBalance * Constants.MAX_CREATOR_ALLOCATION_PERCENT) / Constants.BASIS_POINTS;
         require(launchAmount <= maxAllocation, ExceedsMaxAllocation());
 
         // Calculate how many shares equivalent this represents
@@ -629,8 +615,10 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
             emit FundraisingCancelled(_daoState.totalCollectedMainCollateral);
             emit StageChanged(DataTypes.Stage.Fundraising, DataTypes.Stage.FundraisingCancelled);
-        } else if (_daoState.currentStage == DataTypes.Stage.FundraisingExchange || _daoState.currentStage == DataTypes.Stage.WaitingForLP)
-        {
+        } else if (
+            _daoState.currentStage == DataTypes.Stage.FundraisingExchange
+                || _daoState.currentStage == DataTypes.Stage.WaitingForLP
+        ) {
             require(activeStageTimestamp > 0, ActiveStageNotSet());
             require(
                 block.timestamp >= activeStageTimestamp + Constants.CANCEL_AFTER_ACTIVE_PERIOD, CancelPeriodNotPassed()
@@ -648,7 +636,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Finalize fundraising collection and move to exchange stage
     function finalizeFundraisingCollection() external onlyAdmin atStage(DataTypes.Stage.Fundraising) {
-        require(_daoState.totalCollectedMainCollateral >= fundraisingConfig.targetAmountMainCollateral, TargetNotReached());
+        require(
+            _daoState.totalCollectedMainCollateral >= fundraisingConfig.targetAmountMainCollateral, TargetNotReached()
+        );
 
         _daoState.currentStage = DataTypes.Stage.FundraisingExchange;
 
@@ -726,13 +716,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             address lpToken = v2LPTokenAddresses[i];
             uint256 lpAmount = v2LPAmounts[i];
 
-            LPTokenLibrary.executeProvideV2LPToken(
-                _lpTokenStorage,
-                accountedBalance,
-                lpToken,
-                lpAmount,
-                msg.sender
-            );
+            LPTokenLibrary.executeProvideV2LPToken(_lpTokenStorage, accountedBalance, lpToken, lpAmount, msg.sender);
         }
 
         if (v3TokenIds.length > 0) {
@@ -740,13 +724,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
             for (uint256 i = 0; i < v3TokenIds.length; i++) {
                 uint256 tokenId = v3TokenIds[i];
-                DataTypes.V3LPPositionInfo memory positionInfo = LPTokenLibrary.getV3PositionInfo(_lpTokenStorage, tokenId);
-                LPTokenLibrary.executeProvideV3LPPosition(
-                    _lpTokenStorage,
-                    _rewardsStorage,
-                    tokenId,
-                    address(this)
-                );
+                DataTypes.V3LPPositionInfo memory positionInfo =
+                    LPTokenLibrary.getV3PositionInfo(_lpTokenStorage, tokenId);
+                LPTokenLibrary.executeProvideV3LPPosition(_lpTokenStorage, _rewardsStorage, tokenId, address(this));
             }
         }
 
@@ -761,11 +741,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev If all locks are ended, transitions DAO to WaitingForLPDissolution if LP tokens exist, otherwise to Dissolved
     function dissolveIfLocksEnded() external {
         DissolutionLibrary.executeDissolveIfLocksEnded(
-            _daoState,
-            pocContracts,
-            isPocContract,
-            _lpTokenStorage,
-            accountedBalance
+            _daoState, pocContracts, isPocContract, _lpTokenStorage, accountedBalance
         );
     }
 
@@ -794,11 +770,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         for (uint256 i = 0; i < v2Length; i++) {
             address lpToken = _lpTokenStorage.v2LPTokens[i];
             if (accountedBalance[lpToken] > 0) {
-                (uint256 amount0, uint256 amount1) = LPTokenLibrary.executeDissolveV2LPToken(
-                    _lpTokenStorage,
-                    accountedBalance,
-                    lpToken
-                );
+                (uint256 amount0, uint256 amount1) =
+                    LPTokenLibrary.executeDissolveV2LPToken(_lpTokenStorage, accountedBalance, lpToken);
                 emit V2LPTokenDissolved(lpToken, amount0, amount1);
             }
         }
@@ -812,11 +785,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
             (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
             if (liquidity > 0) {
-                (uint256 amount0, uint256 amount1) = LPTokenLibrary.executeDissolveV3LPPosition(
-                    _lpTokenStorage,
-                    accountedBalance,
-                    tokenId
-                );
+                (uint256 amount0, uint256 amount1) =
+                    LPTokenLibrary.executeDissolveV3LPPosition(_lpTokenStorage, accountedBalance, tokenId);
                 emit V3LPPositionDissolved(tokenId, amount0, amount1);
             }
         }
@@ -859,13 +829,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param tokens Array of token addresses to claim (can include launch token, reward tokens, LP tokens, or sellable collaterals)
     function claimDissolution(address[] calldata tokens) external nonReentrant atStage(DataTypes.Stage.Dissolved) {
         DissolutionLibrary.executeClaimDissolution(
-            _vaultStorage,
-            _rewardsStorage,
-            accountedBalance,
-            address(launchToken),
-            address(this),
-            msg.sender,
-            tokens
+            _vaultStorage, _rewardsStorage, accountedBalance, address(launchToken), address(this), msg.sender, tokens
         );
     }
 
@@ -974,7 +938,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         );
     }
 
-
     /// @notice Update voting shares for delegate when vault shares change
     /// @param vaultId Vault ID whose shares changed
     /// @param sharesDelta Change in shares (positive for increase, negative for decrease)
@@ -982,14 +945,11 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         VaultLibrary.executeUpdateDelegateVotingShares(_vaultStorage, vaultId, sharesDelta);
     }
 
-
     /// @notice Get weighted average launch token price from all active POC contracts (external wrapper for library calls)
     /// @return Weighted average launch price in USD (18 decimals)
     function getLaunchPriceFromPOC() external view returns (uint256) {
         return POCLibrary.getLaunchPriceFromPOC(pocContracts, this.getPOCCollateralPrice);
     }
-
-
 
     /// @notice Get oracle price for a collateral token (external wrapper for library calls)
     /// @param token Collateral token address
@@ -1005,7 +965,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         return POCLibrary.getPOCCollateralPrice(pocContracts, pocIdx);
     }
 
-        /// @notice Getter for vaults (backward compatibility)
+    /// @notice Getter for vaults (backward compatibility)
     function vaults(uint256 vaultId) external view returns (DataTypes.Vault memory) {
         return _vaultStorage.vaults[vaultId];
     }
@@ -1065,7 +1025,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         return _lpTokenStorage.v3PositionManager;
     }
 
-
     /// @notice Getter for vaultMainCollateralDeposit (backward compatibility)
     function vaultMainCollateralDeposit(uint256 vaultId) external view returns (uint256) {
         return _vaultStorage.vaultMainCollateralDeposit[vaultId];
@@ -1106,7 +1065,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         return _lpTokenStorage.lpTokenAddedAt[lpToken];
     }
 
-
     function _onlyAdmin() internal view {
         require(msg.sender == admin, Unauthorized());
     }
@@ -1143,12 +1101,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Only launch tokens can be claimed, other tokens are not available in this function
     function claimCreatorDissolution() external onlyCreator nonReentrant atStage(DataTypes.Stage.Dissolved) {
         DissolutionLibrary.executeClaimCreatorDissolution(
-            _daoState,
-            accountedBalance,
-            address(launchToken),
-            creatorInfraPercent,
-            address(this),
-            creator
+            _daoState, accountedBalance, address(launchToken), creatorInfraPercent, address(this), creator
         );
     }
 
