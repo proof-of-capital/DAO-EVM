@@ -137,7 +137,9 @@ contract DeployDAO is Script {
             tokens: tokens, // Deprecated: kept for backward compatibility
             pocParams: pocParams,
             rewardTokenParams: rewardTokenParams,
-            orderbookParams: orderbookParams
+            orderbookParams: orderbookParams,
+            primaryLPTokenType: DataTypes.LPTokenType.V2, // Default to V2, can be changed
+            v3LPPositions: new DataTypes.V3LPPositionParams[](0) // Empty array by default
         });
 
         // Deploy DAO implementation contract (upgradeable pattern)

@@ -90,6 +90,12 @@ library DataTypes {
         UniswapV3ExactOutput // Uniswap V3: exactOutput (multi-hop)
     }
 
+    /// @notice LP token types
+    enum LPTokenType {
+        V2, // Uniswap V2 LP tokens (ERC20)
+        V3 // Uniswap V3 LP positions (NFT)
+    }
+
     // ============================================
     // VAULT STRUCTURES
     // ============================================
@@ -236,6 +242,20 @@ library DataTypes {
         bool processed; // Whether exit has been processed
     }
 
+    /// @notice V3 LP position information
+    struct V3LPPositionInfo {
+        address positionManager; // Address of NonfungiblePositionManager (same for all V3 positions)
+        uint256 tokenId; // NFT token ID of the position
+        address token0; // First token in the pair
+        address token1; // Second token in the pair
+    }
+
+    /// @notice V3 LP position parameters for constructor
+    struct V3LPPositionParams {
+        address positionManager; // Address of NonfungiblePositionManager
+        uint256 tokenId; // NFT token ID of the position
+    }
+
     // ============================================
     // CONSTRUCTOR PARAMETERS STRUCTURES
     // ============================================
@@ -287,6 +307,8 @@ library DataTypes {
         POCConstructorParams[] pocParams;
         RewardTokenConstructorParams[] rewardTokenParams; // Additional reward tokens (POC collaterals are added automatically)
         OrderbookConstructorParams orderbookParams;
+        LPTokenType primaryLPTokenType; // Primary LP token type (if specified, must be provided)
+        V3LPPositionParams[] v3LPPositions; // V3 LP positions for initialization (optional)
     }
 }
 

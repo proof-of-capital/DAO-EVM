@@ -40,12 +40,10 @@ import "./OrderbookSwapLibrary.sol";
 library Orderbook {
     using SafeERC20 for IERC20;
 
-    // Constants
     uint256 public constant PRICE_DECIMALS = 18;
-    uint256 public constant PRICE_DECIMALS_MULTIPLIER = 1e18; // 10 ** PRICE_DECIMALS
-    uint256 public constant BASIS_POINTS = 10000; // 100% = 10000 basis points (e.g., 500 = 5%, 7500 = 75%)
+    uint256 public constant PRICE_DECIMALS_MULTIPLIER = 1e18;
+    uint256 public constant BASIS_POINTS = 10000;
 
-    // Custom errors
     error CollateralNotSellable();
     error InvalidCollateralPrice();
     error SlippageExceeded();
@@ -53,7 +51,6 @@ library Orderbook {
     error InvalidPrice();
     error InsufficientCollateralReceived(uint256 expected, uint256 received);
 
-    // Events
     event LaunchTokenSold(
         address indexed seller, address indexed collateral, uint256 launchTokenAmount, uint256 collateralAmount
     );
@@ -80,14 +77,10 @@ library Orderbook {
         uint256 totalShares,
         uint256 sharePrice
     ) internal {
-        // Get collateral info from storage
         DataTypes.CollateralInfo storage collateralInfo = sellableCollaterals[params.collateral];
 
-        // Validate collateral is active
         require(collateralInfo.active, CollateralNotSellable());
         require(orderbookParams.initialPrice > 0, OrderbookNotInitialized());
-
-        // Get collateral price in USD
         uint256 collateralPriceUSD = getCollateralPrice(collateralInfo);
         require(collateralPriceUSD > 0, InvalidCollateralPrice());
 
@@ -109,17 +102,14 @@ library Orderbook {
 
         accountedBalance[params.collateral] += receivedCollateral;
 
-        // Calculate received collateral in USD using price from getCollateralPrice
         uint256 receivedCollateralInUsd = (receivedCollateral * collateralPriceUSD) / PRICE_DECIMALS_MULTIPLIER;
 
-        // Update total sold and current level (all in one place)
         orderbookParams.totalSold += params.launchTokenAmount;
 
         accountedBalance[address(launchToken)] -= params.launchTokenAmount;
 
         updateCurrentLevel(orderbookParams, receivedCollateralInUsd, params.launchTokenAmount, totalShares, sharePrice);
 
-        // Emit event
         emit LaunchTokenSold(params.seller, params.collateral, params.launchTokenAmount, receivedCollateral);
     }
 
@@ -133,7 +123,6 @@ library Orderbook {
 
         uint8 decimals = priceFeed.decimals();
 
-        // Normalize to 18 decimals
         if (decimals < 18) {
             return uint256(price) * (10 ** (18 - decimals));
         } else if (decimals > 18) {
@@ -147,8 +136,8 @@ library Orderbook {
     /// @param orderbookParams Orderbook parameters from storage (will be updated)
     /// @param receivedCollateralInUsd Amount of USD received from the sale
     /// @param launchTokenAmount Amount of launch tokens sold
-    /// @param totalShares Total shares supply (КШ - количество шейров)
-    /// @param sharePrice Share price in USD with 18 decimals (СШ - стоимость шейра)
+    /// @param totalShares Total shares supply
+    /// @param sharePrice Share price in USD with 18 decimals
     function updateCurrentLevel(
         DataTypes.OrderbookParams storage orderbookParams,
         uint256 receivedCollateralInUsd,
@@ -171,13 +160,9 @@ library Orderbook {
         uint256 expectedUsd = 0;
         uint256 remainingTokens = launchTokenAmount;
 
-        // Calculate tokens already sold on current level before this sale
-        // ТКПТУ = totalSold (before this sale) - cumulativeVolume
-        // Note: totalSold was already updated in executeSell, so we need to subtract launchTokenAmount
         uint256 totalSoldBeforeSale = orderbookParams.totalSold - launchTokenAmount;
         uint256 soldOnCurrentLevel = totalSoldBeforeSale > cumulativeVolume ? totalSoldBeforeSale - cumulativeVolume : 0;
 
-        // Process tokens level by level
         while (remainingTokens > 0) {
             // Calculate adjusted level volume: вТРУ = ТРУ * КП * КШ * СШ / С
             // All values need to be scaled properly:
@@ -188,27 +173,22 @@ library Orderbook {
             uint256 adjustedLevelVolume = (currentBaseVolume * proportionalityCoefficient * totalShares * sharePrice)
                 / (totalSupply * BASIS_POINTS * PRICE_DECIMALS_MULTIPLIER);
 
-            // Tokens remaining on current level = adjustedLevelVolume - soldOnCurrentLevel
             uint256 tokensRemainingOnLevel =
                 adjustedLevelVolume > soldOnCurrentLevel ? adjustedLevelVolume - soldOnCurrentLevel : 0;
 
             if (remainingTokens <= tokensRemainingOnLevel) {
-                // All remaining tokens fit on current level
-                // expectedUsd += remainingTokens * currentPrice
                 expectedUsd += (remainingTokens * currentPrice) / PRICE_DECIMALS_MULTIPLIER;
                 soldOnCurrentLevel += remainingTokens;
                 remainingTokens = 0;
             } else {
-                // Sell all remaining tokens on current level and move to next
                 if (tokensRemainingOnLevel > 0) {
                     expectedUsd += (tokensRemainingOnLevel * currentPrice) / PRICE_DECIMALS_MULTIPLIER;
                     remainingTokens -= tokensRemainingOnLevel;
                 }
 
-                // Move to next level
                 currentLevel += 1;
                 cumulativeVolume += adjustedLevelVolume;
-                soldOnCurrentLevel = 0; // New level starts fresh
+                soldOnCurrentLevel = 0;
 
                 // Update price: ЦУ1 = ЦУ0 * (1 + ШПЦ) = ЦУ0 * (10000 + priceStepPercent) / 10000
                 currentPrice = (currentPrice * (BASIS_POINTS + priceStepPercent)) / BASIS_POINTS;

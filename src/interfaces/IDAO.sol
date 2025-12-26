@@ -100,13 +100,13 @@ interface IDAO {
     error NoPOCContractsConfigured();
     error POCSharesNot100Percent();
     error NoDepositToWithdraw();
-    error ActiveStageNotSet();
-    error CancelPeriodNotPassed();
     error InvalidPercentage();
     error InvalidSharePrice();
     error InvalidTargetAmount();
     error POCAlreadyExists();
     error TotalShareExceeds100Percent();
+    error ActiveStageNotSet();
+    error CancelPeriodNotPassed();
 
     // Exchange errors
     error InvalidPOCIndex();
@@ -188,6 +188,8 @@ interface IDAO {
     );
     event ExchangeFinalized(uint256 totalLaunches, uint256 sharePriceInLaunches, uint256 creatorInfraLaunches);
     event LPTokensProvided(address indexed lpToken, uint256 amount);
+    event V3LPPositionProvided(uint256 indexed tokenId, address token0, address token1);
+    event V3LiquidityDecreased(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
 
     // Exit queue events
     event ExitRequested(uint256 indexed vaultId, uint256 shares, uint256 launchPriceAtRequest);
@@ -284,7 +286,7 @@ interface IDAO {
     // ============================================
 
     function distributeProfit(address token) external;
-    function distributeLPProfit(address lpToken) external;
+    function distributeLPProfit(address lpTokenOrTokenId, DataTypes.LPTokenType lpType) external;
 
     // ============================================
     // VIEW FUNCTIONS - Public variables getters
@@ -350,9 +352,20 @@ interface IDAO {
     function vaultRewardIndex(uint256, address) external view returns (uint256);
     function earnedRewards(uint256, address) external view returns (uint256);
 
-    // LP tokens
-    function lpTokens(uint256) external view returns (address);
-    function isLPToken(address) external view returns (bool);
+    // V2 LP tokens
+    function v2LPTokens(uint256) external view returns (address);
+    function isV2LPToken(address) external view returns (bool);
+
+    // V3 LP positions
+    function v3LPPositions(uint256)
+        external
+        view
+        returns (address positionManager, uint256 tokenId, address token0, address token1);
+    function v3TokenIdToIndex(uint256) external view returns (uint256);
+    function v3PositionManager() external view returns (address);
+    function primaryLPTokenType() external view returns (DataTypes.LPTokenType);
+    function v3LastLPDistribution(uint256) external view returns (uint256);
+    function v3LPTokenAddedAt(uint256) external view returns (uint256);
 
     // Board member functions
     function BOARD_MEMBER_MIN_SHARES() external view returns (uint256);

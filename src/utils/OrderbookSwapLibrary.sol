@@ -40,7 +40,6 @@ import "./DataTypes.sol";
 library OrderbookSwapLibrary {
     using SafeERC20 for IERC20;
 
-    // Custom Errors
     error RouterNotAvailable();
     error TokenNotAvailable();
     error ZeroAmountNotAllowed();
@@ -110,20 +109,16 @@ library OrderbookSwapLibrary {
         uint256 amountOutMin,
         address contractAddress
     ) internal returns (uint256 amountOut) {
-        // Decode swap data: (address[] path, uint256 deadline)
         (address[] memory path, uint256 deadline) = abi.decode(swapData, (address[], uint256));
 
         require(path.length >= 2, InvalidSwapData());
         require(path[0] == tokenIn && path[path.length - 1] == tokenOut, InvalidSwapData());
 
-        // Set token allowance if needed
         IERC20 inputToken = IERC20(tokenIn);
         uint256 currentAllowance = inputToken.allowance(contractAddress, router);
         if (currentAllowance < amountIn) {
             inputToken.safeIncreaseAllowance(router, type(uint256).max);
         }
-
-        // Execute the swap
         uint256[] memory amounts = IUniswapV2Router02(router)
             .swapExactTokensForTokens(amountIn, amountOutMin, path, contractAddress, deadline);
 
@@ -140,20 +135,17 @@ library OrderbookSwapLibrary {
         uint256 amountInMax,
         address contractAddress
     ) internal returns (uint256 amountOutReceived) {
-        // Decode swap data: (address[] path, uint256 deadline)
         (address[] memory path, uint256 deadline) = abi.decode(swapData, (address[], uint256));
 
         require(path.length >= 2, InvalidSwapData());
         require(path[0] == tokenIn && path[path.length - 1] == tokenOut, InvalidSwapData());
 
-        // Set token allowance if needed
         IERC20 inputToken = IERC20(tokenIn);
         uint256 currentAllowance = inputToken.allowance(contractAddress, router);
         if (currentAllowance < amountInMax) {
             inputToken.safeIncreaseAllowance(router, type(uint256).max);
         }
 
-        // Execute the swap
         IUniswapV2Router02(router).swapTokensForExactTokens(amountOut, amountInMax, path, contractAddress, deadline);
 
         return amountOut;
@@ -169,10 +161,8 @@ library OrderbookSwapLibrary {
         uint256 amountOutMin,
         address contractAddress
     ) internal returns (uint256 amountOut) {
-        // Decode swap data: (uint24 fee, uint256 deadline, uint160 sqrtPriceLimitX96)
         (uint24 fee, uint256 deadline, uint160 sqrtPriceLimitX96) = abi.decode(swapData, (uint24, uint256, uint160));
 
-        // Create router params
         ISwapRouter.ExactInputSingleParams memory routerParams = ISwapRouter.ExactInputSingleParams({
             tokenIn: tokenIn,
             tokenOut: tokenOut,
@@ -184,14 +174,11 @@ library OrderbookSwapLibrary {
             sqrtPriceLimitX96: sqrtPriceLimitX96
         });
 
-        // Set token allowance if needed
         IERC20 inputToken = IERC20(tokenIn);
         uint256 currentAllowance = inputToken.allowance(contractAddress, router);
         if (currentAllowance < amountIn) {
             inputToken.safeIncreaseAllowance(router, type(uint256).max);
         }
-
-        // Execute the swap
         amountOut = ISwapRouter(router).exactInputSingle(routerParams);
 
         return amountOut;
@@ -207,10 +194,8 @@ library OrderbookSwapLibrary {
         uint256 amountOutMin,
         address contractAddress
     ) internal returns (uint256 amountOut) {
-        // Decode swap data: (bytes path, uint256 deadline)
         (bytes memory path, uint256 deadline) = abi.decode(swapData, (bytes, uint256));
 
-        // Verify path starts with tokenIn and ends with tokenOut
         address firstToken;
         address lastToken;
 
@@ -227,7 +212,6 @@ library OrderbookSwapLibrary {
 
         require(firstToken == tokenIn && lastToken == tokenOut, InvalidSwapData());
 
-        // Create router params
         ISwapRouter.ExactInputParams memory routerParams = ISwapRouter.ExactInputParams({
             path: path,
             recipient: contractAddress,
@@ -236,14 +220,11 @@ library OrderbookSwapLibrary {
             amountOutMinimum: amountOutMin
         });
 
-        // Set token allowance if needed
         IERC20 inputToken = IERC20(tokenIn);
         uint256 currentAllowance = inputToken.allowance(contractAddress, router);
         if (currentAllowance < amountIn) {
             inputToken.safeIncreaseAllowance(router, type(uint256).max);
         }
-
-        // Execute the swap
         amountOut = ISwapRouter(router).exactInput(routerParams);
 
         return amountOut;
@@ -259,10 +240,8 @@ library OrderbookSwapLibrary {
         uint256 amountInMax,
         address contractAddress
     ) internal returns (uint256 amountOutReceived) {
-        // Decode swap data: (uint24 fee, uint256 deadline, uint160 sqrtPriceLimitX96)
         (uint24 fee, uint256 deadline, uint160 sqrtPriceLimitX96) = abi.decode(swapData, (uint24, uint256, uint160));
 
-        // Create router params
         ISwapRouter.ExactOutputSingleParams memory routerParams = ISwapRouter.ExactOutputSingleParams({
             tokenIn: tokenIn,
             tokenOut: tokenOut,
@@ -274,14 +253,11 @@ library OrderbookSwapLibrary {
             sqrtPriceLimitX96: sqrtPriceLimitX96
         });
 
-        // Set token allowance if needed
         IERC20 inputToken = IERC20(tokenIn);
         uint256 currentAllowance = inputToken.allowance(contractAddress, router);
         if (currentAllowance < amountInMax) {
             inputToken.safeIncreaseAllowance(router, type(uint256).max);
         }
-
-        // Execute the swap
         ISwapRouter(router).exactOutputSingle(routerParams);
 
         return amountOut;
@@ -297,12 +273,10 @@ library OrderbookSwapLibrary {
         uint256 amountInMax,
         address contractAddress
     ) internal returns (uint256 amountOutReceived) {
-        // Decode swap data: (bytes path, uint256 deadline)
         (bytes memory path, uint256 deadline) = abi.decode(swapData, (bytes, uint256));
 
-        // Verify path starts with tokenOut and ends with tokenIn (reversed for exactOutput)
-        address firstToken; // Output token
-        address lastToken; // Input token
+        address firstToken;
+        address lastToken;
 
         assembly {
             firstToken := mload(add(path, 32))
@@ -317,7 +291,6 @@ library OrderbookSwapLibrary {
 
         require(firstToken == tokenOut && lastToken == tokenIn, InvalidSwapData());
 
-        // Create router params
         ISwapRouter.ExactOutputParams memory routerParams = ISwapRouter.ExactOutputParams({
             path: path,
             recipient: contractAddress,
@@ -326,14 +299,11 @@ library OrderbookSwapLibrary {
             amountInMaximum: amountInMax
         });
 
-        // Set token allowance if needed
         IERC20 inputToken = IERC20(tokenIn);
         uint256 currentAllowance = inputToken.allowance(contractAddress, router);
         if (currentAllowance < amountInMax) {
             inputToken.safeIncreaseAllowance(router, type(uint256).max);
         }
-
-        // Execute the swap
         ISwapRouter(router).exactOutput(routerParams);
 
         return amountOut;
