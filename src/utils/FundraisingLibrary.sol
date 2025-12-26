@@ -14,6 +14,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
+import "./VaultLibrary.sol";
+import "./RewardsLibrary.sol";
 
 /// @title FundraisingLibrary
 /// @notice Library for fundraising operations
@@ -32,6 +34,17 @@ library FundraisingLibrary {
     error NoDepositToWithdraw();
     error NoSharesIssued();
     error POCNotExchanged();
+    error AmountMustBeGreaterThanZero();
+    error DepositBelowMinimum();
+    error SharesCalculationFailed();
+    error FundraisingAlreadyExtended();
+    error FundraisingNotExpiredYet();
+    error TargetNotReached();
+    error BelowMinLaunchDeposit();
+    error InvalidPrice();
+    error InvalidStage();
+    error ActiveStageNotSet();
+    error CancelPeriodNotPassed();
 
     event SellableCollateralAdded(address indexed token, address indexed priceFeed);
     event RewardTokenAdded(address indexed token, address indexed priceFeed);
@@ -39,6 +52,13 @@ library FundraisingLibrary {
     event FundraisingWithdrawal(uint256 indexed vaultId, address indexed sender, uint256 mainCollateralAmount);
     event ExchangeFinalized(uint256 totalLaunchBalance, uint256 sharePriceInLaunches, uint256 infraLaunches);
     event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
+    event FundraisingDeposit(uint256 indexed vaultId, address indexed depositor, uint256 amount, uint256 shares);
+    event LaunchDeposit(
+        uint256 indexed vaultId, address indexed depositor, uint256 launchAmount, uint256 shares, uint256 launchPriceUSD
+    );
+    event FundraisingExtended(uint256 newDeadline);
+    event FundraisingCancelled(uint256 totalCollected);
+    event FundraisingCollectionFinalized(uint256 totalCollected, uint256 totalShares);
 
     /// @notice Initialize POC contracts during DAO initialization
     /// @param pocContracts Array of POC contracts
@@ -226,6 +246,210 @@ library FundraisingLibrary {
 
         emit ExchangeFinalized(daoState.totalLaunchBalance, daoState.sharePriceInLaunches, infraLaunches);
         emit StageChanged(oldStage, daoState.currentStage);
+    }
+
+    /// @notice Deposit mainCollateral during fundraising stage
+    /// @param vaultStorage Vault storage structure
+    /// @param daoState DAO state storage
+    /// @param fundraisingConfig Fundraising configuration
+    /// @param participantEntries Mapping of participant entries
+    /// @param mainCollateral Main collateral token address
+    /// @param sender Sender address
+    /// @param amount Amount of mainCollateral to deposit
+    /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
+    /// @param contractAddress Contract address for token transfer
+    function executeDepositFundraising(
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.DAOState storage daoState,
+        DataTypes.FundraisingConfig storage fundraisingConfig,
+        mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
+        address mainCollateral,
+        address sender,
+        uint256 amount,
+        uint256 vaultId,
+        address contractAddress
+    ) external {
+        require(amount > 0, AmountMustBeGreaterThanZero());
+        require(amount >= fundraisingConfig.minDeposit, DepositBelowMinimum());
+
+        if (vaultId == 0) {
+            vaultId = vaultStorage.addressToVaultId[sender];
+        }
+        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+
+        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+
+        uint256 shares = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
+        require(shares > 0, SharesCalculationFailed());
+
+        DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
+        if (entry.entryTimestamp == 0) {
+            entry.fixedSharePrice = fundraisingConfig.sharePrice;
+            entry.fixedLaunchPrice = fundraisingConfig.launchPrice;
+            entry.entryTimestamp = block.timestamp;
+            entry.weightedAvgSharePrice = entry.fixedSharePrice;
+            entry.weightedAvgLaunchPrice = entry.fixedLaunchPrice;
+        }
+        entry.depositedMainCollateral += amount;
+
+        vault.shares += shares;
+        vaultStorage.totalSharesSupply += shares;
+        daoState.totalCollectedMainCollateral += amount;
+
+        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
+
+        vaultStorage.vaultMainCollateralDeposit[vaultId] += amount;
+
+        IERC20(mainCollateral).safeTransferFrom(sender, contractAddress, amount);
+
+        emit FundraisingDeposit(vaultId, sender, amount, shares);
+    }
+
+    /// @notice Deposit launch tokens during active stage to receive shares
+    /// @param vaultStorage Vault storage structure
+    /// @param daoState DAO state storage
+    /// @param rewardsStorage Rewards storage structure
+    /// @param lpTokenStorage LP token storage structure
+    /// @param fundraisingConfig Fundraising configuration
+    /// @param participantEntries Mapping of participant entries
+    /// @param accountedBalance Accounted balance mapping
+    /// @param launchToken Launch token address
+    /// @param sender Sender address
+    /// @param launchAmount Amount of launch tokens to deposit
+    /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
+    /// @param getLaunchPriceFromPOC Function pointer to get launch price from POC
+    /// @param contractAddress Contract address for token transfer
+    function executeDepositLaunches(
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.DAOState storage daoState,
+        DataTypes.RewardsStorage storage rewardsStorage,
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        DataTypes.FundraisingConfig storage fundraisingConfig,
+        mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
+        mapping(address => uint256) storage accountedBalance,
+        address launchToken,
+        address sender,
+        uint256 launchAmount,
+        uint256 vaultId,
+        function() external view returns (uint256) getLaunchPriceFromPOC,
+        address contractAddress
+    ) external {
+        require(launchAmount >= fundraisingConfig.minLaunchDeposit, BelowMinLaunchDeposit());
+
+        if (vaultId == 0) {
+            vaultId = vaultStorage.addressToVaultId[sender];
+        }
+        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+
+        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+
+        uint256 launchPriceUSD = getLaunchPriceFromPOC();
+        require(launchPriceUSD > 0, InvalidPrice());
+
+        uint256 shares = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
+        require(shares > 0, SharesCalculationFailed());
+
+        DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
+
+        DataTypes.Vault storage vaultForAvg = vaultStorage.vaults[vaultId];
+        DataTypes.ParticipantEntry storage entryForAvg = participantEntries[vaultId];
+
+        if (vaultForAvg.shares == 0) {
+            entryForAvg.weightedAvgLaunchPrice = launchPriceUSD / 2;
+            entryForAvg.weightedAvgSharePrice = fundraisingConfig.sharePrice;
+        } else {
+            uint256 totalShares = vaultForAvg.shares + shares;
+            entryForAvg.weightedAvgLaunchPrice =
+                (entryForAvg.weightedAvgLaunchPrice * vaultForAvg.shares + (launchPriceUSD / 2) * shares) / totalShares;
+            entryForAvg.weightedAvgSharePrice =
+                (entryForAvg.weightedAvgSharePrice * vaultForAvg.shares + fundraisingConfig.sharePrice * shares)
+                    / totalShares;
+        }
+
+        if (entry.entryTimestamp == 0) {
+            entry.entryTimestamp = block.timestamp;
+            entry.fixedSharePrice = fundraisingConfig.sharePrice;
+            entry.fixedLaunchPrice = fundraisingConfig.launchPrice;
+        }
+
+        RewardsLibrary.executeUpdateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
+
+        vault.shares += shares;
+        vaultStorage.totalSharesSupply += shares;
+
+        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
+
+        IERC20(launchToken).safeTransferFrom(sender, contractAddress, launchAmount);
+        daoState.totalLaunchBalance += launchAmount;
+        accountedBalance[launchToken] += launchAmount;
+
+        emit LaunchDeposit(vaultId, sender, launchAmount, shares, launchPriceUSD);
+    }
+
+    /// @notice Extend fundraising deadline (only once)
+    /// @param fundraisingConfig Fundraising configuration
+    function executeExtendFundraising(DataTypes.FundraisingConfig storage fundraisingConfig) external {
+        require(!fundraisingConfig.extended, FundraisingAlreadyExtended());
+        require(block.timestamp >= fundraisingConfig.deadline, FundraisingNotExpiredYet());
+
+        fundraisingConfig.deadline = block.timestamp + fundraisingConfig.extensionPeriod;
+        fundraisingConfig.extended = true;
+
+        emit FundraisingExtended(fundraisingConfig.deadline);
+    }
+
+    /// @notice Cancel fundraising
+    /// @param daoState DAO state storage
+    /// @param fundraisingConfig Fundraising configuration
+    /// @param activeStageTimestamp Active stage timestamp
+    function executeCancelFundraising(
+        DataTypes.DAOState storage daoState,
+        DataTypes.FundraisingConfig storage fundraisingConfig,
+        uint256 activeStageTimestamp
+    ) external {
+        if (daoState.currentStage == DataTypes.Stage.Fundraising) {
+            require(block.timestamp >= fundraisingConfig.deadline + 1 days, FundraisingNotExpiredYet());
+
+            daoState.currentStage = DataTypes.Stage.FundraisingCancelled;
+
+            emit FundraisingCancelled(daoState.totalCollectedMainCollateral);
+            emit StageChanged(DataTypes.Stage.Fundraising, DataTypes.Stage.FundraisingCancelled);
+        } else if (
+            daoState.currentStage == DataTypes.Stage.FundraisingExchange
+                || daoState.currentStage == DataTypes.Stage.WaitingForLP
+        ) {
+            require(activeStageTimestamp > 0, ActiveStageNotSet());
+            require(
+                block.timestamp >= activeStageTimestamp + Constants.CANCEL_AFTER_ACTIVE_PERIOD, CancelPeriodNotPassed()
+            );
+
+            DataTypes.Stage oldStage = daoState.currentStage;
+            daoState.currentStage = DataTypes.Stage.FundraisingCancelled;
+
+            emit FundraisingCancelled(daoState.totalCollectedMainCollateral);
+            emit StageChanged(oldStage, DataTypes.Stage.FundraisingCancelled);
+        } else {
+            revert InvalidStage();
+        }
+    }
+
+    /// @notice Finalize fundraising collection and move to exchange stage
+    /// @param daoState DAO state storage
+    /// @param fundraisingConfig Fundraising configuration
+    /// @param totalSharesSupply Total shares supply
+    function executeFinalizeFundraisingCollection(
+        DataTypes.DAOState storage daoState,
+        DataTypes.FundraisingConfig storage fundraisingConfig,
+        uint256 totalSharesSupply
+    ) external {
+        require(
+            daoState.totalCollectedMainCollateral >= fundraisingConfig.targetAmountMainCollateral, TargetNotReached()
+        );
+
+        daoState.currentStage = DataTypes.Stage.FundraisingExchange;
+
+        emit FundraisingCollectionFinalized(daoState.totalCollectedMainCollateral, totalSharesSupply);
+        emit StageChanged(DataTypes.Stage.Fundraising, DataTypes.Stage.FundraisingExchange);
     }
 }
 

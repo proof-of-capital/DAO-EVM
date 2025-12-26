@@ -364,6 +364,7 @@ library DataTypes {
         address creator;
         uint256 creatorProfitPercent;
         uint256 totalCollectedMainCollateral;
+        uint256 lastCreatorAllocation;
     }
 }
 

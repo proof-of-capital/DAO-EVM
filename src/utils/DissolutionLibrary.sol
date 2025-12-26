@@ -13,6 +13,7 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "../interfaces/IProofOfCapital.sol";
+import "../interfaces/INonfungiblePositionManager.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
 import "./VaultLibrary.sol";
@@ -33,6 +34,8 @@ library DissolutionLibrary {
 
     event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
     event CreatorDissolutionClaimed(address indexed creator, uint256 launchAmount);
+    event V2LPTokenDissolved(address indexed lpToken, uint256 amount0, uint256 amount1);
+    event V3LPPositionDissolved(uint256 indexed tokenId, uint256 amount0, uint256 amount1);
 
     /// @notice Dissolve DAO if all POC contract locks have ended
     /// @param daoState DAO state storage structure
@@ -147,6 +150,80 @@ library DissolutionLibrary {
         IERC20(launchToken).safeTransfer(creator, creatorLaunchShare);
         accountedBalance[address(launchToken)] -= creatorLaunchShare;
         emit CreatorDissolutionClaimed(creator, creatorLaunchShare);
+    }
+
+    /// @notice Dissolve all LP tokens (V2 and V3) and transition to Dissolved stage
+    /// @param daoState DAO state storage
+    /// @param lpTokenStorage LP token storage structure
+    /// @param rewardsStorage Rewards storage structure
+    /// @param accountedBalance Accounted balance mapping
+    /// @param launchToken Launch token address
+    /// @param contractAddress Contract address
+    function executeDissolveLPTokens(
+        DataTypes.DAOState storage daoState,
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        DataTypes.RewardsStorage storage rewardsStorage,
+        mapping(address => uint256) storage accountedBalance,
+        address launchToken,
+        address contractAddress
+    ) external {
+        uint256 v2Length = lpTokenStorage.v2LPTokens.length;
+        for (uint256 i = 0; i < v2Length; i++) {
+            address lpToken = lpTokenStorage.v2LPTokens[i];
+            if (accountedBalance[lpToken] > 0) {
+                (uint256 amount0, uint256 amount1) =
+                    LPTokenLibrary.executeDissolveV2LPToken(lpTokenStorage, accountedBalance, lpToken);
+                emit V2LPTokenDissolved(lpToken, amount0, amount1);
+            }
+        }
+
+        uint256 v3Length = lpTokenStorage.v3LPPositions.length;
+        for (uint256 i = 0; i < v3Length; i++) {
+            uint256 tokenId = lpTokenStorage.v3LPPositions[i].tokenId;
+            DataTypes.V3LPPositionInfo memory positionInfo = lpTokenStorage.v3LPPositions[i];
+            INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
+            (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
+            if (liquidity > 0) {
+                (uint256 amount0, uint256 amount1) =
+                    LPTokenLibrary.executeDissolveV3LPPosition(lpTokenStorage, accountedBalance, tokenId);
+                emit V3LPPositionDissolved(tokenId, amount0, amount1);
+            }
+        }
+
+        delete lpTokenStorage.v2LPTokens;
+        delete lpTokenStorage.v3LPPositions;
+
+        executeSyncAllTokenBalances(rewardsStorage, accountedBalance, launchToken, contractAddress);
+
+        daoState.currentStage = DataTypes.Stage.Dissolved;
+        emit StageChanged(DataTypes.Stage.WaitingForLPDissolution, DataTypes.Stage.Dissolved);
+    }
+
+    /// @notice Sync accountedBalance for all reward tokens and launch token with actual contract balances
+    /// @param rewardsStorage Rewards storage structure
+    /// @param accountedBalance Accounted balance mapping
+    /// @param launchToken Launch token address
+    /// @param contractAddress Contract address
+    function executeSyncAllTokenBalances(
+        DataTypes.RewardsStorage storage rewardsStorage,
+        mapping(address => uint256) storage accountedBalance,
+        address launchToken,
+        address contractAddress
+    ) public {
+        uint256 launchTokenBalance = IERC20(launchToken).balanceOf(contractAddress);
+        if (launchTokenBalance > accountedBalance[launchToken]) {
+            accountedBalance[launchToken] = launchTokenBalance;
+        }
+
+        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; i++) {
+            address token = rewardsStorage.rewardTokens[i];
+            if (rewardsStorage.rewardTokenInfo[token].active) {
+                uint256 actualBalance = IERC20(token).balanceOf(contractAddress);
+                if (actualBalance > accountedBalance[token]) {
+                    accountedBalance[token] = actualBalance;
+                }
+            }
+        }
     }
 }
 

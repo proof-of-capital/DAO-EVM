@@ -39,6 +39,7 @@ library LPTokenLibrary {
     event V3LPPositionDissolved(uint256 indexed tokenId, uint256 amount0, uint256 amount1);
     event LPProfitDistributed(address indexed lpToken, uint256 amount);
     event V3LiquidityDecreased(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
+    event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
 
     /// @notice Provide V2 LP tokens
     /// @param lpTokenStorage LP token storage structure
@@ -350,6 +351,100 @@ library LPTokenLibrary {
         lpTokenStorage.v3LastLPDistribution[tokenId] = block.timestamp;
 
         emit V3LiquidityDecreased(tokenId, liquidityToDecrease, collected0, collected1);
+    }
+
+    /// @notice Creator provides LP tokens and moves DAO to active stage
+    /// @param lpTokenStorage LP token storage structure
+    /// @param rewardsStorage Rewards storage structure
+    /// @param daoState DAO state storage
+    /// @param accountedBalance Accounted balance mapping
+    /// @param v2LPTokenAddresses Array of V2 LP token addresses
+    /// @param v2LPAmounts Array of V2 LP token amounts to deposit
+    /// @param v3TokenIds Array of V3 LP position token IDs
+    /// @param primaryLPTokenType Primary LP token type
+    /// @param sender Sender address
+    /// @param contractAddress Contract address
+    function executeProvideLPTokens(
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        DataTypes.RewardsStorage storage rewardsStorage,
+        DataTypes.DAOState storage daoState,
+        mapping(address => uint256) storage accountedBalance,
+        address[] calldata v2LPTokenAddresses,
+        uint256[] calldata v2LPAmounts,
+        uint256[] calldata v3TokenIds,
+        DataTypes.LPTokenType primaryLPTokenType,
+        address sender,
+        address contractAddress
+    ) external returns (uint256 activeStageTimestamp) {
+        require(v2LPTokenAddresses.length == v2LPAmounts.length, InvalidAddresses());
+        require(v2LPTokenAddresses.length > 0 || v3TokenIds.length > 0, InvalidAddress());
+
+        if (primaryLPTokenType == DataTypes.LPTokenType.V2) {
+            require(v2LPTokenAddresses.length > 0, InvalidAddress());
+        } else if (primaryLPTokenType == DataTypes.LPTokenType.V3) {
+            require(v3TokenIds.length > 0, InvalidAddress());
+        }
+
+        for (uint256 i = 0; i < v2LPTokenAddresses.length; i++) {
+            address lpToken = v2LPTokenAddresses[i];
+            uint256 lpAmount = v2LPAmounts[i];
+
+            require(lpToken != address(0), InvalidAddress());
+            require(lpAmount > 0, AmountMustBeGreaterThanZero());
+
+            IERC20(lpToken).safeTransferFrom(sender, contractAddress, lpAmount);
+
+            if (!lpTokenStorage.isV2LPToken[lpToken]) {
+                lpTokenStorage.v2LPTokens.push(lpToken);
+                lpTokenStorage.isV2LPToken[lpToken] = true;
+            }
+            accountedBalance[lpToken] += lpAmount;
+            lpTokenStorage.lpTokenAddedAt[lpToken] = block.timestamp;
+            lpTokenStorage.lastLPDistribution[lpToken] = block.timestamp;
+
+            emit LPTokensProvided(lpToken, lpAmount);
+        }
+
+        if (v3TokenIds.length > 0) {
+            require(lpTokenStorage.v3PositionManager != address(0), InvalidAddress());
+
+            for (uint256 i = 0; i < v3TokenIds.length; i++) {
+                uint256 tokenId = v3TokenIds[i];
+                require(lpTokenStorage.v3TokenIdToIndex[tokenId] == 0, TokenAlreadyAdded());
+
+                INonfungiblePositionManager positionManager =
+                    INonfungiblePositionManager(lpTokenStorage.v3PositionManager);
+                require(positionManager.ownerOf(tokenId) == contractAddress, Unauthorized());
+
+                (,, address token0, address token1,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
+                require(liquidity > 0, AmountMustBeGreaterThanZero());
+
+                require(rewardsStorage.rewardTokenInfo[token0].active, TokenNotAdded());
+                require(rewardsStorage.rewardTokenInfo[token1].active, TokenNotAdded());
+
+                lpTokenStorage.v3LPPositions
+                    .push(
+                        DataTypes.V3LPPositionInfo({
+                            positionManager: lpTokenStorage.v3PositionManager,
+                            tokenId: tokenId,
+                            token0: token0,
+                            token1: token1
+                        })
+                    );
+
+                lpTokenStorage.v3TokenIdToIndex[tokenId] = lpTokenStorage.v3LPPositions.length;
+                lpTokenStorage.v3LPTokenAddedAt[tokenId] = block.timestamp;
+                lpTokenStorage.v3LastLPDistribution[tokenId] = block.timestamp;
+
+                emit V3LPPositionProvided(tokenId, token0, token1);
+            }
+        }
+
+        DataTypes.Stage oldStage = daoState.currentStage;
+        daoState.currentStage = DataTypes.Stage.Active;
+        activeStageTimestamp = block.timestamp;
+
+        emit StageChanged(oldStage, DataTypes.Stage.Active);
     }
 }
 

@@ -51,6 +51,7 @@ import "./utils/OracleLibrary.sol";
 import "./utils/POCLibrary.sol";
 import "./utils/FundraisingLibrary.sol";
 import "./utils/DissolutionLibrary.sol";
+import "./utils/CreatorLibrary.sol";
 
 /// @title DAO Contract
 /// @notice Main DAO contract managing vaults, shares, orderbook and collateral trading
@@ -88,7 +89,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     DataTypes.LPTokenType public primaryLPTokenType;
 
-    uint256 public lastCreatorAllocation;
     uint256 public activeStageTimestamp;
 
     address public pendingUpgradeFromVoting;
@@ -175,6 +175,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         _daoState.royaltyRecipient = params.royaltyRecipient;
         _daoState.royaltyPercent = params.royaltyPercent;
         _daoState.totalCollectedMainCollateral = 0;
+        _daoState.lastCreatorAllocation = 0;
 
         _vaultStorage.nextVaultId = 1;
         _vaultStorage.totalSharesSupply = 0;
@@ -277,42 +278,17 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param amount Amount of mainCollateral to deposit (18 decimals)
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
     function depositFundraising(uint256 amount, uint256 vaultId) external nonReentrant fundraisingActive {
-        require(amount > 0, AmountMustBeGreaterThanZero());
-        require(amount >= fundraisingConfig.minDeposit, DepositBelowMinimum());
-
-        // If vaultId is 0, use sender's vault, otherwise use provided vaultId
-        if (vaultId == 0) {
-            vaultId = _vaultStorage.addressToVaultId[msg.sender];
-        }
-        require(vaultId > 0 && vaultId < _vaultStorage.nextVaultId, NoVaultFound());
-
-        DataTypes.Vault storage vault = _vaultStorage.vaults[vaultId];
-
-        uint256 shares = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
-        require(shares > 0, SharesCalculationFailed());
-
-        DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
-        if (entry.entryTimestamp == 0) {
-            entry.fixedSharePrice = fundraisingConfig.sharePrice;
-            entry.fixedLaunchPrice = fundraisingConfig.launchPrice;
-            entry.entryTimestamp = block.timestamp;
-            entry.weightedAvgSharePrice = entry.fixedSharePrice;
-            entry.weightedAvgLaunchPrice = entry.fixedLaunchPrice;
-        }
-        entry.depositedMainCollateral += amount;
-
-        vault.shares += shares;
-        _vaultStorage.totalSharesSupply += shares;
-        _daoState.totalCollectedMainCollateral += amount;
-
-        // Update voting shares for delegate
-        VaultLibrary.executeUpdateDelegateVotingShares(_vaultStorage, vaultId, int256(shares));
-
-        _vaultStorage.vaultMainCollateralDeposit[vaultId] += amount;
-
-        IERC20(mainCollateral).safeTransferFrom(msg.sender, address(this), amount);
-
-        emit FundraisingDeposit(vaultId, msg.sender, amount, shares);
+        FundraisingLibrary.executeDepositFundraising(
+            _vaultStorage,
+            _daoState,
+            fundraisingConfig,
+            participantEntries,
+            mainCollateral,
+            msg.sender,
+            amount,
+            vaultId,
+            address(this)
+        );
     }
 
     /// @notice Deposit launch tokens during active stage to receive shares
@@ -324,58 +300,21 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         nonReentrant
         atStage(DataTypes.Stage.Active)
     {
-        require(launchAmount >= fundraisingConfig.minLaunchDeposit, BelowMinLaunchDeposit());
-
-        // If vaultId is 0, use sender's vault, otherwise use provided vaultId
-        if (vaultId == 0) {
-            vaultId = _vaultStorage.addressToVaultId[msg.sender];
-        }
-        require(vaultId > 0 && vaultId < _vaultStorage.nextVaultId, NoVaultFound());
-
-        DataTypes.Vault storage vault = _vaultStorage.vaults[vaultId];
-
-        uint256 launchPriceUSD = this.getLaunchPriceFromPOC();
-        require(launchPriceUSD > 0, InvalidPrice());
-
-        uint256 shares = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
-        require(shares > 0, SharesCalculationFailed());
-
-        DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
-
-        DataTypes.Vault storage vaultForAvg = _vaultStorage.vaults[vaultId];
-        DataTypes.ParticipantEntry storage entryForAvg = participantEntries[vaultId];
-
-        if (vaultForAvg.shares == 0) {
-            entryForAvg.weightedAvgLaunchPrice = launchPriceUSD / 2;
-            entryForAvg.weightedAvgSharePrice = fundraisingConfig.sharePrice;
-        } else {
-            uint256 totalShares = vaultForAvg.shares + shares;
-            entryForAvg.weightedAvgLaunchPrice =
-                (entryForAvg.weightedAvgLaunchPrice * vaultForAvg.shares + (launchPriceUSD / 2) * shares) / totalShares;
-            entryForAvg.weightedAvgSharePrice =
-                (entryForAvg.weightedAvgSharePrice * vaultForAvg.shares + fundraisingConfig.sharePrice * shares)
-                    / totalShares;
-        }
-
-        if (entry.entryTimestamp == 0) {
-            entry.entryTimestamp = block.timestamp;
-            entry.fixedSharePrice = fundraisingConfig.sharePrice;
-            entry.fixedLaunchPrice = fundraisingConfig.launchPrice;
-        }
-
-        RewardsLibrary.executeUpdateVaultRewards(_vaultStorage, _rewardsStorage, _lpTokenStorage, vaultId);
-
-        vault.shares += shares;
-        _vaultStorage.totalSharesSupply += shares;
-
-        // Update voting shares for delegate
-        VaultLibrary.executeUpdateDelegateVotingShares(_vaultStorage, vaultId, int256(shares));
-
-        launchToken.safeTransferFrom(msg.sender, address(this), launchAmount);
-        _daoState.totalLaunchBalance += launchAmount;
-        accountedBalance[address(launchToken)] += launchAmount;
-
-        emit LaunchDeposit(vaultId, msg.sender, launchAmount, shares, launchPriceUSD);
+        FundraisingLibrary.executeDepositLaunches(
+            _vaultStorage,
+            _daoState,
+            _rewardsStorage,
+            _lpTokenStorage,
+            fundraisingConfig,
+            participantEntries,
+            accountedBalance,
+            address(launchToken),
+            msg.sender,
+            launchAmount,
+            vaultId,
+            this.getLaunchPriceFromPOC,
+            address(this)
+        );
     }
 
     /// @notice Update primary address
@@ -429,30 +368,16 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Can only be done once per ALLOCATION_PERIOD; max MAX_CREATOR_ALLOCATION_PERCENT per period
     /// @param launchAmount Amount of launch tokens to allocate
     function allocateLaunchesToCreator(uint256 launchAmount) external onlyVoting atStage(DataTypes.Stage.Active) {
-        require(block.timestamp >= lastCreatorAllocation + Constants.ALLOCATION_PERIOD, AllocationTooSoon());
-        require(launchAmount > 0, AmountMustBeGreaterThanZero());
-
-        uint256 maxAllocation =
-            (_daoState.totalLaunchBalance * Constants.MAX_CREATOR_ALLOCATION_PERCENT) / Constants.BASIS_POINTS;
-        require(launchAmount <= maxAllocation, ExceedsMaxAllocation());
-
-        // Calculate how many shares equivalent this represents
-        require(_daoState.sharePriceInLaunches > 0, InvalidSharePrice());
-        uint256 sharesEquivalent = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / _daoState.sharePriceInLaunches;
-
-        // Calculate what % of total shares this represents
-        require(_vaultStorage.totalSharesSupply > 0, NoShares());
-        uint256 profitPercentEquivalent = (sharesEquivalent * Constants.BASIS_POINTS) / _vaultStorage.totalSharesSupply;
-
-        require(_daoState.creatorProfitPercent >= profitPercentEquivalent, CreatorShareTooLow());
-        _daoState.creatorProfitPercent -= profitPercentEquivalent;
-
-        launchToken.safeTransfer(creator, launchAmount);
-        _daoState.totalLaunchBalance -= launchAmount;
-        accountedBalance[address(launchToken)] -= launchAmount;
-        lastCreatorAllocation = block.timestamp;
-
-        emit CreatorLaunchesAllocated(launchAmount, profitPercentEquivalent, _daoState.creatorProfitPercent);
+        CreatorLibrary.executeAllocateLaunchesToCreator(
+            _daoState,
+            accountedBalance,
+            address(launchToken),
+            creator,
+            _vaultStorage.totalSharesSupply,
+            msg.sender,
+            launchAmount,
+            address(this)
+        );
     }
 
     /// @notice Sell launch tokens for collateral
@@ -543,40 +468,16 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         onlyVoting
         atStage(DataTypes.Stage.Active)
     {
-        require(pocContract != address(0), InvalidAddress());
-        require(collateralToken != address(0), InvalidAddress());
-        require(priceFeed != address(0), InvalidAddress());
-        require(sharePercent > 0 && sharePercent <= Constants.BASIS_POINTS, InvalidPercentage());
-        require(pocIndex[pocContract] == 0, POCAlreadyExists());
-
-        uint256 totalShare = sharePercent;
-        for (uint256 i = 0; i < pocContracts.length; i++) {
-            totalShare += pocContracts[i].sharePercent;
-        }
-        require(totalShare <= Constants.BASIS_POINTS, TotalShareExceeds100Percent());
-
-        if (!sellableCollaterals[collateralToken].active) {
-            sellableCollaterals[collateralToken] =
-                DataTypes.CollateralInfo({token: collateralToken, priceFeed: priceFeed, active: true});
-            emit SellableCollateralAdded(collateralToken, priceFeed);
-        }
-
-        pocContracts.push(
-            DataTypes.POCInfo({
-                pocContract: pocContract,
-                collateralToken: collateralToken,
-                priceFeed: priceFeed,
-                sharePercent: sharePercent,
-                active: true,
-                exchanged: false,
-                exchangedAmount: 0
-            })
+        POCLibrary.executeAddPOCContract(
+            pocContracts,
+            pocIndex,
+            isPocContract,
+            sellableCollaterals,
+            pocContract,
+            collateralToken,
+            priceFeed,
+            sharePercent
         );
-
-        pocIndex[pocContract] = pocContracts.length;
-        isPocContract[pocContract] = true;
-
-        emit POCContractAdded(pocContract, collateralToken, sharePercent);
     }
 
     /// @notice Withdraw funds if fundraising was cancelled
@@ -595,55 +496,21 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Extend fundraising deadline (only once)
     function extendFundraising() external onlyAdmin atStage(DataTypes.Stage.Fundraising) {
-        require(!fundraisingConfig.extended, FundraisingAlreadyExtended());
-        require(block.timestamp >= fundraisingConfig.deadline, FundraisingNotExpiredYet());
-
-        fundraisingConfig.deadline = block.timestamp + fundraisingConfig.extensionPeriod;
-        fundraisingConfig.extended = true;
-
-        emit FundraisingExtended(fundraisingConfig.deadline);
+        FundraisingLibrary.executeExtendFundraising(fundraisingConfig);
     }
 
     /// @notice Cancel fundraising
     /// @dev In Fundraising stage: admin or participant can cancel if target not reached after deadline
     /// @dev In Active or Dissolved stage: admin or participant can cancel after 100 days in Active stage
     function cancelFundraising() external onlyParticipantOrAdmin {
-        if (_daoState.currentStage == DataTypes.Stage.Fundraising) {
-            require(block.timestamp >= fundraisingConfig.deadline + 1 days, FundraisingNotExpiredYet());
-
-            _daoState.currentStage = DataTypes.Stage.FundraisingCancelled;
-
-            emit FundraisingCancelled(_daoState.totalCollectedMainCollateral);
-            emit StageChanged(DataTypes.Stage.Fundraising, DataTypes.Stage.FundraisingCancelled);
-        } else if (
-            _daoState.currentStage == DataTypes.Stage.FundraisingExchange
-                || _daoState.currentStage == DataTypes.Stage.WaitingForLP
-        ) {
-            require(activeStageTimestamp > 0, ActiveStageNotSet());
-            require(
-                block.timestamp >= activeStageTimestamp + Constants.CANCEL_AFTER_ACTIVE_PERIOD, CancelPeriodNotPassed()
-            );
-
-            DataTypes.Stage oldStage = _daoState.currentStage;
-            _daoState.currentStage = DataTypes.Stage.FundraisingCancelled;
-
-            emit FundraisingCancelled(_daoState.totalCollectedMainCollateral);
-            emit StageChanged(oldStage, DataTypes.Stage.FundraisingCancelled);
-        } else {
-            revert InvalidStage();
-        }
+        FundraisingLibrary.executeCancelFundraising(_daoState, fundraisingConfig, activeStageTimestamp);
     }
 
     /// @notice Finalize fundraising collection and move to exchange stage
     function finalizeFundraisingCollection() external onlyAdmin atStage(DataTypes.Stage.Fundraising) {
-        require(
-            _daoState.totalCollectedMainCollateral >= fundraisingConfig.targetAmountMainCollateral, TargetNotReached()
+        FundraisingLibrary.executeFinalizeFundraisingCollection(
+            _daoState, fundraisingConfig, _vaultStorage.totalSharesSupply
         );
-
-        _daoState.currentStage = DataTypes.Stage.FundraisingExchange;
-
-        emit FundraisingCollectionFinalized(_daoState.totalCollectedMainCollateral, _vaultStorage.totalSharesSupply);
-        emit StageChanged(DataTypes.Stage.Fundraising, DataTypes.Stage.FundraisingExchange);
     }
 
     /// @notice Exchange mainCollateral for launch tokens from a specific POC contract
@@ -703,37 +570,18 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         uint256[] calldata v2LPAmounts,
         uint256[] calldata v3TokenIds
     ) external nonReentrant onlyCreator atStage(DataTypes.Stage.WaitingForLP) {
-        require(v2LPTokenAddresses.length == v2LPAmounts.length, InvalidAddresses());
-        require(v2LPTokenAddresses.length > 0 || v3TokenIds.length > 0, InvalidAddress());
-
-        if (primaryLPTokenType == DataTypes.LPTokenType.V2) {
-            require(v2LPTokenAddresses.length > 0, InvalidAddress());
-        } else if (primaryLPTokenType == DataTypes.LPTokenType.V3) {
-            require(v3TokenIds.length > 0, InvalidAddress());
-        }
-
-        for (uint256 i = 0; i < v2LPTokenAddresses.length; i++) {
-            address lpToken = v2LPTokenAddresses[i];
-            uint256 lpAmount = v2LPAmounts[i];
-
-            LPTokenLibrary.executeProvideV2LPToken(_lpTokenStorage, accountedBalance, lpToken, lpAmount, msg.sender);
-        }
-
-        if (v3TokenIds.length > 0) {
-            require(_lpTokenStorage.v3PositionManager != address(0), InvalidAddress());
-
-            for (uint256 i = 0; i < v3TokenIds.length; i++) {
-                uint256 tokenId = v3TokenIds[i];
-                DataTypes.V3LPPositionInfo memory positionInfo =
-                    LPTokenLibrary.getV3PositionInfo(_lpTokenStorage, tokenId);
-                LPTokenLibrary.executeProvideV3LPPosition(_lpTokenStorage, _rewardsStorage, tokenId, address(this));
-            }
-        }
-
-        _daoState.currentStage = DataTypes.Stage.Active;
-        activeStageTimestamp = block.timestamp;
-
-        emit StageChanged(DataTypes.Stage.WaitingForLP, DataTypes.Stage.Active);
+        activeStageTimestamp = LPTokenLibrary.executeProvideLPTokens(
+            _lpTokenStorage,
+            _rewardsStorage,
+            _daoState,
+            accountedBalance,
+            v2LPTokenAddresses,
+            v2LPAmounts,
+            v3TokenIds,
+            primaryLPTokenType,
+            msg.sender,
+            address(this)
+        );
     }
 
     /// @notice Dissolve DAO if all POC contract locks have ended (callable by any participant or admin without voting)
@@ -765,63 +613,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         onlyParticipantOrAdmin
         atStage(DataTypes.Stage.WaitingForLPDissolution)
     {
-        // Dissolve all V2 LP tokens
-        uint256 v2Length = _lpTokenStorage.v2LPTokens.length;
-        for (uint256 i = 0; i < v2Length; i++) {
-            address lpToken = _lpTokenStorage.v2LPTokens[i];
-            if (accountedBalance[lpToken] > 0) {
-                (uint256 amount0, uint256 amount1) =
-                    LPTokenLibrary.executeDissolveV2LPToken(_lpTokenStorage, accountedBalance, lpToken);
-                emit V2LPTokenDissolved(lpToken, amount0, amount1);
-            }
-        }
-
-        // Dissolve all V3 LP positions
-        uint256 v3Length = _lpTokenStorage.v3LPPositions.length;
-        for (uint256 i = 0; i < v3Length; i++) {
-            uint256 tokenId = _lpTokenStorage.v3LPPositions[i].tokenId;
-            // Check if position has liquidity before dissolving
-            DataTypes.V3LPPositionInfo memory positionInfo = _lpTokenStorage.v3LPPositions[i];
-            INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
-            (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
-            if (liquidity > 0) {
-                (uint256 amount0, uint256 amount1) =
-                    LPTokenLibrary.executeDissolveV3LPPosition(_lpTokenStorage, accountedBalance, tokenId);
-                emit V3LPPositionDissolved(tokenId, amount0, amount1);
-            }
-        }
-
-        // Clear arrays and mappings
-        delete _lpTokenStorage.v2LPTokens;
-        delete _lpTokenStorage.v3LPPositions;
-
-        // Sync all token balances with actual contract balances
-        _syncAllTokenBalances();
-
-        // Transition to Dissolved stage
-        _daoState.currentStage = DataTypes.Stage.Dissolved;
-        emit StageChanged(DataTypes.Stage.WaitingForLPDissolution, DataTypes.Stage.Dissolved);
-    }
-
-    /// @notice Sync accountedBalance for all reward tokens and launch token with actual contract balances
-    /// @dev Updates accountedBalance to match actual token balances for all tracked tokens
-    function _syncAllTokenBalances() internal {
-        // Sync launch token balance
-        uint256 launchTokenBalance = IERC20(address(launchToken)).balanceOf(address(this));
-        if (launchTokenBalance > accountedBalance[address(launchToken)]) {
-            accountedBalance[address(launchToken)] = launchTokenBalance;
-        }
-
-        // Sync all reward token balances
-        for (uint256 i = 0; i < _rewardsStorage.rewardTokens.length; i++) {
-            address token = _rewardsStorage.rewardTokens[i];
-            if (_rewardsStorage.rewardTokenInfo[token].active) {
-                uint256 actualBalance = IERC20(token).balanceOf(address(this));
-                if (actualBalance > accountedBalance[token]) {
-                    accountedBalance[token] = actualBalance;
-                }
-            }
-        }
+        DissolutionLibrary.executeDissolveLPTokens(
+            _daoState, _lpTokenStorage, _rewardsStorage, accountedBalance, address(launchToken), address(this)
+        );
     }
 
     /// @notice Claim share of assets after dissolution

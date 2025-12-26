@@ -35,6 +35,9 @@ library POCLibrary {
     error OnlyPOCContract();
     error InvalidSharePrice();
     error NoShares();
+    error InvalidPercentage();
+    error POCAlreadyExists();
+    error TotalShareExceeds100Percent();
 
     event POCExchangeCompleted(
         uint256 indexed pocIdx,
@@ -44,6 +47,8 @@ library POCLibrary {
         uint256 launchReceived
     );
     event CreatorLaunchesReturned(uint256 amount, uint256 profitPercentEquivalent, uint256 newCreatorProfitPercent);
+    event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
+    event SellableCollateralAdded(address indexed token, address indexed priceFeed);
 
     /// @notice Exchange mainCollateral for launch tokens from a specific POC contract
     /// @param daoState DAO state storage structure
@@ -253,6 +258,61 @@ library POCLibrary {
         daoState.creatorProfitPercent = newCreatorProfitPercent;
 
         emit CreatorLaunchesReturned(amount, profitPercentEquivalent, newCreatorProfitPercent);
+    }
+
+    /// @notice Add a POC contract with allocation share
+    /// @param pocContracts Array of POC contracts
+    /// @param pocIndex Mapping of POC contract address to index
+    /// @param isPocContract Mapping to check if address is POC contract
+    /// @param sellableCollaterals Mapping of sellable collaterals
+    /// @param pocContract POC contract address
+    /// @param collateralToken Collateral token for this POC
+    /// @param priceFeed Chainlink price feed for the collateral
+    /// @param sharePercent Allocation percentage in basis points (10000 = 100%)
+    function executeAddPOCContract(
+        DataTypes.POCInfo[] storage pocContracts,
+        mapping(address => uint256) storage pocIndex,
+        mapping(address => bool) storage isPocContract,
+        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
+        address pocContract,
+        address collateralToken,
+        address priceFeed,
+        uint256 sharePercent
+    ) external {
+        require(pocContract != address(0), InvalidAddress());
+        require(collateralToken != address(0), InvalidAddress());
+        require(priceFeed != address(0), InvalidAddress());
+        require(sharePercent > 0 && sharePercent <= Constants.BASIS_POINTS, InvalidPercentage());
+        require(pocIndex[pocContract] == 0, POCAlreadyExists());
+
+        uint256 totalShare = sharePercent;
+        for (uint256 i = 0; i < pocContracts.length; i++) {
+            totalShare += pocContracts[i].sharePercent;
+        }
+        require(totalShare <= Constants.BASIS_POINTS, TotalShareExceeds100Percent());
+
+        if (!sellableCollaterals[collateralToken].active) {
+            sellableCollaterals[collateralToken] =
+                DataTypes.CollateralInfo({token: collateralToken, priceFeed: priceFeed, active: true});
+            emit SellableCollateralAdded(collateralToken, priceFeed);
+        }
+
+        pocContracts.push(
+            DataTypes.POCInfo({
+                pocContract: pocContract,
+                collateralToken: collateralToken,
+                priceFeed: priceFeed,
+                sharePercent: sharePercent,
+                active: true,
+                exchanged: false,
+                exchangedAmount: 0
+            })
+        );
+
+        pocIndex[pocContract] = pocContracts.length;
+        isPocContract[pocContract] = true;
+
+        emit POCContractAdded(pocContract, collateralToken, sharePercent);
     }
 }
 
