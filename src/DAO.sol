@@ -284,10 +284,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             fundraisingConfig,
             participantEntries,
             mainCollateral,
-            msg.sender,
             amount,
-            vaultId,
-            address(this)
+            vaultId
         );
     }
 
@@ -309,11 +307,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             participantEntries,
             accountedBalance,
             address(launchToken),
-            msg.sender,
             launchAmount,
             vaultId,
-            this.getLaunchPriceFromPOC,
-            address(this)
+            this.getLaunchPriceFromPOC
         );
     }
 
@@ -374,9 +370,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             address(launchToken),
             creator,
             _vaultStorage.totalSharesSupply,
-            msg.sender,
-            launchAmount,
-            address(this)
+            launchAmount
         );
     }
 
@@ -407,7 +401,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
                 swapType: swapType,
                 swapData: swapData
             }),
-            address(this),
             launchToken,
             orderbookParams,
             sellableCollaterals,
@@ -427,7 +420,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             fundraisingConfig,
             accountedBalance,
             _vaultStorage.totalSharesSupply,
-            address(this),
             collateral,
             this.getLaunchPriceFromPOC
         );
@@ -543,8 +535,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             swapType,
             swapData,
             this.getOraclePrice,
-            this.getPOCCollateralPrice,
-            address(this)
+            this.getPOCCollateralPrice
         );
     }
 
@@ -578,9 +569,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             v2LPTokenAddresses,
             v2LPAmounts,
             v3TokenIds,
-            primaryLPTokenType,
-            msg.sender,
-            address(this)
+            primaryLPTokenType
         );
     }
 
@@ -614,7 +603,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         atStage(DataTypes.Stage.WaitingForLPDissolution)
     {
         DissolutionLibrary.executeDissolveLPTokens(
-            _daoState, _lpTokenStorage, _rewardsStorage, accountedBalance, address(launchToken), address(this)
+            _daoState, _lpTokenStorage, _rewardsStorage, accountedBalance, address(launchToken)
         );
     }
 
@@ -623,7 +612,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param tokens Array of token addresses to claim (can include launch token, reward tokens, LP tokens, or sellable collaterals)
     function claimDissolution(address[] calldata tokens) external nonReentrant atStage(DataTypes.Stage.Dissolved) {
         DissolutionLibrary.executeClaimDissolution(
-            _vaultStorage, _rewardsStorage, accountedBalance, address(launchToken), address(this), msg.sender, tokens
+            _vaultStorage, _rewardsStorage, accountedBalance, address(launchToken), tokens
         );
     }
 
@@ -637,9 +626,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             address(launchToken),
             _daoState.sharePriceInLaunches,
             _vaultStorage.totalSharesSupply,
-            msg.sender,
-            amount,
-            address(this)
+            amount
         );
     }
 
@@ -689,7 +676,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             fundraisingConfig,
             accountedBalance,
             _vaultStorage.totalSharesSupply,
-            address(this),
             token,
             this.getLaunchPriceFromPOC
         );
@@ -726,7 +712,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             fundraisingConfig,
             accountedBalance,
             _vaultStorage.totalSharesSupply,
-            address(this),
             token,
             this.getLaunchPriceFromPOC
         );
@@ -895,7 +880,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Only launch tokens can be claimed, other tokens are not available in this function
     function claimCreatorDissolution() external onlyCreator nonReentrant atStage(DataTypes.Stage.Dissolved) {
         DissolutionLibrary.executeClaimCreatorDissolution(
-            _daoState, accountedBalance, address(launchToken), creatorInfraPercent, address(this), creator
+            _daoState, accountedBalance, address(launchToken), creatorInfraPercent, creator
         );
     }
 

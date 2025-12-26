@@ -68,7 +68,6 @@ library POCLibrary {
     /// @param swapData Encoded swap parameters
     /// @param getOraclePrice Function pointer to get oracle price
     /// @param getPOCCollateralPriceFunc Function pointer to get POC collateral price
-    /// @param contractAddress Address of the contract executing the exchange
     /// @return launchReceived Amount of launch tokens received
     function executeExchangeForPOC(
         DataTypes.DAOState storage daoState,
@@ -87,8 +86,7 @@ library POCLibrary {
         DataTypes.SwapType swapType,
         bytes calldata swapData,
         function(address) external view returns (uint256) getOraclePrice,
-        function(uint256) external view returns (uint256) getPOCCollateralPriceFunc,
-        address contractAddress
+        function(uint256) external view returns (uint256) getPOCCollateralPriceFunc
     ) external returns (uint256 launchReceived) {
         require(pocIdx < pocContracts.length, InvalidPOCIndex());
 
@@ -121,7 +119,7 @@ library POCLibrary {
 
             IERC20(mainCollateral).safeIncreaseAllowance(router, collateralAmountForPOC);
 
-            uint256 balanceBefore = IERC20(poc.collateralToken).balanceOf(contractAddress);
+            uint256 balanceBefore = IERC20(poc.collateralToken).balanceOf(address(this));
 
             collateralAmount = OrderbookSwapLibrary.executeSwap(
                 router,
@@ -130,11 +128,10 @@ library POCLibrary {
                 mainCollateral,
                 poc.collateralToken,
                 collateralAmountForPOC,
-                0,
-                contractAddress
+                0
             );
 
-            uint256 balanceAfter = IERC20(poc.collateralToken).balanceOf(contractAddress);
+            uint256 balanceAfter = IERC20(poc.collateralToken).balanceOf(address(this));
             collateralAmount = balanceAfter - balanceBefore;
 
             uint256 deviation = OracleLibrary.calculateDeviation(expectedCollateral, collateralAmount);
@@ -143,11 +140,11 @@ library POCLibrary {
 
         IERC20(poc.collateralToken).safeIncreaseAllowance(poc.pocContract, collateralAmount);
 
-        uint256 launchBalanceBefore = IERC20(launchToken).balanceOf(contractAddress);
+        uint256 launchBalanceBefore = IERC20(launchToken).balanceOf(address(this));
 
         IProofOfCapital(poc.pocContract).buyLaunchTokens(collateralAmount);
 
-        uint256 launchBalanceAfter = IERC20(launchToken).balanceOf(contractAddress);
+        uint256 launchBalanceAfter = IERC20(launchToken).balanceOf(address(this));
         launchReceived = launchBalanceAfter - launchBalanceBefore;
 
         poc.exchangedAmount += collateralAmountForPOC;
@@ -225,9 +222,7 @@ library POCLibrary {
     /// @param launchToken Launch token address
     /// @param sharePriceInLaunches Share price in launches
     /// @param totalSharesSupply Total shares supply
-    /// @param sender Sender address (must be POC contract)
     /// @param amount Amount of launch tokens to return
-    /// @param contractAddress Contract address to receive tokens
     /// @return profitPercentEquivalent Profit percent equivalent returned
     function executeUpgradeOwnerShare(
         mapping(address => bool) storage isPocContract,
@@ -235,14 +230,13 @@ library POCLibrary {
         address launchToken,
         uint256 sharePriceInLaunches,
         uint256 totalSharesSupply,
-        address sender,
-        uint256 amount,
-        address contractAddress
+        uint256 amount
     ) external returns (uint256 profitPercentEquivalent) {
+        address sender = msg.sender;
         require(isPocContract[sender], OnlyPOCContract());
         require(amount > 0, AmountMustBeGreaterThanZero());
 
-        IERC20(launchToken).safeTransferFrom(sender, contractAddress, amount);
+        IERC20(launchToken).safeTransferFrom(sender, address(this), amount);
 
         require(sharePriceInLaunches > 0, InvalidSharePrice());
         uint256 sharesEquivalent = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / sharePriceInLaunches;

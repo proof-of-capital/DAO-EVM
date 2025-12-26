@@ -39,7 +39,6 @@ library ProfitDistributionLibrary {
     /// @param fundraisingConfig Fundraising config
     /// @param accountedBalance Accounted balance mapping
     /// @param totalSharesSupply Total shares supply (will be updated)
-    /// @param contractAddress Contract address (for balance check)
     /// @param token Token address to distribute
     /// @param getLaunchPriceFromPOC Function to get current launch price from POC
     /// @return newTotalSharesSupply Updated total shares supply
@@ -53,7 +52,6 @@ library ProfitDistributionLibrary {
         DataTypes.FundraisingConfig storage fundraisingConfig,
         mapping(address => uint256) storage accountedBalance,
         uint256 totalSharesSupply,
-        address contractAddress,
         address token,
         function() external view returns (uint256) getLaunchPriceFromPOC
     ) external returns (uint256 newTotalSharesSupply) {
@@ -61,7 +59,7 @@ library ProfitDistributionLibrary {
         require(rewardsStorage.rewardTokenInfo[token].active || lpTokenStorage.isV2LPToken[token], TokenNotAdded());
 
         newTotalSharesSupply = totalSharesSupply;
-        uint256 unaccounted = IERC20(token).balanceOf(contractAddress) - accountedBalance[token];
+        uint256 unaccounted = IERC20(token).balanceOf(address(this)) - accountedBalance[token];
         if (unaccounted == 0) {
             vaultStorage.totalSharesSupply = newTotalSharesSupply;
             return newTotalSharesSupply;
@@ -80,7 +78,6 @@ library ProfitDistributionLibrary {
             participantEntries,
             fundraisingConfig,
             totalSharesSupply,
-            contractAddress,
             token,
             participantsShare,
             getLaunchPriceFromPOC
@@ -132,7 +129,6 @@ library ProfitDistributionLibrary {
     /// @param participantEntries Participant entries mapping
     /// @param fundraisingConfig Fundraising config
     /// @param totalSharesSupply Total shares supply (will be updated)
-    /// @param contractAddress Contract address (for balance check)
     /// @param token Token address
     /// @param participantsShare Amount available for participants
     /// @param getLaunchPriceFromPOC Function to get current launch price from POC
@@ -146,7 +142,6 @@ library ProfitDistributionLibrary {
         mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
         DataTypes.FundraisingConfig storage fundraisingConfig,
         uint256 totalSharesSupply,
-        address contractAddress,
         address token,
         uint256 participantsShare,
         function() external view returns (uint256) getLaunchPriceFromPOC
@@ -158,7 +153,7 @@ library ProfitDistributionLibrary {
             exitQueueStorage.exitQueue.length > 0 && !ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage)
                 && participantsShare > 0 && !lpTokenStorage.isV2LPToken[token]
         ) {
-            uint256 balanceBefore = IERC20(token).balanceOf(contractAddress);
+            uint256 balanceBefore = IERC20(token).balanceOf(address(this));
 
             uint256 availableFunds = participantsShare;
             uint256 remainingFunds;
@@ -173,7 +168,7 @@ library ProfitDistributionLibrary {
                 getLaunchPriceFromPOC
             );
 
-            uint256 balanceAfter = IERC20(token).balanceOf(contractAddress);
+            uint256 balanceAfter = IERC20(token).balanceOf(address(this));
             usedForExits = balanceBefore - balanceAfter;
         }
 

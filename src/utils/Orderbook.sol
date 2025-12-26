@@ -55,7 +55,6 @@ library Orderbook {
     /// @notice Execute sell operation
     /// @dev Directly works with contract storage, updates orderbookParams.totalSold and current level
     /// @param params Sell operation parameters
-    /// @param contractAddress Address of the contract executing the swap (for library context)
     /// @param launchToken Launch token reference from storage
     /// @param orderbookParams Orderbook parameters from storage (totalSold will be updated)
     /// @param sellableCollaterals Collaterals mapping from storage
@@ -65,7 +64,6 @@ library Orderbook {
     /// @param sharePrice Share price in USD (18 decimals)
     function executeSell(
         DataTypes.SellParams memory params,
-        address contractAddress,
         IERC20 launchToken,
         DataTypes.OrderbookParams storage orderbookParams,
         mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
@@ -90,8 +88,7 @@ library Orderbook {
             address(launchToken),
             params.collateral,
             params.launchTokenAmount,
-            params.minCollateralAmount,
-            contractAddress
+            params.minCollateralAmount
         );
 
         uint256 balanceAfter = IERC20(params.collateral).balanceOf(address(this));

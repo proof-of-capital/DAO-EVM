@@ -74,18 +74,16 @@ library LPTokenLibrary {
     /// @param lpTokenStorage LP token storage structure
     /// @param rewardsStorage Rewards storage structure (for checking token validity)
     /// @param tokenId NFT token ID
-    /// @param contractAddress Contract address (for owner check)
     function executeProvideV3LPPosition(
         DataTypes.LPTokenStorage storage lpTokenStorage,
         DataTypes.RewardsStorage storage rewardsStorage,
-        uint256 tokenId,
-        address contractAddress
+        uint256 tokenId
     ) external {
         require(lpTokenStorage.v3PositionManager != address(0), InvalidAddress());
         require(lpTokenStorage.v3TokenIdToIndex[tokenId] == 0, TokenAlreadyAdded());
 
         INonfungiblePositionManager positionManager = INonfungiblePositionManager(lpTokenStorage.v3PositionManager);
-        require(positionManager.ownerOf(tokenId) == contractAddress, Unauthorized());
+        require(positionManager.ownerOf(tokenId) == address(this), Unauthorized());
 
         (,, address token0, address token1,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
         require(liquidity > 0, AmountMustBeGreaterThanZero());
@@ -362,8 +360,6 @@ library LPTokenLibrary {
     /// @param v2LPAmounts Array of V2 LP token amounts to deposit
     /// @param v3TokenIds Array of V3 LP position token IDs
     /// @param primaryLPTokenType Primary LP token type
-    /// @param sender Sender address
-    /// @param contractAddress Contract address
     function executeProvideLPTokens(
         DataTypes.LPTokenStorage storage lpTokenStorage,
         DataTypes.RewardsStorage storage rewardsStorage,
@@ -372,10 +368,9 @@ library LPTokenLibrary {
         address[] calldata v2LPTokenAddresses,
         uint256[] calldata v2LPAmounts,
         uint256[] calldata v3TokenIds,
-        DataTypes.LPTokenType primaryLPTokenType,
-        address sender,
-        address contractAddress
+        DataTypes.LPTokenType primaryLPTokenType
     ) external returns (uint256 activeStageTimestamp) {
+        address sender = msg.sender;
         require(v2LPTokenAddresses.length == v2LPAmounts.length, InvalidAddresses());
         require(v2LPTokenAddresses.length > 0 || v3TokenIds.length > 0, InvalidAddress());
 
@@ -392,7 +387,7 @@ library LPTokenLibrary {
             require(lpToken != address(0), InvalidAddress());
             require(lpAmount > 0, AmountMustBeGreaterThanZero());
 
-            IERC20(lpToken).safeTransferFrom(sender, contractAddress, lpAmount);
+            IERC20(lpToken).safeTransferFrom(sender, address(this), lpAmount);
 
             if (!lpTokenStorage.isV2LPToken[lpToken]) {
                 lpTokenStorage.v2LPTokens.push(lpToken);
@@ -414,7 +409,7 @@ library LPTokenLibrary {
 
                 INonfungiblePositionManager positionManager =
                     INonfungiblePositionManager(lpTokenStorage.v3PositionManager);
-                require(positionManager.ownerOf(tokenId) == contractAddress, Unauthorized());
+                require(positionManager.ownerOf(tokenId) == address(this), Unauthorized());
 
                 (,, address token0, address token1,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
                 require(liquidity > 0, AmountMustBeGreaterThanZero());

@@ -37,18 +37,14 @@ library CreatorLibrary {
     /// @param launchToken Launch token address
     /// @param creator Creator address
     /// @param totalSharesSupply Total shares supply
-    /// @param sender Sender address (must be voting contract)
     /// @param launchAmount Amount of launch tokens to allocate
-    /// @param contractAddress Contract address for token transfer
     function executeAllocateLaunchesToCreator(
         DataTypes.DAOState storage daoState,
         mapping(address => uint256) storage accountedBalance,
         address launchToken,
         address creator,
         uint256 totalSharesSupply,
-        address sender,
-        uint256 launchAmount,
-        address contractAddress
+        uint256 launchAmount
     ) external {
         require(block.timestamp >= daoState.lastCreatorAllocation + Constants.ALLOCATION_PERIOD, AllocationTooSoon());
         require(launchAmount > 0, AmountMustBeGreaterThanZero());

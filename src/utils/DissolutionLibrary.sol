@@ -80,8 +80,6 @@ library DissolutionLibrary {
     /// @param rewardsStorage Rewards storage structure
     /// @param accountedBalance Mapping of accounted balances
     /// @param launchToken Launch token address
-    /// @param contractAddress Contract address
-    /// @param sender Sender address
     /// @param tokens Array of token addresses to claim
     /// @return shares Shares amount claimed
     function executeClaimDissolution(
@@ -89,10 +87,9 @@ library DissolutionLibrary {
         DataTypes.RewardsStorage storage rewardsStorage,
         mapping(address => uint256) storage accountedBalance,
         address launchToken,
-        address contractAddress,
-        address sender,
         address[] calldata tokens
     ) external returns (uint256 shares) {
+        address sender = msg.sender;
         uint256 vaultId = vaultStorage.addressToVaultId[sender];
         require(vaultId < vaultStorage.nextVaultId, NoVaultFound());
 
@@ -109,7 +106,7 @@ library DissolutionLibrary {
             address token = tokens[i];
             require(token != address(0), InvalidAddress());
 
-            uint256 tokenBalance = IERC20(token).balanceOf(contractAddress);
+            uint256 tokenBalance = IERC20(token).balanceOf(address(this));
             if (tokenBalance == 0) continue;
 
             bool isValidToken = token == address(launchToken) || rewardsStorage.rewardTokenInfo[token].active;
@@ -133,7 +130,6 @@ library DissolutionLibrary {
     /// @param accountedBalance Mapping of accounted balances
     /// @param launchToken Launch token address
     /// @param creatorInfraPercent Creator infrastructure percent
-    /// @param contractAddress Contract address
     /// @param creator Creator address
     /// @return creatorLaunchShare Creator's launch share amount
     function executeClaimCreatorDissolution(
@@ -141,10 +137,9 @@ library DissolutionLibrary {
         mapping(address => uint256) storage accountedBalance,
         address launchToken,
         uint256 creatorInfraPercent,
-        address contractAddress,
         address creator
     ) external returns (uint256 creatorLaunchShare) {
-        uint256 launchBalance = IERC20(launchToken).balanceOf(contractAddress);
+        uint256 launchBalance = IERC20(launchToken).balanceOf(address(this));
         creatorLaunchShare = (launchBalance * creatorInfraPercent) / Constants.BASIS_POINTS;
         require(creatorLaunchShare > 0, NoRewardsToClaim());
         IERC20(launchToken).safeTransfer(creator, creatorLaunchShare);
@@ -158,14 +153,12 @@ library DissolutionLibrary {
     /// @param rewardsStorage Rewards storage structure
     /// @param accountedBalance Accounted balance mapping
     /// @param launchToken Launch token address
-    /// @param contractAddress Contract address
     function executeDissolveLPTokens(
         DataTypes.DAOState storage daoState,
         DataTypes.LPTokenStorage storage lpTokenStorage,
         DataTypes.RewardsStorage storage rewardsStorage,
         mapping(address => uint256) storage accountedBalance,
-        address launchToken,
-        address contractAddress
+        address launchToken
     ) external {
         uint256 v2Length = lpTokenStorage.v2LPTokens.length;
         for (uint256 i = 0; i < v2Length; i++) {
@@ -193,7 +186,7 @@ library DissolutionLibrary {
         delete lpTokenStorage.v2LPTokens;
         delete lpTokenStorage.v3LPPositions;
 
-        executeSyncAllTokenBalances(rewardsStorage, accountedBalance, launchToken, contractAddress);
+        executeSyncAllTokenBalances(rewardsStorage, accountedBalance, launchToken);
 
         daoState.currentStage = DataTypes.Stage.Dissolved;
         emit StageChanged(DataTypes.Stage.WaitingForLPDissolution, DataTypes.Stage.Dissolved);
@@ -203,14 +196,12 @@ library DissolutionLibrary {
     /// @param rewardsStorage Rewards storage structure
     /// @param accountedBalance Accounted balance mapping
     /// @param launchToken Launch token address
-    /// @param contractAddress Contract address
     function executeSyncAllTokenBalances(
         DataTypes.RewardsStorage storage rewardsStorage,
         mapping(address => uint256) storage accountedBalance,
-        address launchToken,
-        address contractAddress
+        address launchToken
     ) public {
-        uint256 launchTokenBalance = IERC20(launchToken).balanceOf(contractAddress);
+        uint256 launchTokenBalance = IERC20(launchToken).balanceOf(address(this));
         if (launchTokenBalance > accountedBalance[launchToken]) {
             accountedBalance[launchToken] = launchTokenBalance;
         }
@@ -218,7 +209,7 @@ library DissolutionLibrary {
         for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; i++) {
             address token = rewardsStorage.rewardTokens[i];
             if (rewardsStorage.rewardTokenInfo[token].active) {
-                uint256 actualBalance = IERC20(token).balanceOf(contractAddress);
+                uint256 actualBalance = IERC20(token).balanceOf(address(this));
                 if (actualBalance > accountedBalance[token]) {
                     accountedBalance[token] = actualBalance;
                 }

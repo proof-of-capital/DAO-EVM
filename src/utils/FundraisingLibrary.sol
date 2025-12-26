@@ -254,24 +254,21 @@ library FundraisingLibrary {
     /// @param fundraisingConfig Fundraising configuration
     /// @param participantEntries Mapping of participant entries
     /// @param mainCollateral Main collateral token address
-    /// @param sender Sender address
     /// @param amount Amount of mainCollateral to deposit
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
-    /// @param contractAddress Contract address for token transfer
     function executeDepositFundraising(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.DAOState storage daoState,
         DataTypes.FundraisingConfig storage fundraisingConfig,
         mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
         address mainCollateral,
-        address sender,
         uint256 amount,
-        uint256 vaultId,
-        address contractAddress
+        uint256 vaultId
     ) external {
         require(amount > 0, AmountMustBeGreaterThanZero());
         require(amount >= fundraisingConfig.minDeposit, DepositBelowMinimum());
 
+        address sender = msg.sender;
         if (vaultId == 0) {
             vaultId = vaultStorage.addressToVaultId[sender];
         }
@@ -300,7 +297,7 @@ library FundraisingLibrary {
 
         vaultStorage.vaultMainCollateralDeposit[vaultId] += amount;
 
-        IERC20(mainCollateral).safeTransferFrom(sender, contractAddress, amount);
+        IERC20(mainCollateral).safeTransferFrom(sender, address(this), amount);
 
         emit FundraisingDeposit(vaultId, sender, amount, shares);
     }
@@ -314,11 +311,9 @@ library FundraisingLibrary {
     /// @param participantEntries Mapping of participant entries
     /// @param accountedBalance Accounted balance mapping
     /// @param launchToken Launch token address
-    /// @param sender Sender address
     /// @param launchAmount Amount of launch tokens to deposit
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
     /// @param getLaunchPriceFromPOC Function pointer to get launch price from POC
-    /// @param contractAddress Contract address for token transfer
     function executeDepositLaunches(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.DAOState storage daoState,
@@ -328,14 +323,13 @@ library FundraisingLibrary {
         mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
         mapping(address => uint256) storage accountedBalance,
         address launchToken,
-        address sender,
         uint256 launchAmount,
         uint256 vaultId,
-        function() external view returns (uint256) getLaunchPriceFromPOC,
-        address contractAddress
+        function() external view returns (uint256) getLaunchPriceFromPOC
     ) external {
         require(launchAmount >= fundraisingConfig.minLaunchDeposit, BelowMinLaunchDeposit());
 
+        address sender = msg.sender;
         if (vaultId == 0) {
             vaultId = vaultStorage.addressToVaultId[sender];
         }
@@ -379,7 +373,7 @@ library FundraisingLibrary {
 
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
 
-        IERC20(launchToken).safeTransferFrom(sender, contractAddress, launchAmount);
+        IERC20(launchToken).safeTransferFrom(sender, address(this), launchAmount);
         daoState.totalLaunchBalance += launchAmount;
         accountedBalance[launchToken] += launchAmount;
 
