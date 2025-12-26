@@ -67,15 +67,13 @@ library FundraisingLibrary {
     /// @param rewardsStorage Rewards storage structure
     /// @param sellableCollaterals Mapping of sellable collaterals
     /// @param pocParams Array of POC constructor parameters
-    /// @param launchToken Launch token address
     function executeInitializePOCContracts(
         DataTypes.POCInfo[] storage pocContracts,
         mapping(address => uint256) storage pocIndex,
         mapping(address => bool) storage isPocContract,
         DataTypes.RewardsStorage storage rewardsStorage,
         mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
-        DataTypes.POCConstructorParams[] memory pocParams,
-        address launchToken
+        DataTypes.POCConstructorParams[] memory pocParams
     ) external {
         uint256 totalPOCShare = 0;
         for (uint256 i = 0; i < pocParams.length; i++) {

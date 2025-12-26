@@ -41,13 +41,11 @@ library DissolutionLibrary {
     /// @notice Dissolve DAO if all POC contract locks have ended
     /// @param daoState DAO state storage structure
     /// @param pocContracts Array of POC contracts
-    /// @param isPocContract Mapping to check if address is POC contract
     /// @param lpTokenStorage LP token storage structure
     /// @param accountedBalance Mapping of accounted balances
     function executeDissolveIfLocksEnded(
         DataTypes.DAOState storage daoState,
         DataTypes.POCInfo[] storage pocContracts,
-        mapping(address => bool) storage isPocContract,
         DataTypes.LPTokenStorage storage lpTokenStorage,
         mapping(address => uint256) storage accountedBalance
     ) external {
@@ -79,11 +77,9 @@ library DissolutionLibrary {
     /// @notice Dissolve DAO from FundraisingExchange or WaitingForLP stages if all POC contract locks have ended
     /// @param daoState DAO state storage structure
     /// @param pocContracts Array of POC contracts
-    /// @param isPocContract Mapping to check if address is POC contract
     function executeDissolveFromFundraisingStages(
         DataTypes.DAOState storage daoState,
-        DataTypes.POCInfo[] storage pocContracts,
-        mapping(address => bool) storage isPocContract
+        DataTypes.POCInfo[] storage pocContracts
     ) external {
         require(
             daoState.currentStage == DataTypes.Stage.FundraisingExchange
@@ -160,14 +156,12 @@ library DissolutionLibrary {
     }
 
     /// @notice Claim creator's share of launch tokens during dissolution
-    /// @param daoState DAO state storage
     /// @param accountedBalance Mapping of accounted balances
     /// @param launchToken Launch token address
     /// @param creatorInfraPercent Creator infrastructure percent
     /// @param creator Creator address
     /// @return creatorLaunchShare Creator's launch share amount
     function executeClaimCreatorDissolution(
-        DataTypes.DAOState storage daoState,
         mapping(address => uint256) storage accountedBalance,
         address launchToken,
         uint256 creatorInfraPercent,

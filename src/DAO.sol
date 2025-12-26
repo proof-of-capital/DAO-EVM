@@ -211,13 +211,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         }
 
         FundraisingLibrary.executeInitializePOCContracts(
-            pocContracts,
-            pocIndex,
-            isPocContract,
-            _rewardsStorage,
-            sellableCollaterals,
-            params.pocParams,
-            address(launchToken)
+            pocContracts, pocIndex, isPocContract, _rewardsStorage, sellableCollaterals, params.pocParams
         );
 
         FundraisingLibrary.executeInitializeRewardTokens(
@@ -518,11 +512,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         POCLibrary.executeExchangeForPOC(
             _daoState,
             pocContracts,
-            pocIndex,
-            isPocContract,
             accountedBalance,
             availableRouterByAdmin,
-            sellableCollaterals,
             mainCollateral,
             address(launchToken),
             _daoState.totalCollectedMainCollateral,
@@ -574,9 +565,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Checks all active POC contracts to see if their lock periods have ended
     /// @dev If all locks are ended, transitions DAO to WaitingForLPDissolution if LP tokens exist, otherwise to Dissolved
     function dissolveIfLocksEnded() external {
-        DissolutionLibrary.executeDissolveIfLocksEnded(
-            _daoState, pocContracts, isPocContract, _lpTokenStorage, accountedBalance
-        );
+        DissolutionLibrary.executeDissolveIfLocksEnded(_daoState, pocContracts, _lpTokenStorage, accountedBalance);
     }
 
     /// @notice Dissolve DAO from FundraisingExchange or WaitingForLP stages if all POC contract locks have ended
@@ -588,7 +577,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
                 || _daoState.currentStage == DataTypes.Stage.WaitingForLP,
             InvalidStage()
         );
-        DissolutionLibrary.executeDissolveFromFundraisingStages(_daoState, pocContracts, isPocContract);
+        DissolutionLibrary.executeDissolveFromFundraisingStages(_daoState, pocContracts);
     }
 
     /// @notice Execute proposal call through DAO (only callable by voting)
@@ -904,7 +893,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Only launch tokens can be claimed, other tokens are not available in this function
     function claimCreatorDissolution() external onlyCreator nonReentrant atStage(DataTypes.Stage.Dissolved) {
         DissolutionLibrary.executeClaimCreatorDissolution(
-            _daoState, accountedBalance, address(launchToken), creatorInfraPercent, creator
+            accountedBalance, address(launchToken), creatorInfraPercent, creator
         );
     }
 

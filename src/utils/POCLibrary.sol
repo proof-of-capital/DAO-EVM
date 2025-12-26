@@ -53,11 +53,8 @@ library POCLibrary {
     /// @notice Exchange mainCollateral for launch tokens from a specific POC contract
     /// @param daoState DAO state storage structure
     /// @param pocContracts Array of POC contracts
-    /// @param pocIndex Mapping of POC contract address to index
-    /// @param isPocContract Mapping to check if address is POC contract
     /// @param accountedBalance Mapping of accounted balances
     /// @param availableRouterByAdmin Mapping of available routers
-    /// @param sellableCollaterals Mapping of sellable collaterals
     /// @param mainCollateral Main collateral token address
     /// @param launchToken Launch token address
     /// @param totalCollectedMainCollateral Total collected main collateral
@@ -72,11 +69,8 @@ library POCLibrary {
     function executeExchangeForPOC(
         DataTypes.DAOState storage daoState,
         DataTypes.POCInfo[] storage pocContracts,
-        mapping(address => uint256) storage pocIndex,
-        mapping(address => bool) storage isPocContract,
         mapping(address => uint256) storage accountedBalance,
         mapping(address => bool) storage availableRouterByAdmin,
-        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
         address mainCollateral,
         address launchToken,
         uint256 totalCollectedMainCollateral,
