@@ -39,6 +39,7 @@ import "./interfaces/IAggregatorV3.sol";
 import "./interfaces/IProofOfCapital.sol";
 import "./interfaces/INonfungiblePositionManager.sol";
 import "./interfaces/IUniswapV2Pair.sol";
+import "./interfaces/IMultisig.sol";
 import "./utils/Orderbook.sol";
 import "./utils/DataTypes.sol";
 import "./utils/Constants.sol";
@@ -667,6 +668,21 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         doNotExtendPOCLock = value;
 
         emit DoNotExtendPOCLockSet(oldValue, value);
+    }
+
+    /// @notice Push multisig to execute a proposal
+    /// @dev Any participant or admin can trigger multisig execution
+    /// @param proposalId Proposal ID to execute on multisig
+    /// @param calls Array of calls to execute
+    function pushMultisigExecution(uint256 proposalId, IMultisig.ProposalCall[] calldata calls)
+        external
+        onlyParticipantOrAdmin
+    {
+        require(creator != address(0), InvalidAddress());
+
+        IMultisig(creator).executeProposal(proposalId, calls);
+
+        emit MultisigExecutionPushed(proposalId, msg.sender);
     }
 
     /// @notice Distribute unaccounted balance of a token as profit

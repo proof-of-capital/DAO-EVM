@@ -31,6 +31,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../utils/DataTypes.sol";
+import "./IMultisig.sol";
 
 /// @title IDAO Interface
 /// @notice Interface for the DAO contract managing vaults, shares, orderbook and collaterals
@@ -157,6 +158,7 @@ interface IDAO {
     event DoNotExtendPOCLockSet(bool oldValue, bool newValue);
     event RouterAvailabilityChanged(address indexed router, bool isAvailable);
     event TokenAvailabilityChanged(address indexed token, bool isAvailable);
+    event MultisigExecutionPushed(uint256 indexed proposalId, address indexed pusher);
     event OrderbookParamsUpdated(
         uint256 initialPrice,
         uint256 initialVolume,
@@ -285,6 +287,7 @@ interface IDAO {
     function setVotingContract(address votingContract) external;
     function setAdmin(address newAdmin) external;
     function setDoNotExtendPOCLock(bool value) external;
+    function pushMultisigExecution(uint256 proposalId, IMultisig.ProposalCall[] calldata calls) external;
 
     // ============================================
     // PROFIT DISTRIBUTION
