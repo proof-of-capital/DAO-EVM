@@ -322,6 +322,7 @@ library DataTypes {
         mapping(uint256 => Vault) vaults;
         mapping(address => uint256) addressToVaultId;
         mapping(uint256 => uint256) vaultMainCollateralDeposit;
+        mapping(uint256 => uint256) vaultDepositedUSD;
         uint256 nextVaultId;
         uint256 totalSharesSupply;
     }
@@ -367,6 +368,7 @@ library DataTypes {
         uint256 totalCollectedMainCollateral;
         uint256 lastCreatorAllocation;
         uint256 totalExitQueueShares;
+        uint256 totalDepositedUSD;
     }
 }
 

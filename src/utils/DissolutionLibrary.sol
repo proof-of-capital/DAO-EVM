@@ -107,6 +107,7 @@ library DissolutionLibrary {
 
     /// @notice Claim share of assets after dissolution
     /// @param vaultStorage Vault storage structure
+    /// @param daoState DAO state storage
     /// @param rewardsStorage Rewards storage structure
     /// @param accountedBalance Mapping of accounted balances
     /// @param launchToken Launch token address
@@ -114,6 +115,7 @@ library DissolutionLibrary {
     /// @return shares Shares amount claimed
     function executeClaimDissolution(
         DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.DAOState storage daoState,
         DataTypes.RewardsStorage storage rewardsStorage,
         mapping(address => uint256) storage accountedBalance,
         address launchToken,
@@ -130,6 +132,9 @@ library DissolutionLibrary {
         shares = vault.shares;
         vault.shares = 0;
 
+        uint256 vaultDepositedUSD = vaultStorage.vaultDepositedUSD[vaultId];
+        require(daoState.totalDepositedUSD > 0 || vaultStorage.totalSharesSupply > 0, NoSharesToClaim());
+
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, -int256(shares));
 
         for (uint256 i = 0; i < tokens.length; i++) {
@@ -143,7 +148,13 @@ library DissolutionLibrary {
 
             require(isValidToken, InvalidAddress());
 
-            uint256 tokenShare = (tokenBalance * shares) / vaultStorage.totalSharesSupply;
+            uint256 tokenShare;
+            if (daoState.totalDepositedUSD > 0 && vaultDepositedUSD > 0) {
+                tokenShare = (tokenBalance * vaultDepositedUSD) / daoState.totalDepositedUSD;
+            } else {
+                tokenShare = (tokenBalance * shares) / vaultStorage.totalSharesSupply;
+            }
+
             if (tokenShare > 0) {
                 IERC20(token).safeTransfer(sender, tokenShare);
                 if (token == address(launchToken)) {
@@ -153,6 +164,10 @@ library DissolutionLibrary {
         }
 
         vaultStorage.totalSharesSupply -= shares;
+        if (vaultDepositedUSD > 0) {
+            daoState.totalDepositedUSD -= vaultDepositedUSD;
+            vaultStorage.vaultDepositedUSD[vaultId] = 0;
+        }
     }
 
     /// @notice Claim creator's share of launch tokens during dissolution

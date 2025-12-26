@@ -197,6 +197,12 @@ library FundraisingLibrary {
         entry.depositedMainCollateral = 0;
         vaultStorage.vaultMainCollateralDeposit[vaultId] = 0;
 
+        uint256 vaultDepositedUSD = vaultStorage.vaultDepositedUSD[vaultId];
+        if (vaultDepositedUSD > 0) {
+            daoState.totalDepositedUSD -= vaultDepositedUSD;
+            vaultStorage.vaultDepositedUSD[vaultId] = 0;
+        }
+
         IERC20(mainCollateral).safeTransfer(sender, mainCollateralAmount);
 
         if (launchTokenAmount > 0) {
@@ -254,6 +260,7 @@ library FundraisingLibrary {
     /// @param mainCollateral Main collateral token address
     /// @param amount Amount of mainCollateral to deposit
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
+    /// @param getOraclePrice Function pointer to get oracle price for a token
     function executeDepositFundraising(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.DAOState storage daoState,
@@ -261,7 +268,8 @@ library FundraisingLibrary {
         mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
         address mainCollateral,
         uint256 amount,
-        uint256 vaultId
+        uint256 vaultId,
+        function(address) external view returns (uint256) getOraclePrice
     ) external {
         require(amount > 0, AmountMustBeGreaterThanZero());
         require(amount >= fundraisingConfig.minDeposit, DepositBelowMinimum());
@@ -277,6 +285,9 @@ library FundraisingLibrary {
         uint256 shares = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         require(shares > 0, SharesCalculationFailed());
 
+        uint256 mainCollateralPriceUSD = getOraclePrice(mainCollateral);
+        uint256 usdDeposit = (amount * mainCollateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
+
         DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
         if (entry.entryTimestamp == 0) {
             entry.fixedSharePrice = fundraisingConfig.sharePrice;
@@ -290,6 +301,8 @@ library FundraisingLibrary {
         vault.shares += shares;
         vaultStorage.totalSharesSupply += shares;
         daoState.totalCollectedMainCollateral += amount;
+        vaultStorage.vaultDepositedUSD[vaultId] += usdDeposit;
+        daoState.totalDepositedUSD += usdDeposit;
 
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
 
@@ -341,6 +354,8 @@ library FundraisingLibrary {
         uint256 shares = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         require(shares > 0, SharesCalculationFailed());
 
+        uint256 usdDeposit = (launchAmount * launchPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
+
         DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
 
         DataTypes.Vault storage vaultForAvg = vaultStorage.vaults[vaultId];
@@ -368,6 +383,8 @@ library FundraisingLibrary {
 
         vault.shares += shares;
         vaultStorage.totalSharesSupply += shares;
+        vaultStorage.vaultDepositedUSD[vaultId] += usdDeposit;
+        daoState.totalDepositedUSD += usdDeposit;
 
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
 

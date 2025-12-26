@@ -182,6 +182,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         _daoState.royaltyPercent = params.royaltyPercent;
         _daoState.totalCollectedMainCollateral = 0;
         _daoState.lastCreatorAllocation = 0;
+        _daoState.totalDepositedUSD = 0;
 
         _vaultStorage.nextVaultId = 1;
         _vaultStorage.totalSharesSupply = 0;
@@ -280,7 +281,14 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
     function depositFundraising(uint256 amount, uint256 vaultId) external nonReentrant fundraisingActive {
         FundraisingLibrary.executeDepositFundraising(
-            _vaultStorage, _daoState, fundraisingConfig, participantEntries, mainCollateral, amount, vaultId
+            _vaultStorage,
+            _daoState,
+            fundraisingConfig,
+            participantEntries,
+            mainCollateral,
+            amount,
+            vaultId,
+            this.getOraclePrice
         );
     }
 
@@ -640,7 +648,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param tokens Array of token addresses to claim (can include launch token, reward tokens, LP tokens, or sellable collaterals)
     function claimDissolution(address[] calldata tokens) external nonReentrant atStage(DataTypes.Stage.Dissolved) {
         DissolutionLibrary.executeClaimDissolution(
-            _vaultStorage, _rewardsStorage, accountedBalance, address(launchToken), tokens
+            _vaultStorage, _daoState, _rewardsStorage, accountedBalance, address(launchToken), tokens
         );
     }
 
