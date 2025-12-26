@@ -581,19 +581,13 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Dissolve DAO from FundraisingExchange or WaitingForLP stages if all POC contract locks have ended
     /// @dev Checks all active POC contracts to see if their lock periods have ended
     /// @dev Withdraws all launch tokens and collateral tokens from POC contracts and transitions to Dissolved
-    function dissolveFromFundraisingStages()
-        external
-        nonReentrant
-        onlyParticipantOrAdmin
-    {
+    function dissolveFromFundraisingStages() external nonReentrant onlyParticipantOrAdmin {
         require(
             _daoState.currentStage == DataTypes.Stage.FundraisingExchange
                 || _daoState.currentStage == DataTypes.Stage.WaitingForLP,
             InvalidStage()
         );
-        DissolutionLibrary.executeDissolveFromFundraisingStages(
-            _daoState, pocContracts, isPocContract
-        );
+        DissolutionLibrary.executeDissolveFromFundraisingStages(_daoState, pocContracts, isPocContract);
     }
 
     /// @notice Execute proposal call through DAO (only callable by voting)
