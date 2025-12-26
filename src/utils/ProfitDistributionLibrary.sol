@@ -41,6 +41,7 @@ library ProfitDistributionLibrary {
     /// @param totalSharesSupply Total shares supply (will be updated)
     /// @param token Token address to distribute
     /// @param getLaunchPriceFromPOC Function to get current launch price from POC
+    /// @param getOraclePrice Function to get token price in USD
     /// @return newTotalSharesSupply Updated total shares supply
     function executeDistributeProfit(
         DataTypes.DAOState storage daoState,
@@ -53,7 +54,8 @@ library ProfitDistributionLibrary {
         mapping(address => uint256) storage accountedBalance,
         uint256 totalSharesSupply,
         address token,
-        function() external view returns (uint256) getLaunchPriceFromPOC
+        function() external view returns (uint256) getLaunchPriceFromPOC,
+        function(address) external view returns (uint256) getOraclePrice
     ) external returns (uint256 newTotalSharesSupply) {
         require(vaultStorage.totalSharesSupply > 0, NoShares());
         require(rewardsStorage.rewardTokenInfo[token].active || lpTokenStorage.isV2LPToken[token], TokenNotAdded());
@@ -81,7 +83,8 @@ library ProfitDistributionLibrary {
             totalSharesSupply,
             token,
             participantsShare,
-            getLaunchPriceFromPOC
+            getLaunchPriceFromPOC,
+            getOraclePrice
         );
 
         accountedBalance[token] += remainingForParticipants;
@@ -134,6 +137,7 @@ library ProfitDistributionLibrary {
     /// @param token Token address
     /// @param participantsShare Amount available for participants
     /// @param getLaunchPriceFromPOC Function to get current launch price from POC
+    /// @param getOraclePrice Function to get token price in USD
     /// @return remainingForParticipants Amount remaining after exit queue processing
     /// @return newTotalSharesSupply Updated total shares supply
     function distributeToParticipants(
@@ -147,7 +151,8 @@ library ProfitDistributionLibrary {
         uint256 totalSharesSupply,
         address token,
         uint256 participantsShare,
-        function() external view returns (uint256) getLaunchPriceFromPOC
+        function() external view returns (uint256) getLaunchPriceFromPOC,
+        function(address) external view returns (uint256) getOraclePrice
     ) internal returns (uint256 remainingForParticipants, uint256 newTotalSharesSupply) {
         newTotalSharesSupply = totalSharesSupply;
         uint256 usedForExits = 0;
@@ -170,7 +175,8 @@ library ProfitDistributionLibrary {
                 totalSharesSupply,
                 availableFunds,
                 token,
-                getLaunchPriceFromPOC
+                getLaunchPriceFromPOC,
+                getOraclePrice
             );
 
             uint256 balanceAfter = IERC20(token).balanceOf(address(this));

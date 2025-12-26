@@ -94,10 +94,11 @@ library ExitQueueLibrary {
     /// @param participantEntries Participant entries mapping
     /// @param fundraisingConfig Fundraising config (for share price)
     /// @param totalSharesSupply Total shares supply (will be updated)
-    /// @param availableFunds Amount of funds available for buyback
+    /// @param availableFunds Amount of funds available for buyback (in tokens)
     /// @param token Token used for buyback
     /// @param getLaunchPriceFromPOC Function to get current launch price from POC
-    /// @return remainingFunds Remaining funds after processing
+    /// @param getOraclePrice Function to get token price in USD
+    /// @return remainingFunds Remaining funds after processing (in tokens)
     /// @return newTotalSharesSupply Updated total shares supply
     function processExitQueue(
         DataTypes.VaultStorage storage vaultStorage,
@@ -108,7 +109,8 @@ library ExitQueueLibrary {
         uint256 totalSharesSupply,
         uint256 availableFunds,
         address token,
-        function() external view returns (uint256) getLaunchPriceFromPOC
+        function() external view returns (uint256) getLaunchPriceFromPOC,
+        function(address) external view returns (uint256) getOraclePrice
     ) external returns (uint256 remainingFunds, uint256 newTotalSharesSupply) {
         newTotalSharesSupply = totalSharesSupply;
         remainingFunds = availableFunds;
@@ -116,6 +118,8 @@ library ExitQueueLibrary {
         if (availableFunds == 0 || isExitQueueEmpty(exitQueueStorage)) {
             return (remainingFunds, newTotalSharesSupply);
         }
+
+        uint256 tokenPriceUSD = getOraclePrice(token);
 
         for (
             uint256 i = exitQueueStorage.nextExitQueueIndex;
@@ -137,41 +141,43 @@ library ExitQueueLibrary {
                 continue;
             }
 
-            uint256 exitValue = calculateExitValue(
+            uint256 exitValueUSD = calculateExitValue(
                 participantEntries, fundraisingConfig, request.vaultId, shares, getLaunchPriceFromPOC
             );
+            uint256 exitValueInTokens = convertUSDToTokens(exitValueUSD, tokenPriceUSD);
 
-            if (remainingFunds >= exitValue) {
+            if (remainingFunds >= exitValueInTokens) {
                 newTotalSharesSupply = executeExit(
                     vaultStorage,
                     exitQueueStorage,
                     daoState,
                     fundraisingConfig,
                     i,
-                    exitValue,
+                    exitValueInTokens,
                     token,
                     newTotalSharesSupply
                 );
-                remainingFunds -= exitValue;
+                remainingFunds -= exitValueInTokens;
                 exitQueueStorage.nextExitQueueIndex = i + 1;
             } else {
-                uint256 partialShares = (remainingFunds * shares) / exitValue;
+                uint256 partialShares = (remainingFunds * shares) / exitValueInTokens;
                 if (partialShares > 0) {
-                    uint256 partialExitValue = calculateExitValue(
+                    uint256 partialExitValueUSD = calculateExitValue(
                         participantEntries, fundraisingConfig, request.vaultId, partialShares, getLaunchPriceFromPOC
                     );
-                    if (partialExitValue > 0 && partialExitValue <= remainingFunds) {
+                    uint256 partialExitValueInTokens = convertUSDToTokens(partialExitValueUSD, tokenPriceUSD);
+                    if (partialExitValueInTokens > 0 && partialExitValueInTokens <= remainingFunds) {
                         newTotalSharesSupply = executePartialExit(
                             vaultStorage,
                             daoState,
                             fundraisingConfig,
                             request.vaultId,
                             partialShares,
-                            partialExitValue,
+                            partialExitValueInTokens,
                             token,
                             newTotalSharesSupply
                         );
-                        remainingFunds -= partialExitValue;
+                        remainingFunds -= partialExitValueInTokens;
                     }
                 }
             }
@@ -184,7 +190,7 @@ library ExitQueueLibrary {
     /// @param daoState DAO state storage structure
     /// @param fundraisingConfig Fundraising config (for share price update)
     /// @param exitIndex Index in exit queue
-    /// @param exitValue Value to pay out
+    /// @param exitValue Value to pay out (in tokens)
     /// @param token Token to pay with
     /// @param totalSharesSupply Total shares supply (before exit)
     /// @return newTotalSharesSupply Updated total shares supply
@@ -231,7 +237,7 @@ library ExitQueueLibrary {
     /// @param fundraisingConfig Fundraising config (for share price update)
     /// @param vaultId Vault ID
     /// @param shares Shares to exit
-    /// @param payoutAmount Amount to pay out
+    /// @param payoutAmount Amount to pay out (in tokens)
     /// @param token Token to pay with
     /// @param totalSharesSupply Total shares supply (before exit)
     /// @return newTotalSharesSupply Updated total shares supply
@@ -299,6 +305,14 @@ library ExitQueueLibrary {
         }
 
         return (shareValue * shares) / Constants.PRICE_DECIMALS_MULTIPLIER;
+    }
+
+    /// @notice Convert USD amount to token amount
+    /// @param usdAmount Amount in USD (18 decimals)
+    /// @param tokenPriceUSD Token price in USD (18 decimals)
+    /// @return Token amount
+    function convertUSDToTokens(uint256 usdAmount, uint256 tokenPriceUSD) internal pure returns (uint256) {
+        return (usdAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / tokenPriceUSD;
     }
 
     /// @notice Check if exit queue is empty (all processed)

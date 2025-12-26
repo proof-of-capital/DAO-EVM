@@ -451,7 +451,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             accountedBalance,
             _vaultStorage.totalSharesSupply,
             collateral,
-            this.getLaunchPriceFromPOC
+            this.getLaunchPriceFromPOC,
+            this.getOraclePrice
         );
     }
 
@@ -728,7 +729,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             accountedBalance,
             _vaultStorage.totalSharesSupply,
             token,
-            this.getLaunchPriceFromPOC
+            this.getLaunchPriceFromPOC,
+            this.getOraclePrice
         );
     }
 
@@ -764,7 +766,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             accountedBalance,
             _vaultStorage.totalSharesSupply,
             token,
-            this.getLaunchPriceFromPOC
+            this.getLaunchPriceFromPOC,
+            this.getOraclePrice
         );
     }
 
