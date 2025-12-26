@@ -395,36 +395,17 @@ library FundraisingLibrary {
     /// @notice Cancel fundraising
     /// @param daoState DAO state storage
     /// @param fundraisingConfig Fundraising configuration
-    /// @param activeStageTimestamp Active stage timestamp
     function executeCancelFundraising(
         DataTypes.DAOState storage daoState,
-        DataTypes.FundraisingConfig storage fundraisingConfig,
-        uint256 activeStageTimestamp
+        DataTypes.FundraisingConfig storage fundraisingConfig
     ) external {
-        if (daoState.currentStage == DataTypes.Stage.Fundraising) {
-            require(block.timestamp >= fundraisingConfig.deadline + 1 days, FundraisingNotExpiredYet());
+        require(daoState.currentStage == DataTypes.Stage.Fundraising, InvalidStage());
+        require(block.timestamp >= fundraisingConfig.deadline + 1 days, FundraisingNotExpiredYet());
 
-            daoState.currentStage = DataTypes.Stage.FundraisingCancelled;
+        daoState.currentStage = DataTypes.Stage.FundraisingCancelled;
 
-            emit FundraisingCancelled(daoState.totalCollectedMainCollateral);
-            emit StageChanged(DataTypes.Stage.Fundraising, DataTypes.Stage.FundraisingCancelled);
-        } else if (
-            daoState.currentStage == DataTypes.Stage.FundraisingExchange
-                || daoState.currentStage == DataTypes.Stage.WaitingForLP
-        ) {
-            require(activeStageTimestamp > 0, ActiveStageNotSet());
-            require(
-                block.timestamp >= activeStageTimestamp + Constants.CANCEL_AFTER_ACTIVE_PERIOD, CancelPeriodNotPassed()
-            );
-
-            DataTypes.Stage oldStage = daoState.currentStage;
-            daoState.currentStage = DataTypes.Stage.FundraisingCancelled;
-
-            emit FundraisingCancelled(daoState.totalCollectedMainCollateral);
-            emit StageChanged(oldStage, DataTypes.Stage.FundraisingCancelled);
-        } else {
-            revert InvalidStage();
-        }
+        emit FundraisingCancelled(daoState.totalCollectedMainCollateral);
+        emit StageChanged(DataTypes.Stage.Fundraising, DataTypes.Stage.FundraisingCancelled);
     }
 
     /// @notice Finalize fundraising collection and move to exchange stage

@@ -31,6 +31,7 @@ library DissolutionLibrary {
     error NoSharesToClaim();
     error InvalidAddress();
     error NoRewardsToClaim();
+    error InvalidStage();
 
     event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
     event CreatorDissolutionClaimed(address indexed creator, uint256 launchAmount);
@@ -73,6 +74,39 @@ library DissolutionLibrary {
             daoState.currentStage = DataTypes.Stage.Dissolved;
             emit StageChanged(DataTypes.Stage.Active, DataTypes.Stage.Dissolved);
         }
+    }
+
+    /// @notice Dissolve DAO from FundraisingExchange or WaitingForLP stages if all POC contract locks have ended
+    /// @param daoState DAO state storage structure
+    /// @param pocContracts Array of POC contracts
+    /// @param isPocContract Mapping to check if address is POC contract
+    function executeDissolveFromFundraisingStages(
+        DataTypes.DAOState storage daoState,
+        DataTypes.POCInfo[] storage pocContracts,
+        mapping(address => bool) storage isPocContract
+    ) external {
+        require(
+            daoState.currentStage == DataTypes.Stage.FundraisingExchange
+                || daoState.currentStage == DataTypes.Stage.WaitingForLP,
+            InvalidStage()
+        );
+        require(pocContracts.length > 0, NoPOCContractsConfigured());
+
+        for (uint256 i = 0; i < pocContracts.length; i++) {
+            DataTypes.POCInfo storage poc = pocContracts[i];
+
+            if (poc.active) {
+                uint256 lockEndTime = IProofOfCapital(poc.pocContract).lockEndTime();
+                require(block.timestamp >= lockEndTime, POCLockPeriodNotEnded());
+
+                IProofOfCapital(poc.pocContract).withdrawAllLaunchTokens();
+                IProofOfCapital(poc.pocContract).withdrawAllCollateralTokens();
+            }
+        }
+
+        DataTypes.Stage oldStage = daoState.currentStage;
+        daoState.currentStage = DataTypes.Stage.Dissolved;
+        emit StageChanged(oldStage, DataTypes.Stage.Dissolved);
     }
 
     /// @notice Claim share of assets after dissolution

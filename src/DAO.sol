@@ -490,9 +490,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Cancel fundraising
     /// @dev In Fundraising stage: admin or participant can cancel if target not reached after deadline
-    /// @dev In Active or Dissolved stage: admin or participant can cancel after 100 days in Active stage
     function cancelFundraising() external onlyParticipantOrAdmin {
-        FundraisingLibrary.executeCancelFundraising(_daoState, fundraisingConfig, activeStageTimestamp);
+        FundraisingLibrary.executeCancelFundraising(_daoState, fundraisingConfig);
     }
 
     /// @notice Finalize fundraising collection and move to exchange stage
@@ -576,6 +575,24 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function dissolveIfLocksEnded() external {
         DissolutionLibrary.executeDissolveIfLocksEnded(
             _daoState, pocContracts, isPocContract, _lpTokenStorage, accountedBalance
+        );
+    }
+
+    /// @notice Dissolve DAO from FundraisingExchange or WaitingForLP stages if all POC contract locks have ended
+    /// @dev Checks all active POC contracts to see if their lock periods have ended
+    /// @dev Withdraws all launch tokens and collateral tokens from POC contracts and transitions to Dissolved
+    function dissolveFromFundraisingStages()
+        external
+        nonReentrant
+        onlyParticipantOrAdmin
+    {
+        require(
+            _daoState.currentStage == DataTypes.Stage.FundraisingExchange
+                || _daoState.currentStage == DataTypes.Stage.WaitingForLP,
+            InvalidStage()
+        );
+        DissolutionLibrary.executeDissolveFromFundraisingStages(
+            _daoState, pocContracts, isPocContract
         );
     }
 
