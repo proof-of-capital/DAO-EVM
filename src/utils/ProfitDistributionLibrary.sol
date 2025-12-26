@@ -155,6 +155,7 @@ library ProfitDistributionLibrary {
         if (
             exitQueueStorage.exitQueue.length > 0 && !ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage)
                 && participantsShare > 0 && !lpTokenStorage.isV2LPToken[token]
+                && daoState.currentStage != DataTypes.Stage.Closing
         ) {
             uint256 balanceBefore = IERC20(token).balanceOf(address(this));
 

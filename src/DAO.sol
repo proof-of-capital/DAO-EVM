@@ -113,6 +113,11 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         _;
     }
 
+    modifier atActiveOrClosingStage() {
+        _atActiveOrClosingStage();
+        _;
+    }
+
     modifier vaultExists(uint256 vaultId) {
         _vaultExists(vaultId);
         _;
@@ -260,7 +265,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         returns (uint256 vaultId)
     {
         require(
-            _daoState.currentStage == DataTypes.Stage.Fundraising || _daoState.currentStage == DataTypes.Stage.Active,
+            _daoState.currentStage == DataTypes.Stage.Fundraising || _daoState.currentStage == DataTypes.Stage.Active
+                || _daoState.currentStage == DataTypes.Stage.Closing,
             InvalidStage()
         );
 
@@ -282,11 +288,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev New participants can enter by depositing launches; price is fixed at entry
     /// @param launchAmount Amount of launch tokens to deposit
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
-    function depositLaunches(uint256 launchAmount, uint256 vaultId)
-        external
-        nonReentrant
-        atStage(DataTypes.Stage.Active)
-    {
+    function depositLaunches(uint256 launchAmount, uint256 vaultId) external nonReentrant atActiveOrClosingStage {
         FundraisingLibrary.executeDepositLaunches(
             _vaultStorage,
             _daoState,
@@ -345,7 +347,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Request to exit DAO by selling all shares
     /// @dev Participant exits with all their shares; adds request to exit queue for processing
-    function requestExit() external nonReentrant atStage(DataTypes.Stage.Active) {
+    function requestExit() external nonReentrant atActiveOrClosingStage {
         ExitQueueLibrary.executeRequestExit(
             _vaultStorage, _exitQueueStorage, _daoState, msg.sender, this.getLaunchPriceFromPOC
         );
@@ -353,8 +355,36 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Cancel exit request from queue
     /// @dev Participant can cancel their exit request before it's processed
-    function cancelExit() external nonReentrant atStage(DataTypes.Stage.Active) {
+    function cancelExit() external nonReentrant atActiveOrClosingStage {
         ExitQueueLibrary.executeCancelExit(_vaultStorage, _exitQueueStorage, _daoState, msg.sender);
+    }
+
+    /// @notice Enter closing stage if exit queue shares > 50%
+    /// @dev Can be called by any participant or admin when in Active stage
+    function enterClosingStage() external onlyParticipantOrAdmin {
+        require(_daoState.currentStage == DataTypes.Stage.Active, InvalidStage());
+        require(_vaultStorage.totalSharesSupply > 0, NoShares());
+
+        uint256 exitQueuePercentage =
+            (_daoState.totalExitQueueShares * Constants.BASIS_POINTS) / _vaultStorage.totalSharesSupply;
+        require(exitQueuePercentage >= Constants.CLOSING_EXIT_QUEUE_THRESHOLD, InvalidStage());
+
+        _daoState.currentStage = DataTypes.Stage.Closing;
+        emit StageChanged(DataTypes.Stage.Active, DataTypes.Stage.Closing);
+    }
+
+    /// @notice Return to active stage if exit queue shares < 50%
+    /// @dev Can be called by any participant or admin when in Closing stage
+    function returnToActiveStage() external onlyParticipantOrAdmin {
+        require(_daoState.currentStage == DataTypes.Stage.Closing, InvalidStage());
+        require(_vaultStorage.totalSharesSupply > 0, NoShares());
+
+        uint256 exitQueuePercentage =
+            (_daoState.totalExitQueueShares * Constants.BASIS_POINTS) / _vaultStorage.totalSharesSupply;
+        require(exitQueuePercentage < Constants.CLOSING_EXIT_QUEUE_THRESHOLD, InvalidStage());
+
+        _daoState.currentStage = DataTypes.Stage.Active;
+        emit StageChanged(DataTypes.Stage.Closing, DataTypes.Stage.Active);
     }
 
     /// @notice Allocate launch tokens to creator, reducing their profit share proportionally
@@ -380,7 +410,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         address router,
         DataTypes.SwapType swapType,
         bytes calldata swapData
-    ) external nonReentrant atStage(DataTypes.Stage.Active) onlyParticipantOrAdmin {
+    ) external nonReentrant atActiveOrClosingStage onlyParticipantOrAdmin {
         require(launchTokenAmount > 0, AmountMustBeGreaterThanZero());
 
         Orderbook.executeSell(
@@ -701,7 +731,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function distributeLPProfit(address lpTokenOrTokenId, DataTypes.LPTokenType lpType)
         external
         nonReentrant
-        atStage(DataTypes.Stage.Active)
+        atActiveOrClosingStage
     {
         LPTokenLibrary.executeDistributeLPProfit(
             _lpTokenStorage,
@@ -867,6 +897,13 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     function _atStage(DataTypes.Stage stage) internal view {
         require(_daoState.currentStage == stage, InvalidStage());
+    }
+
+    function _atActiveOrClosingStage() internal view {
+        require(
+            _daoState.currentStage == DataTypes.Stage.Active || _daoState.currentStage == DataTypes.Stage.Closing,
+            InvalidStage()
+        );
     }
 
     function _vaultExists(uint256 vaultId) internal view {

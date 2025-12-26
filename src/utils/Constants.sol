@@ -58,6 +58,7 @@ library Constants {
     uint256 public constant MIN_REWARD_PER_SHARE = 10;
     uint256 public constant UPGRADE_DELAY = 5 days;
     uint256 public constant CANCEL_AFTER_ACTIVE_PERIOD = 100 days;
+    uint256 public constant CLOSING_EXIT_QUEUE_THRESHOLD = 5000; // 50% in basis points
 
     // ============================================
     // VOTING CONSTANTS
