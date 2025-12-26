@@ -38,6 +38,7 @@ import "./interfaces/IDAO.sol";
 import "./interfaces/IAggregatorV3.sol";
 import "./interfaces/IProofOfCapital.sol";
 import "./interfaces/INonfungiblePositionManager.sol";
+import "./interfaces/IUniswapV2Pair.sol";
 import "./utils/Orderbook.sol";
 import "./utils/DataTypes.sol";
 
@@ -1057,7 +1058,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Dissolve DAO if all POC contract locks have ended (callable by any participant or admin without voting)
     /// @dev Checks all active POC contracts to see if their lock periods have ended
-    /// @dev If all locks are ended, transitions DAO to Dissolved stage
+    /// @dev If all locks are ended, transitions DAO to WaitingForLPDissolution if LP tokens exist, otherwise to Dissolved
     function dissolveIfLocksEnded() external {
         require(pocContracts.length > 0, NoPOCContractsConfigured());
 
@@ -1073,8 +1074,14 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             }
         }
 
-        currentStage = DataTypes.Stage.Dissolved;
-        emit StageChanged(DataTypes.Stage.Active, DataTypes.Stage.Dissolved);
+        // Check if there are LP tokens to dissolve
+        if (_hasLPTokens()) {
+            currentStage = DataTypes.Stage.WaitingForLPDissolution;
+            emit StageChanged(DataTypes.Stage.Active, DataTypes.Stage.WaitingForLPDissolution);
+        } else {
+            currentStage = DataTypes.Stage.Dissolved;
+            emit StageChanged(DataTypes.Stage.Active, DataTypes.Stage.Dissolved);
+        }
     }
 
     /// @notice Execute proposal call through DAO (only callable by voting)
@@ -1086,6 +1093,72 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(targetContract != address(0), InvalidAddress());
         (bool success, bytes memory returnData) = targetContract.call(callData);
         require(success, ExecutionFailed(_getRevertMsg(returnData)));
+    }
+
+    /// @notice Dissolve all LP tokens (V2 and V3) and transition to Dissolved stage
+    /// @dev Can be called by any participant or admin when in WaitingForLPDissolution stage
+    /// @dev Dissolves all V2 LP tokens and V3 LP positions, then transitions to Dissolved
+    function dissolveLPTokens()
+        external
+        nonReentrant
+        onlyParticipantOrAdmin
+        atStage(DataTypes.Stage.WaitingForLPDissolution)
+    {
+        // Dissolve all V2 LP tokens
+        uint256 v2Length = v2LPTokens.length;
+        for (uint256 i = 0; i < v2Length; i++) {
+            address lpToken = v2LPTokens[i];
+            if (accountedBalance[lpToken] > 0) {
+                (uint256 amount0, uint256 amount1) = _dissolveV2LPToken(lpToken);
+                emit V2LPTokenDissolved(lpToken, amount0, amount1);
+            }
+        }
+
+        // Dissolve all V3 LP positions
+        uint256 v3Length = v3LPPositions.length;
+        for (uint256 i = 0; i < v3Length; i++) {
+            uint256 tokenId = v3LPPositions[i].tokenId;
+            // Check if position has liquidity before dissolving
+            DataTypes.V3LPPositionInfo memory positionInfo = v3LPPositions[i];
+            INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
+            (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
+            if (liquidity > 0) {
+                (uint256 amount0, uint256 amount1) = _dissolveV3LPPosition(tokenId);
+                emit V3LPPositionDissolved(tokenId, amount0, amount1);
+            }
+        }
+
+        // Clear arrays and mappings
+        delete v2LPTokens;
+        delete v3LPPositions;
+
+        // Sync all token balances with actual contract balances
+        _syncAllTokenBalances();
+
+        // Transition to Dissolved stage
+        currentStage = DataTypes.Stage.Dissolved;
+        emit StageChanged(DataTypes.Stage.WaitingForLPDissolution, DataTypes.Stage.Dissolved);
+    }
+
+    /// @notice Sync accountedBalance for all reward tokens and launch token with actual contract balances
+    /// @dev Updates accountedBalance to match actual token balances for all tracked tokens
+    function _syncAllTokenBalances() internal {
+        // Sync launch token balance
+        uint256 launchTokenBalance = IERC20(address(launchToken)).balanceOf(address(this));
+        if (launchTokenBalance > accountedBalance[address(launchToken)]) {
+            accountedBalance[address(launchToken)] = launchTokenBalance;
+        }
+
+        // Sync all reward token balances
+        for (uint256 i = 0; i < rewardTokens.length; i++) {
+            address token = rewardTokens[i];
+            if (rewardTokenInfo[token].active) {
+                uint256 actualBalance = IERC20(token).balanceOf(address(this));
+                if (actualBalance > accountedBalance[token]) {
+                    accountedBalance[token] = actualBalance;
+                }
+            }
+        }
     }
 
     /// @notice Claim share of assets after dissolution
@@ -1374,6 +1447,91 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         uint256 index = v3TokenIdToIndex[tokenId];
         require(index > 0, NotLPToken());
         return v3LPPositions[index - 1];
+    }
+
+    /// @notice Check if there are any LP tokens (V2 or V3) that need to be dissolved
+    /// @return true if there are LP tokens, false otherwise
+    function _hasLPTokens() internal view returns (bool) {
+        // Check V2 LP tokens
+        for (uint256 i = 0; i < v2LPTokens.length; i++) {
+            if (accountedBalance[v2LPTokens[i]] > 0) {
+                return true;
+            }
+        }
+
+        // Check V3 LP positions
+        for (uint256 i = 0; i < v3LPPositions.length; i++) {
+            uint256 tokenId = v3LPPositions[i].tokenId;
+            INonfungiblePositionManager positionManager = INonfungiblePositionManager(v3LPPositions[i].positionManager);
+            (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
+            if (liquidity > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// @notice Dissolve a single V2 LP token by burning it and receiving underlying tokens
+    /// @param lpToken Address of the V2 LP token (Pair contract)
+    /// @return amount0 Amount of token0 received
+    /// @return amount1 Amount of token1 received
+    function _dissolveV2LPToken(address lpToken) internal returns (uint256 amount0, uint256 amount1) {
+        uint256 lpBalance = accountedBalance[lpToken];
+        require(lpBalance > 0, AmountMustBeGreaterThanZero());
+
+        // Get token addresses before burning
+        address token0 = IUniswapV2Pair(lpToken).token0();
+        address token1 = IUniswapV2Pair(lpToken).token1();
+
+        // Transfer LP tokens to the Pair contract (lpToken is the Pair address)
+        IERC20(lpToken).safeTransfer(lpToken, lpBalance);
+
+        // Burn LP tokens and receive underlying tokens
+        (amount0, amount1) = IUniswapV2Pair(lpToken).burn(address(this));
+
+        // Update accounting for LP token
+        accountedBalance[lpToken] = 0;
+        isV2LPToken[lpToken] = false;
+
+        // Update accountedBalance for received tokens
+        if (amount0 > 0) {
+            accountedBalance[token0] += amount0;
+        }
+        if (amount1 > 0) {
+            accountedBalance[token1] += amount1;
+        }
+    }
+
+    /// @notice Dissolve a single V3 LP position by decreasing all liquidity and collecting tokens
+    /// @param tokenId NFT token ID of the V3 position
+    /// @return amount0 Amount of token0 received
+    /// @return amount1 Amount of token1 received
+    function _dissolveV3LPPosition(uint256 tokenId) internal returns (uint256 amount0, uint256 amount1) {
+        // Get position info before removing from mapping
+        DataTypes.V3LPPositionInfo memory positionInfo = _getV3PositionInfo(tokenId);
+        INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
+
+        // Get current liquidity
+        (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
+        require(liquidity > 0, AmountMustBeGreaterThanZero());
+
+        // Decrease all liquidity
+        _decreaseV3Liquidity(tokenId, liquidity);
+
+        // Collect tokens
+        (amount0, amount1) = _collectV3Tokens(tokenId);
+
+        // Update accountedBalance for received tokens
+        if (amount0 > 0) {
+            accountedBalance[positionInfo.token0] += amount0;
+        }
+        if (amount1 > 0) {
+            accountedBalance[positionInfo.token1] += amount1;
+        }
+
+        // Remove from mapping (array will be cleared in dissolveLPTokens)
+        v3TokenIdToIndex[tokenId] = 0;
     }
 
     /// @notice Update voting shares for delegate when vault shares change

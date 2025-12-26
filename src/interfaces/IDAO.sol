@@ -205,6 +205,10 @@ interface IDAO {
     event CreatorLaunchesReturned(uint256 launchAmount, uint256 profitPercentIncrease, uint256 newCreatorProfitPercent);
     event LPProfitDistributed(address indexed lpToken, uint256 amount);
 
+    // LP dissolution events
+    event V2LPTokenDissolved(address indexed lpToken, uint256 amount0, uint256 amount1);
+    event V3LPPositionDissolved(uint256 indexed tokenId, uint256 amount0, uint256 amount1);
+
     // Upgrade events
     event PendingUpgradeSetFromVoting(address indexed newImplementation);
     event PendingUpgradeSetFromCreator(address indexed newImplementation);

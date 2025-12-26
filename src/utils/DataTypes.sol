@@ -43,6 +43,7 @@ library DataTypes {
         FundraisingExchange, // Exchanging collected funds for launch tokens
         WaitingForLP, // Waiting for LP tokens from creator
         Active, // Active operation stage
+        WaitingForLPDissolution, // Waiting for LP tokens dissolution (V2 and V3)
         Dissolved // DAO dissolved stage
     }
 
