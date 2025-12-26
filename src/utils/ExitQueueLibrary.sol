@@ -24,8 +24,10 @@ library ExitQueueLibrary {
     error OnlyPrimaryCanClaim();
     error AmountMustBeGreaterThanZero();
     error AlreadyInExitQueue();
+    error NotInExitQueue();
 
     event ExitRequested(uint256 indexed vaultId, uint256 shares, uint256 launchPriceAtRequest);
+    event ExitRequestCancelled(uint256 indexed vaultId);
     event ExitProcessed(uint256 indexed vaultId, uint256 shares, uint256 payoutAmount, address token);
     event PartialExitProcessed(uint256 indexed vaultId, uint256 shares, uint256 payoutAmount, address token);
     event SharePriceIncreased(uint256 oldPrice, uint256 newPrice, uint256 exitedShares);
@@ -33,11 +35,13 @@ library ExitQueueLibrary {
     /// @notice Request to exit DAO by selling all shares
     /// @param vaultStorage Vault storage structure
     /// @param exitQueueStorage Exit queue storage structure
+    /// @param daoState DAO state storage structure
     /// @param sender Sender address
     /// @param getLaunchPriceFromPOC Function to get current launch price from POC
     function executeRequestExit(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.ExitQueueStorage storage exitQueueStorage,
+        DataTypes.DAOState storage daoState,
         address sender,
         function() external view returns (uint256) getLaunchPriceFromPOC
     ) external {
@@ -78,12 +82,15 @@ library ExitQueueLibrary {
 
         exitQueueStorage.vaultExitRequestIndex[vaultId] = exitQueueStorage.exitQueue.length;
 
+        daoState.totalExitQueueShares += vault.shares;
+
         emit ExitRequested(vaultId, vault.shares, launchPriceNow);
     }
 
     /// @notice Process exit queue with available funds
     /// @param vaultStorage Vault storage structure
     /// @param exitQueueStorage Exit queue storage structure
+    /// @param daoState DAO state storage structure
     /// @param participantEntries Participant entries mapping
     /// @param fundraisingConfig Fundraising config (for share price)
     /// @param totalSharesSupply Total shares supply (will be updated)
@@ -95,6 +102,7 @@ library ExitQueueLibrary {
     function processExitQueue(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.ExitQueueStorage storage exitQueueStorage,
+        DataTypes.DAOState storage daoState,
         mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
         DataTypes.FundraisingConfig storage fundraisingConfig,
         uint256 totalSharesSupply,
@@ -135,7 +143,14 @@ library ExitQueueLibrary {
 
             if (remainingFunds >= exitValue) {
                 newTotalSharesSupply = executeExit(
-                    vaultStorage, exitQueueStorage, fundraisingConfig, i, exitValue, token, newTotalSharesSupply
+                    vaultStorage,
+                    exitQueueStorage,
+                    daoState,
+                    fundraisingConfig,
+                    i,
+                    exitValue,
+                    token,
+                    newTotalSharesSupply
                 );
                 remainingFunds -= exitValue;
                 exitQueueStorage.nextExitQueueIndex = i + 1;
@@ -148,6 +163,7 @@ library ExitQueueLibrary {
                     if (partialExitValue > 0 && partialExitValue <= remainingFunds) {
                         newTotalSharesSupply = executePartialExit(
                             vaultStorage,
+                            daoState,
                             fundraisingConfig,
                             request.vaultId,
                             partialShares,
@@ -165,6 +181,7 @@ library ExitQueueLibrary {
     /// @notice Execute a single exit request
     /// @param vaultStorage Vault storage structure
     /// @param exitQueueStorage Exit queue storage structure
+    /// @param daoState DAO state storage structure
     /// @param fundraisingConfig Fundraising config (for share price update)
     /// @param exitIndex Index in exit queue
     /// @param exitValue Value to pay out
@@ -174,6 +191,7 @@ library ExitQueueLibrary {
     function executeExit(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.ExitQueueStorage storage exitQueueStorage,
+        DataTypes.DAOState storage daoState,
         DataTypes.FundraisingConfig storage fundraisingConfig,
         uint256 exitIndex,
         uint256 exitValue,
@@ -193,6 +211,8 @@ library ExitQueueLibrary {
         request.processed = true;
         exitQueueStorage.vaultExitRequestIndex[vaultId] = 0;
 
+        daoState.totalExitQueueShares -= shares;
+
         IERC20(token).safeTransfer(vault.primary, exitValue);
 
         if (newTotalSharesSupply > 0) {
@@ -207,6 +227,7 @@ library ExitQueueLibrary {
 
     /// @notice Execute a partial exit
     /// @param vaultStorage Vault storage structure
+    /// @param daoState DAO state storage structure
     /// @param fundraisingConfig Fundraising config (for share price update)
     /// @param vaultId Vault ID
     /// @param shares Shares to exit
@@ -216,6 +237,7 @@ library ExitQueueLibrary {
     /// @return newTotalSharesSupply Updated total shares supply
     function executePartialExit(
         DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.DAOState storage daoState,
         DataTypes.FundraisingConfig storage fundraisingConfig,
         uint256 vaultId,
         uint256 shares,
@@ -228,6 +250,8 @@ library ExitQueueLibrary {
         vault.shares -= shares;
         uint256 previousTotalShares = totalSharesSupply;
         newTotalSharesSupply = totalSharesSupply - shares;
+
+        daoState.totalExitQueueShares -= shares;
 
         IERC20(token).safeTransfer(vault.primary, payoutAmount);
 
@@ -282,6 +306,50 @@ library ExitQueueLibrary {
     /// @return True if no pending exits
     function isExitQueueEmpty(DataTypes.ExitQueueStorage storage exitQueueStorage) internal view returns (bool) {
         return exitQueueStorage.nextExitQueueIndex >= exitQueueStorage.exitQueue.length;
+    }
+
+    /// @notice Cancel exit request from queue
+    /// @param vaultStorage Vault storage structure
+    /// @param exitQueueStorage Exit queue storage structure
+    /// @param daoState DAO state storage structure
+    /// @param sender Sender address
+    function executeCancelExit(
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.ExitQueueStorage storage exitQueueStorage,
+        DataTypes.DAOState storage daoState,
+        address sender
+    ) external {
+        uint256 vaultId = vaultStorage.addressToVaultId[sender];
+        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+
+        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        require(vault.primary == sender, OnlyPrimaryCanClaim());
+
+        uint256 exitRequestIndex = exitQueueStorage.vaultExitRequestIndex[vaultId];
+        require(exitRequestIndex != 0, NotInExitQueue());
+
+        uint256 arrayIndex = exitRequestIndex - 1;
+        DataTypes.ExitRequest storage request = exitQueueStorage.exitQueue[arrayIndex];
+        require(!request.processed, NotInExitQueue());
+
+        uint256 vaultShares = vault.shares;
+
+        address delegate = vault.delegate;
+
+        if (delegate != address(0) && delegate != vault.primary) {
+            uint256 delegateVaultId = vaultStorage.addressToVaultId[delegate];
+            if (delegateVaultId > 0 && delegateVaultId < vaultStorage.nextVaultId) {
+                DataTypes.Vault storage delegateVault = vaultStorage.vaults[delegateVaultId];
+                delegateVault.votingShares += vaultShares;
+            }
+        }
+
+        request.processed = true;
+        exitQueueStorage.vaultExitRequestIndex[vaultId] = 0;
+
+        daoState.totalExitQueueShares -= vaultShares;
+
+        emit ExitRequestCancelled(vaultId);
     }
 }
 

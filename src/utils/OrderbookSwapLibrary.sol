@@ -67,31 +67,17 @@ library OrderbookSwapLibrary {
         require(amountIn > 0, ZeroAmountNotAllowed());
 
         if (swapType == DataTypes.SwapType.UniswapV2ExactTokensForTokens) {
-            return _executeUniswapV2ExactTokensForTokens(
-                router, swapData, tokenIn, tokenOut, amountIn, amountOutMin
-            );
+            return _executeUniswapV2ExactTokensForTokens(router, swapData, tokenIn, tokenOut, amountIn, amountOutMin);
         } else if (swapType == DataTypes.SwapType.UniswapV2TokensForExactTokens) {
-            return _executeUniswapV2TokensForExactTokens(
-                router, swapData, tokenIn, tokenOut, amountOutMin, amountIn
-            );
+            return _executeUniswapV2TokensForExactTokens(router, swapData, tokenIn, tokenOut, amountOutMin, amountIn);
         } else if (swapType == DataTypes.SwapType.UniswapV3ExactInputSingle) {
-            return _executeUniswapV3ExactInputSingle(
-                router, swapData, tokenIn, tokenOut, amountIn, amountOutMin
-            );
+            return _executeUniswapV3ExactInputSingle(router, swapData, tokenIn, tokenOut, amountIn, amountOutMin);
         } else if (swapType == DataTypes.SwapType.UniswapV3ExactInput) {
-            return
-                _executeUniswapV3ExactInput(
-                    router, swapData, tokenIn, tokenOut, amountIn, amountOutMin
-                );
+            return _executeUniswapV3ExactInput(router, swapData, tokenIn, tokenOut, amountIn, amountOutMin);
         } else if (swapType == DataTypes.SwapType.UniswapV3ExactOutputSingle) {
-            return _executeUniswapV3ExactOutputSingle(
-                router, swapData, tokenIn, tokenOut, amountOutMin, amountIn
-            );
+            return _executeUniswapV3ExactOutputSingle(router, swapData, tokenIn, tokenOut, amountOutMin, amountIn);
         } else if (swapType == DataTypes.SwapType.UniswapV3ExactOutput) {
-            return
-                _executeUniswapV3ExactOutput(
-                    router, swapData, tokenIn, tokenOut, amountOutMin, amountIn
-                );
+            return _executeUniswapV3ExactOutput(router, swapData, tokenIn, tokenOut, amountOutMin, amountIn);
         } else {
             revert InvalidSwapType();
         }
@@ -116,8 +102,8 @@ library OrderbookSwapLibrary {
         if (currentAllowance < amountIn) {
             inputToken.safeIncreaseAllowance(router, type(uint256).max);
         }
-        uint256[] memory amounts = IUniswapV2Router02(router)
-            .swapExactTokensForTokens(amountIn, amountOutMin, path, address(this), deadline);
+        uint256[] memory amounts =
+            IUniswapV2Router02(router).swapExactTokensForTokens(amountIn, amountOutMin, path, address(this), deadline);
 
         return amounts[amounts.length - 1];
     }
@@ -207,11 +193,7 @@ library OrderbookSwapLibrary {
         require(firstToken == tokenIn && lastToken == tokenOut, InvalidSwapData());
 
         ISwapRouter.ExactInputParams memory routerParams = ISwapRouter.ExactInputParams({
-            path: path,
-            recipient: address(this),
-            deadline: deadline,
-            amountIn: amountIn,
-            amountOutMinimum: amountOutMin
+            path: path, recipient: address(this), deadline: deadline, amountIn: amountIn, amountOutMinimum: amountOutMin
         });
 
         IERC20 inputToken = IERC20(tokenIn);
@@ -284,11 +266,7 @@ library OrderbookSwapLibrary {
         require(firstToken == tokenOut && lastToken == tokenIn, InvalidSwapData());
 
         ISwapRouter.ExactOutputParams memory routerParams = ISwapRouter.ExactOutputParams({
-            path: path,
-            recipient: address(this),
-            deadline: deadline,
-            amountOut: amountOut,
-            amountInMaximum: amountInMax
+            path: path, recipient: address(this), deadline: deadline, amountOut: amountOut, amountInMaximum: amountInMax
         });
 
         IERC20 inputToken = IERC20(tokenIn);

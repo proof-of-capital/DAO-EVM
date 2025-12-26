@@ -365,6 +365,7 @@ library DataTypes {
         uint256 creatorProfitPercent;
         uint256 totalCollectedMainCollateral;
         uint256 lastCreatorAllocation;
+        uint256 totalExitQueueShares;
     }
 }
 

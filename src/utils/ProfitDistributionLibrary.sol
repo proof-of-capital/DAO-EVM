@@ -71,6 +71,7 @@ library ProfitDistributionLibrary {
         uint256 participantsShare = unaccounted - royaltyShare - creatorShare;
         uint256 remainingForParticipants;
         (remainingForParticipants, newTotalSharesSupply) = distributeToParticipants(
+            daoState,
             rewardsStorage,
             exitQueueStorage,
             lpTokenStorage,
@@ -122,6 +123,7 @@ library ProfitDistributionLibrary {
     }
 
     /// @notice Distribute to participants (process exit queue and update rewards)
+    /// @param daoState DAO state storage structure
     /// @param rewardsStorage Rewards storage structure
     /// @param exitQueueStorage Exit queue storage structure
     /// @param lpTokenStorage LP token storage structure
@@ -135,6 +137,7 @@ library ProfitDistributionLibrary {
     /// @return remainingForParticipants Amount remaining after exit queue processing
     /// @return newTotalSharesSupply Updated total shares supply
     function distributeToParticipants(
+        DataTypes.DAOState storage daoState,
         DataTypes.RewardsStorage storage rewardsStorage,
         DataTypes.ExitQueueStorage storage exitQueueStorage,
         DataTypes.LPTokenStorage storage lpTokenStorage,
@@ -160,6 +163,7 @@ library ProfitDistributionLibrary {
             (remainingFunds, newTotalSharesSupply) = ExitQueueLibrary.processExitQueue(
                 vaultStorage,
                 exitQueueStorage,
+                daoState,
                 participantEntries,
                 fundraisingConfig,
                 totalSharesSupply,

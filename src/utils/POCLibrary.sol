@@ -122,13 +122,7 @@ library POCLibrary {
             uint256 balanceBefore = IERC20(poc.collateralToken).balanceOf(address(this));
 
             collateralAmount = OrderbookSwapLibrary.executeSwap(
-                router,
-                swapType,
-                swapData,
-                mainCollateral,
-                poc.collateralToken,
-                collateralAmountForPOC,
-                0
+                router, swapType, swapData, mainCollateral, poc.collateralToken, collateralAmountForPOC, 0
             );
 
             uint256 balanceAfter = IERC20(poc.collateralToken).balanceOf(address(this));

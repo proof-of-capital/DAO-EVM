@@ -279,13 +279,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
     function depositFundraising(uint256 amount, uint256 vaultId) external nonReentrant fundraisingActive {
         FundraisingLibrary.executeDepositFundraising(
-            _vaultStorage,
-            _daoState,
-            fundraisingConfig,
-            participantEntries,
-            mainCollateral,
-            amount,
-            vaultId
+            _vaultStorage, _daoState, fundraisingConfig, participantEntries, mainCollateral, amount, vaultId
         );
     }
 
@@ -357,7 +351,15 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Request to exit DAO by selling all shares
     /// @dev Participant exits with all their shares; adds request to exit queue for processing
     function requestExit() external nonReentrant atStage(DataTypes.Stage.Active) {
-        ExitQueueLibrary.executeRequestExit(_vaultStorage, _exitQueueStorage, msg.sender, this.getLaunchPriceFromPOC);
+        ExitQueueLibrary.executeRequestExit(
+            _vaultStorage, _exitQueueStorage, _daoState, msg.sender, this.getLaunchPriceFromPOC
+        );
+    }
+
+    /// @notice Cancel exit request from queue
+    /// @dev Participant can cancel their exit request before it's processed
+    function cancelExit() external nonReentrant atStage(DataTypes.Stage.Active) {
+        ExitQueueLibrary.executeCancelExit(_vaultStorage, _exitQueueStorage, _daoState, msg.sender);
     }
 
     /// @notice Allocate launch tokens to creator, reducing their profit share proportionally
@@ -365,12 +367,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param launchAmount Amount of launch tokens to allocate
     function allocateLaunchesToCreator(uint256 launchAmount) external onlyVoting atStage(DataTypes.Stage.Active) {
         CreatorLibrary.executeAllocateLaunchesToCreator(
-            _daoState,
-            accountedBalance,
-            address(launchToken),
-            creator,
-            _vaultStorage.totalSharesSupply,
-            launchAmount
+            _daoState, accountedBalance, address(launchToken), creator, _vaultStorage.totalSharesSupply, launchAmount
         );
     }
 

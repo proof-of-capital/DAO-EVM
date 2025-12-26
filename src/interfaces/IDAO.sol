@@ -226,6 +226,7 @@ interface IDAO {
     function setDelegate(address userAddress, address delegate) external;
     function claimReward(address[] calldata tokens) external;
     function requestExit() external;
+    function cancelExit() external;
     function allocateLaunchesToCreator(uint256 launchAmount) external;
     function upgradeOwnerShare(uint256 amount) external;
 
