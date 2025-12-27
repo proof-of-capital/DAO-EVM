@@ -60,7 +60,15 @@ library CreatorLibrary {
         uint256 profitPercentEquivalent = (sharesEquivalent * Constants.BASIS_POINTS) / totalSharesSupply;
 
         require(daoState.creatorProfitPercent >= profitPercentEquivalent, CreatorShareTooLow());
-        daoState.creatorProfitPercent -= profitPercentEquivalent;
+
+        uint256 minCreatorProfitPercent =
+            Constants.BASIS_POINTS - Constants.MIN_DAO_PROFIT_SHARE - daoState.royaltyPercent;
+        uint256 newCreatorProfitPercent = daoState.creatorProfitPercent - profitPercentEquivalent;
+        if (newCreatorProfitPercent < minCreatorProfitPercent) {
+            newCreatorProfitPercent = minCreatorProfitPercent;
+            profitPercentEquivalent = daoState.creatorProfitPercent - minCreatorProfitPercent;
+        }
+        daoState.creatorProfitPercent = newCreatorProfitPercent;
 
         IERC20(launchToken).safeTransfer(creator, launchAmount);
         daoState.totalLaunchBalance -= launchAmount;

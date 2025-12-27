@@ -237,6 +237,14 @@ library POCLibrary {
             newCreatorProfitPercent = Constants.BASIS_POINTS;
             profitPercentEquivalent = Constants.BASIS_POINTS - daoState.creatorProfitPercent;
         }
+
+        uint256 maxCreatorProfitPercent =
+            Constants.BASIS_POINTS - Constants.MIN_DAO_PROFIT_SHARE - daoState.royaltyPercent;
+        if (newCreatorProfitPercent > maxCreatorProfitPercent) {
+            newCreatorProfitPercent = maxCreatorProfitPercent;
+            profitPercentEquivalent = maxCreatorProfitPercent - daoState.creatorProfitPercent;
+        }
+
         daoState.creatorProfitPercent = newCreatorProfitPercent;
 
         emit CreatorLaunchesReturned(amount, profitPercentEquivalent, newCreatorProfitPercent);

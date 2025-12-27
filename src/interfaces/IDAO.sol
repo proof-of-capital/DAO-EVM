@@ -360,4 +360,9 @@ interface IDAO {
 
     // Board member functions
     function isBoardMember(address account) external view returns (bool);
+
+    // Dynamic threshold functions
+    function getDAOProfitShare() external view returns (uint256);
+    function getVetoThreshold() external view returns (uint256);
+    function getClosingThreshold() external view returns (uint256);
 }

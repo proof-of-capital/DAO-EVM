@@ -59,6 +59,8 @@ library Constants {
     uint256 public constant UPGRADE_DELAY = 5 days;
     uint256 public constant CANCEL_AFTER_ACTIVE_PERIOD = 100 days;
     uint256 public constant CLOSING_EXIT_QUEUE_THRESHOLD = 5000; // 50% in basis points
+    uint256 public constant MIN_DAO_PROFIT_SHARE = 2500; // 25% in basis points
+    uint256 public constant CLOSING_EXIT_QUEUE_MIN_THRESHOLD = 3000; // 30% in basis points
 
     // ============================================
     // VOTING CONSTANTS

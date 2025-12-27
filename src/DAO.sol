@@ -377,7 +377,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         ExitQueueLibrary.executeCancelExit(_vaultStorage, _exitQueueStorage, _daoState, msg.sender);
     }
 
-    /// @notice Enter closing stage if exit queue shares > 50%
+    /// @notice Enter closing stage if exit queue shares >= dynamic threshold
     /// @dev Can be called by any participant or admin when in Active stage
     function enterClosingStage() external onlyParticipantOrAdmin {
         require(_daoState.currentStage == DataTypes.Stage.Active, InvalidStage());
@@ -385,13 +385,14 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
         uint256 exitQueuePercentage =
             (_daoState.totalExitQueueShares * Constants.BASIS_POINTS) / _vaultStorage.totalSharesSupply;
-        require(exitQueuePercentage >= Constants.CLOSING_EXIT_QUEUE_THRESHOLD, InvalidStage());
+        uint256 closingThreshold = _getClosingThreshold();
+        require(exitQueuePercentage >= closingThreshold, InvalidStage());
 
         _daoState.currentStage = DataTypes.Stage.Closing;
         emit StageChanged(DataTypes.Stage.Active, DataTypes.Stage.Closing);
     }
 
-    /// @notice Return to active stage if exit queue shares < 50%
+    /// @notice Return to active stage if exit queue shares < dynamic threshold
     /// @dev Can be called by any participant or admin when in Closing stage
     function returnToActiveStage() external onlyParticipantOrAdmin {
         require(_daoState.currentStage == DataTypes.Stage.Closing, InvalidStage());
@@ -399,7 +400,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
         uint256 exitQueuePercentage =
             (_daoState.totalExitQueueShares * Constants.BASIS_POINTS) / _vaultStorage.totalSharesSupply;
-        require(exitQueuePercentage < Constants.CLOSING_EXIT_QUEUE_THRESHOLD, InvalidStage());
+        uint256 closingThreshold = _getClosingThreshold();
+        require(exitQueuePercentage < closingThreshold, InvalidStage());
 
         _daoState.currentStage = DataTypes.Stage.Active;
         emit StageChanged(DataTypes.Stage.Closing, DataTypes.Stage.Active);
@@ -806,6 +808,50 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @return Price in USD (18 decimals)
     function getPOCCollateralPrice(uint256 pocIdx) external view returns (uint256) {
         return POCLibrary.getPOCCollateralPrice(pocContracts, pocIdx);
+    }
+
+    /// @notice Get DAO profit share percentage
+    /// @return DAO profit share in basis points (10000 = 100%)
+    function getDAOProfitShare() external view returns (uint256) {
+        uint256 daoShare = Constants.BASIS_POINTS - _daoState.creatorProfitPercent - _daoState.royaltyPercent;
+        if (daoShare < Constants.MIN_DAO_PROFIT_SHARE) {
+            return Constants.MIN_DAO_PROFIT_SHARE;
+        }
+        return daoShare;
+    }
+
+    /// @notice Get dynamic veto threshold based on DAO profit share
+    /// @return Veto threshold in basis points (10000 = 100%)
+    function getVetoThreshold() external view returns (uint256) {
+        uint256 daoShare = this.getDAOProfitShare();
+        return Constants.BASIS_POINTS - daoShare;
+    }
+
+    /// @notice Get dynamic closing threshold based on DAO profit share
+    /// @return Closing threshold in basis points (10000 = 100%), not less than CLOSING_EXIT_QUEUE_MIN_THRESHOLD
+    function getClosingThreshold() external view returns (uint256) {
+        return _getClosingThreshold();
+    }
+
+    /// @notice Internal function to calculate DAO profit share
+    /// @return DAO profit share in basis points (10000 = 100%)
+    function _getDAOProfitShare() internal view returns (uint256) {
+        uint256 daoShare = Constants.BASIS_POINTS - _daoState.creatorProfitPercent - _daoState.royaltyPercent;
+        if (daoShare < Constants.MIN_DAO_PROFIT_SHARE) {
+            return Constants.MIN_DAO_PROFIT_SHARE;
+        }
+        return daoShare;
+    }
+
+    /// @notice Internal function to calculate dynamic closing threshold
+    /// @return Closing threshold in basis points (10000 = 100%), not less than CLOSING_EXIT_QUEUE_MIN_THRESHOLD
+    function _getClosingThreshold() internal view returns (uint256) {
+        uint256 daoShare = _getDAOProfitShare();
+        uint256 vetoThreshold = Constants.BASIS_POINTS - daoShare;
+        if (vetoThreshold < Constants.CLOSING_EXIT_QUEUE_MIN_THRESHOLD) {
+            return Constants.CLOSING_EXIT_QUEUE_MIN_THRESHOLD;
+        }
+        return vetoThreshold;
     }
 
     /// @notice Getter for vaults (backward compatibility)
