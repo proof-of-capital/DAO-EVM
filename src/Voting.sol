@@ -66,6 +66,7 @@ contract Voting is IVoting {
     error VotingNotAllowedInClosing();
     error TokenContractProposalNotAllowed();
     error VaultInExitQueue();
+    error ProposalCreationCooldown();
 
     // State variables
     IDAO public immutable dao;
@@ -81,6 +82,9 @@ contract Voting is IVoting {
     mapping(uint256 => mapping(uint256 => bool)) public hasVotedMapping;
     mapping(uint256 => mapping(uint256 => uint256)) public proposalVotesByVault;
     mapping(uint256 => mapping(uint256 => bool)) public proposalVoteDirection;
+    mapping(uint256 => uint256) public lastProposalCreationTimeByVault;
+    uint256 public lastAdminProposalCreationTime;
+    uint256 public lastCreatorProposalCreationTime;
 
     modifier onlyDAO() {
         _onlyDAO();
@@ -127,6 +131,7 @@ contract Voting is IVoting {
     /// @notice Create a new proposal
     /// @dev Only admin, creator, or board members (>= 10 shares) can create proposals
     /// @dev Proposal type is auto-detected based on target contract and call data
+    /// @dev Each address can create only one proposal per day
     /// @param targetContract Target contract for the call
     /// @param callData Encoded call data
     /// @return proposalId ID of created proposal
@@ -141,8 +146,23 @@ contract Voting is IVoting {
                 isAdminUser || isCreator || vault.shares >= Constants.BOARD_MEMBER_MIN_SHARES,
                 InsufficientSharesToCreateProposal()
             );
+            require(
+                block.timestamp >= lastProposalCreationTimeByVault[vaultId] + Constants.PROPOSAL_CREATION_COOLDOWN,
+                ProposalCreationCooldown()
+            );
         } else {
             require(isAdminUser || isCreator, NotAuthorizedToCreateProposal());
+            if (isAdminUser) {
+                require(
+                    block.timestamp >= lastAdminProposalCreationTime + Constants.PROPOSAL_CREATION_COOLDOWN,
+                    ProposalCreationCooldown()
+                );
+            } else {
+                require(
+                    block.timestamp >= lastCreatorProposalCreationTime + Constants.PROPOSAL_CREATION_COOLDOWN,
+                    ProposalCreationCooldown()
+                );
+            }
         }
 
         require(targetContract != address(0), InvalidTarget());
@@ -166,6 +186,16 @@ contract Voting is IVoting {
             endTime: block.timestamp + votingPeriod,
             executed: false
         });
+
+        if (vaultId > 0) {
+            lastProposalCreationTimeByVault[vaultId] = block.timestamp;
+        } else {
+            if (isAdminUser) {
+                lastAdminProposalCreationTime = block.timestamp;
+            } else {
+                lastCreatorProposalCreationTime = block.timestamp;
+            }
+        }
 
         emit ProposalCreated(proposalId, msg.sender, proposalType, targetContract, callData);
         emit ProposalCategoryDetected(proposalId, proposalType);
