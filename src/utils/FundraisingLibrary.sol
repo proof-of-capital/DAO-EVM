@@ -45,6 +45,7 @@ library FundraisingLibrary {
     error InvalidStage();
     error ActiveStageNotSet();
     error CancelPeriodNotPassed();
+    error DepositLimitExceeded();
 
     event SellableCollateralAdded(address indexed token, address indexed priceFeed);
     event RewardTokenAdded(address indexed token, address indexed priceFeed);
@@ -285,6 +286,9 @@ library FundraisingLibrary {
         uint256 shares = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         require(shares > 0, SharesCalculationFailed());
 
+        uint256 depositLimit = vaultStorage.vaultDepositLimit[vaultId];
+        require(vault.shares + shares <= depositLimit, DepositLimitExceeded());
+
         uint256 mainCollateralPriceUSD = getOraclePrice(mainCollateral);
         uint256 usdDeposit = (amount * mainCollateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
@@ -353,6 +357,9 @@ library FundraisingLibrary {
 
         uint256 shares = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         require(shares > 0, SharesCalculationFailed());
+
+        uint256 depositLimit = vaultStorage.vaultDepositLimit[vaultId];
+        require(vault.shares + shares <= depositLimit, DepositLimitExceeded());
 
         uint256 usdDeposit = (launchAmount * launchPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 

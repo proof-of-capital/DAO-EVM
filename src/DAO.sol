@@ -345,6 +345,16 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         VaultLibrary.executeSetDelegate(_vaultStorage, userAddress, delegate);
     }
 
+    /// @notice Set deposit limit for a vault (in shares)
+    /// @param vaultId Vault ID to set limit for
+    /// @param limit Deposit limit in shares (0 = deposits forbidden)
+    function setVaultDepositLimit(uint256 vaultId, uint256 limit) external onlyBoardMemberOrAdmin vaultExists(vaultId) {
+        DataTypes.Vault storage vault = _vaultStorage.vaults[vaultId];
+        require(limit >= vault.shares, DepositLimitBelowCurrentShares());
+        _vaultStorage.vaultDepositLimit[vaultId] = limit;
+        emit VaultDepositLimitSet(vaultId, limit);
+    }
+
     /// @notice Claim accumulated rewards for tokens
     /// @param tokens Array of token addresses to claim
     function claimReward(address[] calldata tokens) external nonReentrant {
@@ -918,7 +928,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     }
 
     function _vaultExists(uint256 vaultId) internal view {
-        require(vaultId < _vaultStorage.nextVaultId && _vaultStorage.vaults[vaultId].shares > 0, VaultDoesNotExist());
+        require(vaultId < _vaultStorage.nextVaultId, VaultDoesNotExist());
     }
 
     function _onlyParticipantOrAdmin() internal view {

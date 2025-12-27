@@ -89,6 +89,8 @@ interface IDAO {
     error CreatorShareTooLow();
     error NotLPToken();
     error LPDistributionTooSoon();
+    error DepositLimitExceeded();
+    error DepositLimitBelowCurrentShares();
 
     // Fundraising errors
     error FundraisingDeadlinePassed();
@@ -139,6 +141,7 @@ interface IDAO {
     event EmergencyAddressUpdated(uint256 indexed vaultId, address oldEmergency, address newEmergency);
     event DelegateUpdated(uint256 indexed vaultId, address oldDelegate, address newDelegate, uint256 delegateSetAt);
     event RewardClaimed(uint256 indexed vaultId, address indexed token, uint256 amount);
+    event VaultDepositLimitSet(uint256 indexed vaultId, uint256 limit);
 
     // Trading events
     event LaunchTokenSold(

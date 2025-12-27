@@ -86,6 +86,7 @@ library VaultLibrary {
         }
 
         vaultStorage.vaultMainCollateralDeposit[vaultId] = 0;
+        vaultStorage.vaultDepositLimit[vaultId] = 0;
 
         emit VaultCreated(vaultId, primary, 0);
     }
