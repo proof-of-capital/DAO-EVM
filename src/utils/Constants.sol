@@ -77,5 +77,7 @@ library Constants {
     uint256 public constant DEFAULT_FINANCIAL_APPROVAL = 60;
     uint256 public constant DEFAULT_OTHER_QUORUM = 30;
     uint256 public constant DEFAULT_OTHER_APPROVAL = 51;
+    uint256 public constant PERCENTAGE_MULTIPLIER = 100;
+    uint256 public constant PROPOSAL_EXPIRY_PERIOD = 30 days;
 }
 

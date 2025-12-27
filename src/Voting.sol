@@ -66,7 +66,6 @@ contract Voting is IVoting {
 
     // State variables
     IDAO public immutable dao;
-    address public admin;
 
     uint256 public votingPeriod;
     uint256 public quorumPercentage;
@@ -77,10 +76,6 @@ contract Voting is IVoting {
 
     mapping(uint256 => DataTypes.ProposalCore) public proposals;
     mapping(uint256 => mapping(uint256 => bool)) public hasVotedMapping;
-    modifier onlyAdmin() {
-        _onlyAdmin();
-        _;
-    }
 
     modifier onlyDAO() {
         _onlyDAO();
@@ -92,22 +87,14 @@ contract Voting is IVoting {
         _;
     }
 
-    function _onlyAdmin() internal view {
-        require(msg.sender == admin, NotAdmin());
-    }
-
-    function _onlyDAO() internal view {
-        require(msg.sender == address(dao), NotDAO());
-    }
-
-    function _proposalExists(uint256 proposalId) internal view {
-        require(proposalId < nextProposalId, ProposalDoesNotExist());
+    modifier onlyAdminOrCreatorOrParticipant() {
+        _onlyAdminOrCreatorOrParticipant();
+        _;
     }
 
     constructor(address _dao) {
         require(_dao != address(0), InvalidDAOAddress());
         dao = IDAO(_dao);
-        admin = msg.sender;
 
         votingPeriod = Constants.DEFAULT_VOTING_PERIOD;
         quorumPercentage = Constants.DEFAULT_QUORUM_PERCENTAGE;
@@ -143,14 +130,16 @@ contract Voting is IVoting {
         external
         returns (uint256 proposalId)
     {
-        bool isAdminUser = msg.sender == admin;
+        bool isAdminUser = msg.sender == dao.admin();
         bool isCreator = msg.sender == dao.creator();
         uint256 vaultId = dao.addressToVaultId(msg.sender);
 
         if (vaultId > 0) {
             DataTypes.Vault memory vault = dao.vaults(vaultId);
-            uint256 minShares = Constants.BOARD_MEMBER_MIN_SHARES;
-            require(isAdminUser || isCreator || vault.shares >= minShares, InsufficientSharesToCreateProposal());
+            require(
+                isAdminUser || isCreator || vault.shares >= Constants.BOARD_MEMBER_MIN_SHARES,
+                InsufficientSharesToCreateProposal()
+            );
         } else {
             require(isAdminUser || isCreator, NotAuthorizedToCreateProposal());
         }
@@ -212,11 +201,9 @@ contract Voting is IVoting {
     }
 
     /// @notice Execute a successful proposal
-    /// @dev Only admin or creator can execute proposals
+    /// @dev Only admin, creator, or participant can execute proposals
     /// @param proposalId Proposal ID
-    function execute(uint256 proposalId) external proposalExists(proposalId) {
-        require(msg.sender == admin || msg.sender == dao.creator(), OnlyAdminOrCreatorCanExecute());
-
+    function execute(uint256 proposalId) external proposalExists(proposalId) onlyAdminOrCreatorOrParticipant {
         DataTypes.ProposalCore storage proposal = proposals[proposalId];
 
         require(block.timestamp >= proposal.endTime, VotingNotEnded());
@@ -230,32 +217,6 @@ contract Voting is IVoting {
         dao.executeProposal(proposal.targetContract, proposal.callData);
 
         emit ProposalExecuted(proposalId);
-    }
-
-    /// @notice Update voting parameters
-    /// @param _votingPeriod New voting period
-    /// @param _quorumPercentage New quorum percentage
-    /// @param _approvalThreshold New approval threshold
-    function setVotingParameters(uint256 _votingPeriod, uint256 _quorumPercentage, uint256 _approvalThreshold)
-        external
-        onlyAdmin
-    {
-        require(_votingPeriod > 0, InvalidVotingPeriod());
-        require(_quorumPercentage > 0 && _quorumPercentage <= 100, InvalidQuorum());
-        require(_approvalThreshold > 0 && _approvalThreshold <= 100, InvalidThreshold());
-
-        votingPeriod = _votingPeriod;
-        quorumPercentage = _quorumPercentage;
-        approvalThreshold = _approvalThreshold;
-
-        emit VotingParametersUpdated(_votingPeriod, _quorumPercentage, _approvalThreshold);
-    }
-
-    /// @notice Transfer admin role
-    /// @param newAdmin New admin address
-    function transferAdmin(address newAdmin) external onlyAdmin {
-        require(newAdmin != address(0), InvalidAddress());
-        admin = newAdmin;
     }
 
     /// @notice Get proposal details
@@ -272,6 +233,7 @@ contract Voting is IVoting {
 
     /// @notice Get proposal status
     /// @dev Unanimous proposals require 100% forVotes and 0 againstVotes
+    /// @dev Exit queue shares are counted: for veto proposals they go to forVotes, for others to againstVotes
     /// @param proposalId Proposal ID
     /// @return Current status of the proposal
     function getProposalStatus(uint256 proposalId)
@@ -287,24 +249,36 @@ contract Voting is IVoting {
         }
 
         uint256 totalShares = dao.totalSharesSupply();
+        uint256 exitQueueShares = dao.daoState().totalExitQueueShares;
+        bool isVeto = _isVetoProposal(proposal.targetContract, proposal.callData);
+
+        uint256 adjustedForVotes = proposal.forVotes;
+        uint256 adjustedAgainstVotes = proposal.againstVotes;
+        uint256 adjustedTotalShares = totalShares + exitQueueShares;
+
+        if (isVeto) {
+            adjustedForVotes += exitQueueShares;
+        } else {
+            adjustedAgainstVotes += exitQueueShares;
+        }
 
         if (proposal.proposalType == DataTypes.ProposalType.Unanimous) {
-            if (proposal.againstVotes > 0) {
+            if (adjustedAgainstVotes > 0) {
                 return DataTypes.ProposalStatus.Defeated;
             }
 
             if (block.timestamp < proposal.endTime) {
-                if (proposal.forVotes >= totalShares) {
+                if (adjustedForVotes >= adjustedTotalShares) {
                     return DataTypes.ProposalStatus.Active;
                 }
                 return DataTypes.ProposalStatus.Active;
             }
 
-            if (proposal.forVotes < totalShares) {
+            if (adjustedForVotes < adjustedTotalShares) {
                 return DataTypes.ProposalStatus.Defeated;
             }
 
-            if (block.timestamp > proposal.endTime + 30 days) {
+            if (block.timestamp > proposal.endTime + Constants.PROPOSAL_EXPIRY_PERIOD) {
                 return DataTypes.ProposalStatus.Expired;
             }
 
@@ -315,19 +289,19 @@ contract Voting is IVoting {
             return DataTypes.ProposalStatus.Active;
         }
 
-        uint256 totalVotes = proposal.forVotes + proposal.againstVotes;
+        uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
 
         DataTypes.VotingThresholds memory thresholds = categoryThresholds[proposal.votingCategory];
 
-        if (totalVotes * 100 < totalShares * thresholds.quorumPercentage) {
+        if (totalVotes * Constants.PERCENTAGE_MULTIPLIER < adjustedTotalShares * thresholds.quorumPercentage) {
             return DataTypes.ProposalStatus.Defeated;
         }
 
-        if (proposal.forVotes * 100 < totalVotes * thresholds.approvalThreshold) {
+        if (adjustedForVotes * Constants.PERCENTAGE_MULTIPLIER < totalVotes * thresholds.approvalThreshold) {
             return DataTypes.ProposalStatus.Defeated;
         }
 
-        if (block.timestamp > proposal.endTime + 30 days) {
+        if (block.timestamp > proposal.endTime + Constants.PROPOSAL_EXPIRY_PERIOD) {
             return DataTypes.ProposalStatus.Expired;
         }
 
@@ -447,24 +421,67 @@ contract Voting is IVoting {
             return true;
         }
 
-        (,, bool isActive) = dao.sellableCollaterals(target);
-        if (isActive) {
+        DataTypes.RewardTokenInfo memory rewardInfo = dao.rewardTokenInfo(target);
+        if (rewardInfo.active) {
             return true;
         }
 
         return false;
     }
 
-    /// @notice Extract revert message from return data
-    /// @param returnData Return data from failed call
-    /// @return Revert message
-    function _getRevertMsg(bytes memory returnData) internal pure returns (string memory) {
-        if (returnData.length < 68) return "Transaction reverted silently";
-
-        assembly {
-            returnData := add(returnData, 0x04)
+    /// @notice Check if proposal is a veto proposal (calls setIsVetoToCreator(true))
+    /// @param targetContract Target contract address
+    /// @param callData Encoded call data
+    /// @return True if proposal calls setIsVetoToCreator(true) on DAO contract
+    function _isVetoProposal(address targetContract, bytes memory callData) internal view returns (bool) {
+        if (targetContract != address(dao)) {
+            return false;
         }
-        return abi.decode(returnData, (string));
+
+        bytes4 setIsVetoToCreatorSelector = IDAO.setIsVetoToCreator.selector;
+
+        if (callData.length < 36) {
+            return false;
+        }
+
+        bytes4 selector = bytes4(callData);
+        if (selector != setIsVetoToCreatorSelector) {
+            return false;
+        }
+
+        bytes memory data = new bytes(callData.length - 4);
+        for (uint256 i = 4; i < callData.length; i++) {
+            data[i - 4] = callData[i];
+        }
+
+        (bool value) = abi.decode(data, (bool));
+        return value;
+    }
+
+    function _onlyAdmin() internal view {
+        require(msg.sender == dao.admin(), NotAdmin());
+    }
+
+    function _onlyDAO() internal view {
+        require(msg.sender == address(dao), NotDAO());
+    }
+
+    function _proposalExists(uint256 proposalId) internal view {
+        require(proposalId < nextProposalId, ProposalDoesNotExist());
+    }
+
+    function _onlyAdminOrCreatorOrParticipant() internal view {
+        bool isAdminUser = msg.sender == dao.admin();
+        bool isCreator = msg.sender == dao.creator();
+        uint256 vaultId = dao.addressToVaultId(msg.sender);
+        bool isParticipant = vaultId > 0;
+
+        if (isParticipant) {
+            DataTypes.Vault memory vault = dao.vaults(vaultId);
+            isParticipant = vault.shares > 0;
+        }
+
+        require(isAdminUser || isCreator || isParticipant, OnlyAdminOrCreatorCanExecute());
     }
 }
 
