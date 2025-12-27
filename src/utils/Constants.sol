@@ -79,5 +79,18 @@ library Constants {
     uint256 public constant DEFAULT_OTHER_APPROVAL = 51;
     uint256 public constant PERCENTAGE_MULTIPLIER = 100;
     uint256 public constant PROPOSAL_EXPIRY_PERIOD = 30 days;
+
+    // ============================================
+    // PROPOSAL TYPE SPECIFIC CONSTANTS
+    // ============================================
+
+    uint256 public constant VETO_QUORUM = 50; // 50% in percentage
+    uint256 public constant VETO_APPROVAL = 80; // 80% in percentage
+    uint256 public constant ARBITRARY_QUORUM = 30; // 30% in percentage
+    uint256 public constant ARBITRARY_APPROVAL = 80; // 80% in percentage
+    uint256 public constant ARBITRARY_EARLY_REJECT_THRESHOLD = 20; // 20% in percentage
+    uint256 public constant UNANIMOUS_QUORUM = 50; // 50% in percentage
+    uint256 public constant UNANIMOUS_APPROVAL = 95; // 95% in percentage
+    uint256 public constant UNANIMOUS_EARLY_REJECT_THRESHOLD = 5; // 5% in percentage
 }
 

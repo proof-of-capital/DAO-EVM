@@ -49,21 +49,18 @@ library DataTypes {
     }
 
     /// @notice Proposal types for voting
+    /// @dev Type is auto-determined based on target contract and call data
     enum ProposalType {
-        AdminChange, // Admin change proposal
-        Treasury, // Treasury distribution proposal
-        Emergency, // Emergency actions (pause, dissolution)
-        Arbitrary, // Arbitrary call proposal
-        Unanimous // Unanimous vote required (for changing POC contracts, contract upgrades)
-    }
-
-    /// @notice Voting categories based on target contract type
-    /// @dev Determines which thresholds to apply for voting
-    enum VotingCategory {
         Governance, // Calls to DAO contract itself (settings changes)
         POC, // Calls to POC contracts (external management)
-        Financial, // Calls to token contracts (financial operations)
-        Other // All other external calls
+        Financial, // Calls to token contracts (financial operations) - forbidden
+        Other, // All other external calls
+        Veto, // Veto proposal for multisig (set/remove veto mode)
+        Arbitrary, // Arbitrary call proposal (general questions)
+        Unanimous, // Unanimous vote required (for changing POC contracts, contract upgrades)
+        AdminChange, // Admin change proposal
+        Treasury, // Treasury distribution proposal
+        Emergency // Emergency actions (pause, dissolution)
     }
 
     /// @notice Voting thresholds for each category
@@ -188,8 +185,7 @@ library DataTypes {
     struct ProposalCore {
         uint256 id; // Proposal ID
         address proposer; // Address that created the proposal
-        ProposalType proposalType; // Type of proposal
-        VotingCategory votingCategory; // Category for threshold selection (auto-detected)
+        ProposalType proposalType; // Type of proposal (auto-determined)
         bytes callData; // Call data for execution
         address targetContract; // Target contract for execution
         uint256 forVotes; // Votes in favor

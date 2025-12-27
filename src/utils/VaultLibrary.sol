@@ -168,9 +168,13 @@ library VaultLibrary {
     /// @param vaultStorage Vault storage structure
     /// @param userAddress User address to find vault and set delegate
     /// @param delegate New delegate address (if zero, primary is set as delegate)
-    function executeSetDelegate(DataTypes.VaultStorage storage vaultStorage, address userAddress, address delegate)
-        external
-    {
+    /// @param updateVotesCallback Function to update votes in voting contract
+    function executeSetDelegate(
+        DataTypes.VaultStorage storage vaultStorage,
+        address userAddress,
+        address delegate,
+        function(uint256, int256) external updateVotesCallback
+    ) external {
         require(userAddress != address(0), InvalidAddress());
 
         uint256 vaultId = vaultStorage.addressToVaultId[userAddress];
@@ -184,7 +188,7 @@ library VaultLibrary {
         address oldDelegate = vault.delegate;
         uint256 vaultShares = vault.shares;
 
-        if (oldDelegate != address(0)) {
+        if (oldDelegate != address(0) && oldDelegate != vault.primary) {
             uint256 oldDelegateVaultId = vaultStorage.addressToVaultId[oldDelegate];
             if (oldDelegateVaultId > 0 && oldDelegateVaultId < vaultStorage.nextVaultId) {
                 DataTypes.Vault storage oldDelegateVault = vaultStorage.vaults[oldDelegateVaultId];
@@ -193,6 +197,7 @@ library VaultLibrary {
                 } else {
                     oldDelegateVault.votingShares = 0;
                 }
+                updateVotesCallback(oldDelegateVaultId, -int256(vaultShares));
             }
         }
 
@@ -204,6 +209,7 @@ library VaultLibrary {
             if (newDelegateVaultId > 0 && newDelegateVaultId < vaultStorage.nextVaultId) {
                 DataTypes.Vault storage newDelegateVault = vaultStorage.vaults[newDelegateVaultId];
                 newDelegateVault.votingShares += vaultShares;
+                updateVotesCallback(newDelegateVaultId, int256(vaultShares));
             }
         }
 

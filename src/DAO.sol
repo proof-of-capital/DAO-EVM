@@ -35,6 +35,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./interfaces/IDAO.sol";
+import "./interfaces/IVoting.sol";
 import "./interfaces/IAggregatorV3.sol";
 import "./interfaces/IProofOfCapital.sol";
 import "./interfaces/INonfungiblePositionManager.sol";
@@ -342,7 +343,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function setDelegate(address userAddress, address delegate) external {
         require(msg.sender == address(votingContract), OnlyVotingContract());
         require(votingContract != address(0), InvalidAddress());
-        VaultLibrary.executeSetDelegate(_vaultStorage, userAddress, delegate);
+        VaultLibrary.executeSetDelegate(_vaultStorage, userAddress, delegate, this.updateVotesForVaultWrapper);
     }
 
     /// @notice Set deposit limit for a vault (in shares)
@@ -367,8 +368,23 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Participant exits with all their shares; adds request to exit queue for processing
     function requestExit() external nonReentrant atActiveOrClosingStage {
         ExitQueueLibrary.executeRequestExit(
-            _vaultStorage, _exitQueueStorage, _daoState, msg.sender, this.getLaunchPriceFromPOC
+            _vaultStorage,
+            _exitQueueStorage,
+            _daoState,
+            msg.sender,
+            this.getLaunchPriceFromPOC,
+            this.updateVotesForVaultWrapper
         );
+    }
+
+    /// @notice Wrapper function for updating votes in voting contract
+    /// @param vaultId Vault ID
+    /// @param votingSharesDelta Change in voting shares
+    function updateVotesForVaultWrapper(uint256 vaultId, int256 votingSharesDelta) external {
+        require(msg.sender == address(this), Unauthorized());
+        if (votingContract != address(0)) {
+            IVoting(votingContract).updateVotesForVault(vaultId, votingSharesDelta);
+        }
     }
 
     /// @notice Cancel exit request from queue
@@ -788,6 +804,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param sharesDelta Change in shares (positive for increase, negative for decrease)
     function _updateDelegateVotingShares(uint256 vaultId, int256 sharesDelta) internal {
         VaultLibrary.executeUpdateDelegateVotingShares(_vaultStorage, vaultId, sharesDelta);
+        if (votingContract != address(0)) {
+            IVoting(votingContract).updateVotesForVault(vaultId, sharesDelta);
+        }
     }
 
     /// @notice Get weighted average launch token price from all active POC contracts (external wrapper for library calls)
@@ -1030,6 +1049,13 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function isBoardMember(address account) external view returns (bool) {
         uint256 vaultId = _vaultStorage.addressToVaultId[account];
         return vaultId > 0 && _vaultStorage.vaults[vaultId].shares >= Constants.BOARD_MEMBER_MIN_SHARES;
+    }
+
+    /// @notice Check if a vault is in exit queue
+    /// @param vaultId Vault ID to check
+    /// @return True if vault is in exit queue
+    function isVaultInExitQueue(uint256 vaultId) external view returns (bool) {
+        return _exitQueueStorage.vaultExitRequestIndex[vaultId] > 0;
     }
 
     /// @notice Set pending upgrade address (only voting contract can call)

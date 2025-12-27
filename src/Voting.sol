@@ -63,6 +63,9 @@ contract Voting is IVoting {
     error InvalidThreshold();
     error InvalidAddress();
     error InvalidCategory();
+    error VotingNotAllowedInClosing();
+    error TokenContractProposalNotAllowed();
+    error VaultInExitQueue();
 
     // State variables
     IDAO public immutable dao;
@@ -70,12 +73,14 @@ contract Voting is IVoting {
     uint256 public votingPeriod;
     uint256 public quorumPercentage;
     uint256 public approvalThreshold;
-    mapping(DataTypes.VotingCategory => DataTypes.VotingThresholds) public categoryThresholds;
+    mapping(DataTypes.ProposalType => DataTypes.VotingThresholds) public categoryThresholds;
 
     uint256 public nextProposalId;
 
     mapping(uint256 => DataTypes.ProposalCore) public proposals;
     mapping(uint256 => mapping(uint256 => bool)) public hasVotedMapping;
+    mapping(uint256 => mapping(uint256 => uint256)) public proposalVotesByVault;
+    mapping(uint256 => mapping(uint256 => bool)) public proposalVoteDirection;
 
     modifier onlyDAO() {
         _onlyDAO();
@@ -100,36 +105,32 @@ contract Voting is IVoting {
         quorumPercentage = Constants.DEFAULT_QUORUM_PERCENTAGE;
         approvalThreshold = Constants.DEFAULT_APPROVAL_THRESHOLD;
 
-        categoryThresholds[DataTypes.VotingCategory.Governance] = DataTypes.VotingThresholds({
+        categoryThresholds[DataTypes.ProposalType.Governance] = DataTypes.VotingThresholds({
             quorumPercentage: Constants.DEFAULT_GOVERNANCE_QUORUM,
             approvalThreshold: Constants.DEFAULT_GOVERNANCE_APPROVAL
         });
 
-        categoryThresholds[DataTypes.VotingCategory.POC] = DataTypes.VotingThresholds({
+        categoryThresholds[DataTypes.ProposalType.POC] = DataTypes.VotingThresholds({
             quorumPercentage: Constants.DEFAULT_POC_QUORUM, approvalThreshold: Constants.DEFAULT_POC_APPROVAL
         });
 
-        categoryThresholds[DataTypes.VotingCategory.Financial] = DataTypes.VotingThresholds({
+        categoryThresholds[DataTypes.ProposalType.Financial] = DataTypes.VotingThresholds({
             quorumPercentage: Constants.DEFAULT_FINANCIAL_QUORUM,
             approvalThreshold: Constants.DEFAULT_FINANCIAL_APPROVAL
         });
 
-        categoryThresholds[DataTypes.VotingCategory.Other] = DataTypes.VotingThresholds({
+        categoryThresholds[DataTypes.ProposalType.Other] = DataTypes.VotingThresholds({
             quorumPercentage: Constants.DEFAULT_OTHER_QUORUM, approvalThreshold: Constants.DEFAULT_OTHER_APPROVAL
         });
     }
 
     /// @notice Create a new proposal
     /// @dev Only admin, creator, or board members (>= 10 shares) can create proposals
-    /// @dev Voting category is auto-detected based on target contract
-    /// @param proposalType Type of proposal
+    /// @dev Proposal type is auto-detected based on target contract and call data
     /// @param targetContract Target contract for the call
     /// @param callData Encoded call data
     /// @return proposalId ID of created proposal
-    function createProposal(DataTypes.ProposalType proposalType, address targetContract, bytes calldata callData)
-        external
-        returns (uint256 proposalId)
-    {
+    function createProposal(address targetContract, bytes calldata callData) external returns (uint256 proposalId) {
         bool isAdminUser = msg.sender == dao.admin();
         bool isCreator = msg.sender == dao.creator();
         uint256 vaultId = dao.addressToVaultId(msg.sender);
@@ -146,7 +147,10 @@ contract Voting is IVoting {
 
         require(targetContract != address(0), InvalidTarget());
 
-        DataTypes.VotingCategory category = _determineCategory(targetContract);
+        require(!_isTokenContract(targetContract), TokenContractProposalNotAllowed());
+
+        DataTypes.ProposalType proposalType = _determineProposalType(targetContract, callData);
+        require(proposalType != DataTypes.ProposalType.Financial, TokenContractProposalNotAllowed());
 
         proposalId = nextProposalId++;
 
@@ -154,7 +158,6 @@ contract Voting is IVoting {
             id: proposalId,
             proposer: msg.sender,
             proposalType: proposalType,
-            votingCategory: category,
             callData: callData,
             targetContract: targetContract,
             forVotes: 0,
@@ -165,7 +168,7 @@ contract Voting is IVoting {
         });
 
         emit ProposalCreated(proposalId, msg.sender, proposalType, targetContract, callData);
-        emit ProposalCategoryDetected(proposalId, category);
+        emit ProposalCategoryDetected(proposalId, proposalType);
     }
 
     /// @notice Vote on a proposal
@@ -178,6 +181,9 @@ contract Voting is IVoting {
         require(block.timestamp < proposal.endTime, VotingEnded());
         require(!proposal.executed, ProposalAlreadyExecuted());
 
+        DataTypes.DAOState memory daoState = dao.daoState();
+        require(daoState.currentStage != DataTypes.Stage.Closing, VotingNotAllowedInClosing());
+
         uint256 vaultId = dao.addressToVaultId(msg.sender);
         require(vaultId > 0, NoVaultFound());
         DataTypes.Vault memory vault = dao.vaults(vaultId);
@@ -186,10 +192,14 @@ contract Voting is IVoting {
         require(block.timestamp >= vault.votingPausedUntil, VotingIsPaused());
         require(!hasVotedMapping[proposalId][vaultId], AlreadyVoted());
 
-        uint256 votingPower = vault.shares;
+        require(!dao.isVaultInExitQueue(vaultId), VaultInExitQueue());
+
+        uint256 votingPower = vault.votingShares;
         require(votingPower > 0, NoVotingPower());
 
         hasVotedMapping[proposalId][vaultId] = true;
+        proposalVotesByVault[proposalId][vaultId] = votingPower;
+        proposalVoteDirection[proposalId][vaultId] = support;
 
         if (support) {
             proposal.forVotes += votingPower;
@@ -198,6 +208,65 @@ contract Voting is IVoting {
         }
 
         emit VoteCast(proposalId, vaultId, support, votingPower);
+    }
+
+    /// @notice Update votes for a vault when its voting shares change
+    /// @dev Only callable by DAO contract
+    /// @param vaultId Vault ID whose voting shares changed
+    /// @param votingSharesDelta Change in voting shares (positive for increase, negative for decrease)
+    function updateVotesForVault(uint256 vaultId, int256 votingSharesDelta) external onlyDAO {
+        if (votingSharesDelta == 0) {
+            return;
+        }
+
+        for (uint256 proposalId = 0; proposalId < nextProposalId; proposalId++) {
+            DataTypes.ProposalCore storage proposal = proposals[proposalId];
+
+            if (block.timestamp >= proposal.endTime || proposal.executed) {
+                continue;
+            }
+
+            uint256 currentVotes = proposalVotesByVault[proposalId][vaultId];
+            if (currentVotes == 0) {
+                continue;
+            }
+
+            bool support = proposalVoteDirection[proposalId][vaultId];
+            uint256 voteChange;
+
+            if (votingSharesDelta > 0) {
+                voteChange = uint256(votingSharesDelta);
+                proposalVotesByVault[proposalId][vaultId] = currentVotes + voteChange;
+            } else {
+                voteChange = uint256(-votingSharesDelta);
+                if (voteChange > currentVotes) {
+                    voteChange = currentVotes;
+                }
+                proposalVotesByVault[proposalId][vaultId] = currentVotes - voteChange;
+            }
+
+            if (support) {
+                if (votingSharesDelta > 0) {
+                    proposal.forVotes += voteChange;
+                } else {
+                    if (proposal.forVotes >= voteChange) {
+                        proposal.forVotes -= voteChange;
+                    } else {
+                        proposal.forVotes = 0;
+                    }
+                }
+            } else {
+                if (votingSharesDelta > 0) {
+                    proposal.againstVotes += voteChange;
+                } else {
+                    if (proposal.againstVotes >= voteChange) {
+                        proposal.againstVotes -= voteChange;
+                    } else {
+                        proposal.againstVotes = 0;
+                    }
+                }
+            }
+        }
     }
 
     /// @notice Execute a successful proposal
@@ -232,7 +301,7 @@ contract Voting is IVoting {
     }
 
     /// @notice Get proposal status
-    /// @dev Unanimous proposals require 100% forVotes and 0 againstVotes
+    /// @dev Different proposal types have different voting rules
     /// @dev Exit queue shares are counted: for veto proposals they go to forVotes, for others to againstVotes
     /// @param proposalId Proposal ID
     /// @return Current status of the proposal
@@ -250,28 +319,133 @@ contract Voting is IVoting {
 
         uint256 totalShares = dao.totalSharesSupply();
         uint256 exitQueueShares = dao.daoState().totalExitQueueShares;
-        bool isVeto = _isVetoProposal(proposal.targetContract, proposal.callData);
 
         uint256 adjustedForVotes = proposal.forVotes;
         uint256 adjustedAgainstVotes = proposal.againstVotes;
         uint256 adjustedTotalShares = totalShares + exitQueueShares;
 
-        if (isVeto) {
+        if (proposal.proposalType == DataTypes.ProposalType.Veto) {
             adjustedForVotes += exitQueueShares;
         } else {
             adjustedAgainstVotes += exitQueueShares;
         }
 
+        if (proposal.proposalType == DataTypes.ProposalType.Veto) {
+            if (block.timestamp < proposal.endTime) {
+                uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
+                uint256 quorumRequired = (adjustedTotalShares * Constants.VETO_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
+
+                if (totalVotes >= quorumRequired && totalVotes > 0) {
+                    uint256 approvalRequired = (totalVotes * Constants.VETO_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
+                    if (adjustedForVotes >= approvalRequired) {
+                        return DataTypes.ProposalStatus.Active;
+                    }
+                }
+                return DataTypes.ProposalStatus.Active;
+            }
+
+            uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
+            uint256 quorumRequired = (adjustedTotalShares * Constants.VETO_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
+
+            if (totalVotes < quorumRequired) {
+                return DataTypes.ProposalStatus.Defeated;
+            }
+
+            if (totalVotes == 0) {
+                return DataTypes.ProposalStatus.Defeated;
+            }
+
+            uint256 approvalRequired = (totalVotes * Constants.VETO_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
+            if (adjustedForVotes < approvalRequired) {
+                return DataTypes.ProposalStatus.Defeated;
+            }
+
+            if (block.timestamp > proposal.endTime + Constants.PROPOSAL_EXPIRY_PERIOD) {
+                return DataTypes.ProposalStatus.Expired;
+            }
+
+            return DataTypes.ProposalStatus.Active;
+        }
+
+        if (proposal.proposalType == DataTypes.ProposalType.Arbitrary) {
+            if (block.timestamp < proposal.endTime) {
+                uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
+                uint256 earlyRejectThreshold = (adjustedTotalShares * Constants.ARBITRARY_EARLY_REJECT_THRESHOLD)
+                    / Constants.PERCENTAGE_MULTIPLIER;
+
+                if (adjustedAgainstVotes > earlyRejectThreshold) {
+                    return DataTypes.ProposalStatus.Defeated;
+                }
+
+                uint256 quorumRequired =
+                    (adjustedTotalShares * Constants.ARBITRARY_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
+                if (totalVotes >= quorumRequired && totalVotes > 0) {
+                    uint256 approvalRequired =
+                        (totalVotes * Constants.ARBITRARY_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
+                    if (adjustedForVotes >= approvalRequired) {
+                        return DataTypes.ProposalStatus.Active;
+                    }
+                }
+                return DataTypes.ProposalStatus.Active;
+            }
+
+            uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
+            uint256 quorumRequired =
+                (adjustedTotalShares * Constants.ARBITRARY_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
+
+            if (totalVotes < quorumRequired) {
+                return DataTypes.ProposalStatus.Defeated;
+            }
+
+            if (totalVotes == 0) {
+                return DataTypes.ProposalStatus.Defeated;
+            }
+
+            uint256 approvalRequired = (totalVotes * Constants.ARBITRARY_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
+            if (adjustedForVotes < approvalRequired) {
+                return DataTypes.ProposalStatus.Defeated;
+            }
+
+            if (block.timestamp > proposal.endTime + Constants.PROPOSAL_EXPIRY_PERIOD) {
+                return DataTypes.ProposalStatus.Expired;
+            }
+
+            return DataTypes.ProposalStatus.Active;
+        }
+
         if (proposal.proposalType == DataTypes.ProposalType.Unanimous) {
+            if (block.timestamp < proposal.endTime) {
+                uint256 earlyRejectThreshold = (adjustedTotalShares * Constants.UNANIMOUS_EARLY_REJECT_THRESHOLD)
+                    / Constants.PERCENTAGE_MULTIPLIER;
+
+                if (adjustedAgainstVotes > earlyRejectThreshold) {
+                    return DataTypes.ProposalStatus.Defeated;
+                }
+
+                uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
+                uint256 quorumRequired =
+                    (adjustedTotalShares * Constants.UNANIMOUS_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
+
+                if (totalVotes >= quorumRequired && totalVotes > 0) {
+                    uint256 approvalRequired =
+                        (totalVotes * Constants.UNANIMOUS_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
+                    if (adjustedForVotes >= approvalRequired) {
+                        return DataTypes.ProposalStatus.Active;
+                    }
+                }
+                return DataTypes.ProposalStatus.Active;
+            }
+
             if (adjustedAgainstVotes > 0) {
                 return DataTypes.ProposalStatus.Defeated;
             }
 
-            if (block.timestamp < proposal.endTime) {
-                if (adjustedForVotes >= adjustedTotalShares) {
-                    return DataTypes.ProposalStatus.Active;
-                }
-                return DataTypes.ProposalStatus.Active;
+            uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
+            uint256 quorumRequired =
+                (adjustedTotalShares * Constants.UNANIMOUS_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
+
+            if (totalVotes < quorumRequired) {
+                return DataTypes.ProposalStatus.Defeated;
             }
 
             if (adjustedForVotes < adjustedTotalShares) {
@@ -291,7 +465,7 @@ contract Voting is IVoting {
 
         uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
 
-        DataTypes.VotingThresholds memory thresholds = categoryThresholds[proposal.votingCategory];
+        DataTypes.VotingThresholds memory thresholds = categoryThresholds[proposal.proposalType];
 
         if (totalVotes * Constants.PERCENTAGE_MULTIPLIER < adjustedTotalShares * thresholds.quorumPercentage) {
             return DataTypes.ProposalStatus.Defeated;
@@ -322,79 +496,70 @@ contract Voting is IVoting {
         return (votingPeriod, quorumPercentage, approvalThreshold);
     }
 
-    /// @notice Get voting thresholds for a specific category
-    /// @param category Voting category
+    /// @notice Get voting thresholds for a specific proposal type
+    /// @param proposalType Proposal type
     /// @return quorumPct Quorum percentage (participation rate)
     /// @return approvalPct Approval threshold (approval rate)
-    function getCategoryThresholds(DataTypes.VotingCategory category)
+    function getCategoryThresholds(DataTypes.ProposalType proposalType)
         external
         view
         returns (uint256 quorumPct, uint256 approvalPct)
     {
-        DataTypes.VotingThresholds memory thresholds = categoryThresholds[category];
+        DataTypes.VotingThresholds memory thresholds = categoryThresholds[proposalType];
         return (thresholds.quorumPercentage, thresholds.approvalThreshold);
     }
 
-    /// @notice Get all category thresholds
-    /// @return governanceThresholds Governance category thresholds
-    /// @return pocThresholds POC category thresholds
-    /// @return financialThresholds Financial category thresholds
-    /// @return otherThresholds Other category thresholds
-    function getAllCategoryThresholds()
-        external
-        view
-        returns (
-            DataTypes.VotingThresholds memory governanceThresholds,
-            DataTypes.VotingThresholds memory pocThresholds,
-            DataTypes.VotingThresholds memory financialThresholds,
-            DataTypes.VotingThresholds memory otherThresholds
-        )
-    {
-        return (
-            categoryThresholds[DataTypes.VotingCategory.Governance],
-            categoryThresholds[DataTypes.VotingCategory.POC],
-            categoryThresholds[DataTypes.VotingCategory.Financial],
-            categoryThresholds[DataTypes.VotingCategory.Other]
-        );
-    }
-
-    /// @notice Get proposal's voting category
+    /// @notice Get proposal's type
     /// @param proposalId Proposal ID
-    /// @return Voting category of the proposal
+    /// @return Proposal type
     function getProposalCategory(uint256 proposalId)
         external
         view
         proposalExists(proposalId)
-        returns (DataTypes.VotingCategory)
+        returns (DataTypes.ProposalType)
     {
-        return proposals[proposalId].votingCategory;
+        return proposals[proposalId].proposalType;
     }
 
-    /// @notice Determine what category a target contract would fall into
+    /// @notice Determine what proposal type a target contract and call data would result in
     /// @param targetContract Target contract address to check
-    /// @return Voting category for the target
-    function determineCategory(address targetContract) external view returns (DataTypes.VotingCategory) {
-        return _determineCategory(targetContract);
+    /// @param callData Encoded call data
+    /// @return Proposal type for the target
+    function determineCategory(address targetContract, bytes calldata callData)
+        external
+        view
+        returns (DataTypes.ProposalType)
+    {
+        return _determineProposalType(targetContract, callData);
     }
 
-    /// @notice Determine voting category based on target contract
-    /// @dev Categories: Governance (DAO itself), POC (POC contracts), Financial (tokens), Other
+    /// @notice Determine proposal type based on target contract and call data
+    /// @dev Types: Governance (DAO itself), POC (POC contracts), Financial (tokens - forbidden), Other, Veto, Arbitrary, Unanimous
     /// @param targetContract Target contract address
-    /// @return Voting category for the target
-    function _determineCategory(address targetContract) internal view returns (DataTypes.VotingCategory) {
+    /// @param callData Encoded call data
+    /// @return Proposal type
+    function _determineProposalType(address targetContract, bytes memory callData)
+        internal
+        view
+        returns (DataTypes.ProposalType)
+    {
+        if (_isVetoProposal(targetContract, callData)) {
+            return DataTypes.ProposalType.Veto;
+        }
+
         if (targetContract == address(dao)) {
-            return DataTypes.VotingCategory.Governance;
+            return DataTypes.ProposalType.Governance;
         }
 
         if (_isPOCContract(targetContract)) {
-            return DataTypes.VotingCategory.POC;
+            return DataTypes.ProposalType.POC;
         }
 
         if (_isTokenContract(targetContract)) {
-            return DataTypes.VotingCategory.Financial;
+            return DataTypes.ProposalType.Financial;
         }
 
-        return DataTypes.VotingCategory.Other;
+        return DataTypes.ProposalType.Other;
     }
 
     /// @notice Check if address is a registered POC contract

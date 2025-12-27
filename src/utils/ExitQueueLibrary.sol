@@ -38,12 +38,14 @@ library ExitQueueLibrary {
     /// @param daoState DAO state storage structure
     /// @param sender Sender address
     /// @param getLaunchPriceFromPOC Function to get current launch price from POC
+    /// @param updateVotesCallback Function to update votes in voting contract
     function executeRequestExit(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.ExitQueueStorage storage exitQueueStorage,
         DataTypes.DAOState storage daoState,
         address sender,
-        function() external view returns (uint256) getLaunchPriceFromPOC
+        function() external view returns (uint256) getLaunchPriceFromPOC,
+        function(uint256, int256) external updateVotesCallback
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[sender];
         require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
@@ -67,6 +69,10 @@ library ExitQueueLibrary {
                 }
             }
         }
+
+        vault.delegate = vault.primary;
+
+        updateVotesCallback(vaultId, -int256(vaultShares));
 
         uint256 launchPriceNow = getLaunchPriceFromPOC();
 
