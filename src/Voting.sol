@@ -332,31 +332,33 @@ contract Voting is IVoting {
 
         if (proposal.proposalType == DataTypes.ProposalType.Veto) {
             if (block.timestamp < proposal.endTime) {
-                uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
-                uint256 quorumRequired = (adjustedTotalShares * Constants.VETO_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
+                uint256 earlyTotalVotes = adjustedForVotes + adjustedAgainstVotes;
+                uint256 earlyQuorumRequired =
+                    (adjustedTotalShares * Constants.VETO_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
 
-                if (totalVotes >= quorumRequired && totalVotes > 0) {
-                    uint256 approvalRequired = (totalVotes * Constants.VETO_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
-                    if (adjustedForVotes >= approvalRequired) {
+                if (earlyTotalVotes >= earlyQuorumRequired && earlyTotalVotes > 0) {
+                    uint256 earlyApprovalRequired =
+                        (earlyTotalVotes * Constants.VETO_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
+                    if (adjustedForVotes >= earlyApprovalRequired) {
                         return DataTypes.ProposalStatus.Active;
                     }
                 }
                 return DataTypes.ProposalStatus.Active;
             }
 
-            uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
-            uint256 quorumRequired = (adjustedTotalShares * Constants.VETO_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
+            uint256 vetoTotalVotes = adjustedForVotes + adjustedAgainstVotes;
+            uint256 vetoQuorumRequired = (adjustedTotalShares * Constants.VETO_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
 
-            if (totalVotes < quorumRequired) {
+            if (vetoTotalVotes < vetoQuorumRequired) {
                 return DataTypes.ProposalStatus.Defeated;
             }
 
-            if (totalVotes == 0) {
+            if (vetoTotalVotes == 0) {
                 return DataTypes.ProposalStatus.Defeated;
             }
 
-            uint256 approvalRequired = (totalVotes * Constants.VETO_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
-            if (adjustedForVotes < approvalRequired) {
+            uint256 vetoApprovalRequired = (vetoTotalVotes * Constants.VETO_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
+            if (adjustedForVotes < vetoApprovalRequired) {
                 return DataTypes.ProposalStatus.Defeated;
             }
 
@@ -369,7 +371,7 @@ contract Voting is IVoting {
 
         if (proposal.proposalType == DataTypes.ProposalType.Arbitrary) {
             if (block.timestamp < proposal.endTime) {
-                uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
+                uint256 earlyTotalVotes = adjustedForVotes + adjustedAgainstVotes;
                 uint256 earlyRejectThreshold = (adjustedTotalShares * Constants.ARBITRARY_EARLY_REJECT_THRESHOLD)
                     / Constants.PERCENTAGE_MULTIPLIER;
 
@@ -377,32 +379,33 @@ contract Voting is IVoting {
                     return DataTypes.ProposalStatus.Defeated;
                 }
 
-                uint256 quorumRequired =
+                uint256 earlyQuorumRequired =
                     (adjustedTotalShares * Constants.ARBITRARY_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
-                if (totalVotes >= quorumRequired && totalVotes > 0) {
-                    uint256 approvalRequired =
-                        (totalVotes * Constants.ARBITRARY_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
-                    if (adjustedForVotes >= approvalRequired) {
+                if (earlyTotalVotes >= earlyQuorumRequired && earlyTotalVotes > 0) {
+                    uint256 earlyApprovalRequired =
+                        (earlyTotalVotes * Constants.ARBITRARY_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
+                    if (adjustedForVotes >= earlyApprovalRequired) {
                         return DataTypes.ProposalStatus.Active;
                     }
                 }
                 return DataTypes.ProposalStatus.Active;
             }
 
-            uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
-            uint256 quorumRequired =
+            uint256 arbitraryTotalVotes = adjustedForVotes + adjustedAgainstVotes;
+            uint256 arbitraryQuorumRequired =
                 (adjustedTotalShares * Constants.ARBITRARY_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
 
-            if (totalVotes < quorumRequired) {
+            if (arbitraryTotalVotes < arbitraryQuorumRequired) {
                 return DataTypes.ProposalStatus.Defeated;
             }
 
-            if (totalVotes == 0) {
+            if (arbitraryTotalVotes == 0) {
                 return DataTypes.ProposalStatus.Defeated;
             }
 
-            uint256 approvalRequired = (totalVotes * Constants.ARBITRARY_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
-            if (adjustedForVotes < approvalRequired) {
+            uint256 arbitraryApprovalRequired =
+                (arbitraryTotalVotes * Constants.ARBITRARY_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
+            if (adjustedForVotes < arbitraryApprovalRequired) {
                 return DataTypes.ProposalStatus.Defeated;
             }
 
@@ -422,14 +425,14 @@ contract Voting is IVoting {
                     return DataTypes.ProposalStatus.Defeated;
                 }
 
-                uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
-                uint256 quorumRequired =
+                uint256 earlyTotalVotes = adjustedForVotes + adjustedAgainstVotes;
+                uint256 earlyQuorumRequired =
                     (adjustedTotalShares * Constants.UNANIMOUS_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
 
-                if (totalVotes >= quorumRequired && totalVotes > 0) {
-                    uint256 approvalRequired =
-                        (totalVotes * Constants.UNANIMOUS_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
-                    if (adjustedForVotes >= approvalRequired) {
+                if (earlyTotalVotes >= earlyQuorumRequired && earlyTotalVotes > 0) {
+                    uint256 earlyApprovalRequired =
+                        (earlyTotalVotes * Constants.UNANIMOUS_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
+                    if (adjustedForVotes >= earlyApprovalRequired) {
                         return DataTypes.ProposalStatus.Active;
                     }
                 }
@@ -440,11 +443,11 @@ contract Voting is IVoting {
                 return DataTypes.ProposalStatus.Defeated;
             }
 
-            uint256 totalVotes = adjustedForVotes + adjustedAgainstVotes;
-            uint256 quorumRequired =
+            uint256 unanimousTotalVotes = adjustedForVotes + adjustedAgainstVotes;
+            uint256 unanimousQuorumRequired =
                 (adjustedTotalShares * Constants.UNANIMOUS_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
 
-            if (totalVotes < quorumRequired) {
+            if (unanimousTotalVotes < unanimousQuorumRequired) {
                 return DataTypes.ProposalStatus.Defeated;
             }
 
@@ -534,7 +537,7 @@ contract Voting is IVoting {
     }
 
     /// @notice Determine proposal type based on target contract and call data
-    /// @dev Types: Governance (DAO itself), POC (POC contracts), Financial (tokens - forbidden), Other, Veto, Arbitrary, Unanimous
+    /// @dev Types: Governance (DAO itself), POC (POC contracts), Financial (tokens - forbidden), Other, Veto, Arbitrary, Unanimous (upgrades)
     /// @param targetContract Target contract address
     /// @param callData Encoded call data
     /// @return Proposal type
@@ -545,6 +548,10 @@ contract Voting is IVoting {
     {
         if (_isVetoProposal(targetContract, callData)) {
             return DataTypes.ProposalType.Veto;
+        }
+
+        if (_isUnanimousProposal(targetContract, callData)) {
+            return DataTypes.ProposalType.Unanimous;
         }
 
         if (targetContract == address(dao)) {
@@ -621,6 +628,25 @@ contract Voting is IVoting {
 
         (bool value) = abi.decode(data, (bool));
         return value;
+    }
+
+    /// @notice Check if proposal is an unanimous proposal (calls setPendingUpgradeFromVoting)
+    /// @param targetContract Target contract address
+    /// @param callData Encoded call data
+    /// @return True if proposal calls setPendingUpgradeFromVoting on DAO contract
+    function _isUnanimousProposal(address targetContract, bytes memory callData) internal view returns (bool) {
+        if (targetContract != address(dao)) {
+            return false;
+        }
+
+        bytes4 setPendingUpgradeFromVotingSelector = IDAO.setPendingUpgradeFromVoting.selector;
+
+        if (callData.length < 4) {
+            return false;
+        }
+
+        bytes4 selector = bytes4(callData);
+        return selector == setPendingUpgradeFromVotingSelector;
     }
 
     function _onlyAdmin() internal view {

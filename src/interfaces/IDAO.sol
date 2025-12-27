@@ -290,6 +290,7 @@ interface IDAO {
     function setVotingContract(address votingContract) external;
     function setAdmin(address newAdmin) external;
     function setIsVetoToCreator(bool value) external;
+    function setPendingUpgradeFromVoting(address newImplementation) external;
     function pushMultisigExecution(uint256 proposalId, IMultisig.ProposalCall[] calldata calls) external;
 
     // ============================================

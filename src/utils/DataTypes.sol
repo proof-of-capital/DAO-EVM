@@ -57,10 +57,7 @@ library DataTypes {
         Other, // All other external calls
         Veto, // Veto proposal for multisig (set/remove veto mode)
         Arbitrary, // Arbitrary call proposal (general questions)
-        Unanimous, // Unanimous vote required (for changing POC contracts, contract upgrades)
-        AdminChange, // Admin change proposal
-        Treasury, // Treasury distribution proposal
-        Emergency // Emergency actions (pause, dissolution)
+        Unanimous // Unanimous vote required (for changing POC contracts, contract upgrades)
     }
 
     /// @notice Voting thresholds for each category
