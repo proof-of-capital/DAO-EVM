@@ -92,6 +92,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     DataTypes.LPTokenType public primaryLPTokenType;
 
     uint256 public activeStageTimestamp;
+    uint256 public waitingForLPStartedAt;
 
     address public pendingUpgradeFromVoting;
     uint256 public pendingUpgradeFromVotingTimestamp;
@@ -605,6 +606,10 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             creatorInfraPercent,
             _vaultStorage.totalSharesSupply
         );
+
+        if (_daoState.currentStage == DataTypes.Stage.WaitingForLP) {
+            waitingForLPStartedAt = block.timestamp;
+        }
     }
 
     /// @notice Creator provides LP tokens and moves DAO to active stage
@@ -736,7 +741,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     {
         require(creator != address(0), InvalidAddress());
 
-        IMultisig(creator).executeProposal(proposalId, calls);
+        IMultisig(creator).executeTransaction(proposalId, calls);
 
         emit MultisigExecutionPushed(proposalId, msg.sender);
     }
@@ -971,6 +976,16 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Getter for lpTokenAddedAt (backward compatibility)
     function lpTokenAddedAt(address lpToken) external view returns (uint256) {
         return _lpTokenStorage.lpTokenAddedAt[lpToken];
+    }
+
+    /// @notice Getter for POC contracts count
+    function getPOCContractsCount() external view returns (uint256) {
+        return pocContracts.length;
+    }
+
+    /// @notice Getter for POC contract by index
+    function getPOCContract(uint256 index) external view returns (DataTypes.POCInfo memory) {
+        return pocContracts[index];
     }
 
     function _onlyAdmin() internal view {

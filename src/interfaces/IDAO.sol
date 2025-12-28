@@ -249,6 +249,7 @@ interface IDAO {
     ) external;
     function getCurrentPrice() external view returns (uint256);
     function getCollateralPrice(address collateral) external view returns (uint256);
+    function getLaunchPriceFromPOC() external view returns (uint256);
 
     // ============================================
     // FUNDRAISING MANAGEMENT
@@ -282,6 +283,11 @@ interface IDAO {
     function claimDissolution(address[] calldata tokens) external;
     function claimCreatorDissolution() external;
     function executeProposal(address targetContract, bytes calldata callData) external;
+    function provideLPTokens(
+        address[] calldata v2LPTokenAddresses,
+        uint256[] calldata v2LPAmounts,
+        uint256[] calldata v3TokenIds
+    ) external;
 
     // ============================================
     // ADMINISTRATION
@@ -313,7 +319,9 @@ interface IDAO {
     function mainCollateral() external view returns (address);
     function creator() external view returns (address);
     function creatorInfraPercent() external view returns (uint256);
+    function isVetoToCreator() external view returns (bool);
     function daoState() external view returns (DataTypes.DAOState memory);
+    function waitingForLPStartedAt() external view returns (uint256);
 
     // Shares and supply
     function totalSharesSupply() external view returns (uint256);
@@ -327,6 +335,8 @@ interface IDAO {
 
     // POC contracts
     function pocIndex(address) external view returns (uint256);
+    function getPOCContractsCount() external view returns (uint256);
+    function getPOCContract(uint256 index) external view returns (DataTypes.POCInfo memory);
 
     // Vaults
     function vaults(uint256 vaultId) external view returns (DataTypes.Vault memory);

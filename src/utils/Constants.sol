@@ -93,5 +93,32 @@ library Constants {
     uint256 public constant UNANIMOUS_QUORUM = 50; // 50% in percentage
     uint256 public constant UNANIMOUS_APPROVAL = 95; // 95% in percentage
     uint256 public constant UNANIMOUS_EARLY_REJECT_THRESHOLD = 5; // 5% in percentage
+
+    // ============================================
+    // MULTISIG CONSTANTS
+    // ============================================
+
+    uint256 public constant MULTISIG_VOTING_PERIOD = 10 days;
+    uint256 public constant MULTISIG_TRANSACTION_EXPIRY_PERIOD = 7 days;
+    uint256 public constant MULTISIG_MAX_COUNT_VOTE_PERIOD = 1 days;
+    uint256 public constant MULTISIG_DEFAULT_MAX_COUNT_VOTE_PER_PERIOD = 6;
+    uint256 public constant MULTISIG_GENERAL_PARTICIPATION_THRESHOLD = 60;
+    uint256 public constant MULTISIG_GENERAL_APPROVAL_THRESHOLD = 80;
+    uint256 public constant MULTISIG_TRANSFER_THRESHOLD_COUNT = 7;
+    bytes32 public constant MULTISIG_BACKUP_ADMIN_ROLE = keccak256("BACKUP_ADMIN_ROLE");
+    bytes32 public constant MULTISIG_EMERGENCY_INVESTOR_ROLE = keccak256("EMERGENCY_INVESTOR_ROLE");
+    bytes32 public constant MULTISIG_EMERGENCY_ADMIN_ROLE = keccak256("EMERGENCY_ADMIN_ROLE");
+
+    bytes4 public constant TRANSFER_OWNERSHIP_SELECTOR = 0xf2fde38b;
+    bytes4 public constant RENOUNCE_OWNERSHIP_SELECTOR = 0x715018a6;
+    bytes4 public constant GRANT_ROLE_SELECTOR = 0x2f2ff15d;
+    bytes4 public constant REVOKE_ROLE_SELECTOR = 0xd547741f;
+    bytes4 public constant CHANGE_EMERGENCY_ADDRESS_SELECTOR = 0xd6ac0667;
+    bytes4 public constant SET_COMMON_BACKUP_ADMIN_SELECTOR = 0x1b556ca0;
+    bytes4 public constant SET_COMMON_EMERGENCY_ADMIN_SELECTOR = 0xa5862a58;
+    bytes4 public constant SET_MAX_COUNT_VOTE_PER_PERIOD_SELECTOR = 0x09f0a353;
+    bytes4 public constant SET_COMMON_EMERGENCY_INVESTOR_SELECTOR = 0x7024e081;
+    uint256 public constant MULTISIG_WAITING_FOR_LP_TIMEOUT = 14 days;
+    uint256 public constant LP_EXTEND_LOCK_PERIOD = 180 days;
 }
 
