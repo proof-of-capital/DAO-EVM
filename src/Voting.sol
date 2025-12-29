@@ -143,7 +143,7 @@ contract Voting is IVoting {
         if (vaultId > 0) {
             DataTypes.Vault memory vault = dao.vaults(vaultId);
             require(
-                isAdminUser || isCreator || vault.shares >= Constants.BOARD_MEMBER_MIN_SHARES,
+                isAdminUser || isCreator || vault.votingShares >= Constants.BOARD_MEMBER_MIN_SHARES,
                 InsufficientSharesToCreateProposal()
             );
             require(

@@ -196,12 +196,12 @@ library FundraisingLibrary {
 
         DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
         entry.depositedMainCollateral = 0;
-        vaultStorage.vaultMainCollateralDeposit[vaultId] = 0;
+        vault.mainCollateralDeposit = 0;
 
-        uint256 vaultDepositedUSD = vaultStorage.vaultDepositedUSD[vaultId];
+        uint256 vaultDepositedUSD = vault.depositedUSD;
         if (vaultDepositedUSD > 0) {
             daoState.totalDepositedUSD -= vaultDepositedUSD;
-            vaultStorage.vaultDepositedUSD[vaultId] = 0;
+            vault.depositedUSD = 0;
         }
 
         IERC20(mainCollateral).safeTransfer(sender, mainCollateralAmount);
@@ -286,7 +286,7 @@ library FundraisingLibrary {
         uint256 shares = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         require(shares > 0, SharesCalculationFailed());
 
-        uint256 depositLimit = vaultStorage.vaultDepositLimit[vaultId];
+        uint256 depositLimit = vault.depositLimit;
         require(vault.shares + shares <= depositLimit, DepositLimitExceeded());
 
         uint256 mainCollateralPriceUSD = getOraclePrice(mainCollateral);
@@ -305,12 +305,12 @@ library FundraisingLibrary {
         vault.shares += shares;
         vaultStorage.totalSharesSupply += shares;
         daoState.totalCollectedMainCollateral += amount;
-        vaultStorage.vaultDepositedUSD[vaultId] += usdDeposit;
+        vault.depositedUSD += usdDeposit;
         daoState.totalDepositedUSD += usdDeposit;
 
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
 
-        vaultStorage.vaultMainCollateralDeposit[vaultId] += amount;
+        vault.mainCollateralDeposit += amount;
 
         IERC20(mainCollateral).safeTransferFrom(sender, address(this), amount);
 
@@ -358,7 +358,7 @@ library FundraisingLibrary {
         uint256 shares = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         require(shares > 0, SharesCalculationFailed());
 
-        uint256 depositLimit = vaultStorage.vaultDepositLimit[vaultId];
+        uint256 depositLimit = vault.depositLimit;
         require(vault.shares + shares <= depositLimit, DepositLimitExceeded());
 
         uint256 usdDeposit = (launchAmount * launchPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
@@ -390,7 +390,7 @@ library FundraisingLibrary {
 
         vault.shares += shares;
         vaultStorage.totalSharesSupply += shares;
-        vaultStorage.vaultDepositedUSD[vaultId] += usdDeposit;
+        vault.depositedUSD += usdDeposit;
         daoState.totalDepositedUSD += usdDeposit;
 
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));

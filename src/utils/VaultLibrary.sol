@@ -68,7 +68,10 @@ library VaultLibrary {
             votingPausedUntil: 0,
             delegate: finalDelegate,
             delegateSetAt: block.timestamp,
-            votingShares: 0
+            votingShares: 0,
+            mainCollateralDeposit: 0,
+            depositedUSD: 0,
+            depositLimit: 0
         });
 
         vaultStorage.addressToVaultId[primary] = vaultId;
@@ -84,9 +87,6 @@ library VaultLibrary {
             address token = lpTokenStorage.v2LPTokens[i];
             rewardsStorage.vaultRewardIndex[vaultId][token] = rewardsStorage.rewardPerShareStored[token];
         }
-
-        vaultStorage.vaultMainCollateralDeposit[vaultId] = 0;
-        vaultStorage.vaultDepositLimit[vaultId] = 0;
 
         emit VaultCreated(vaultId, primary, 0);
     }

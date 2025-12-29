@@ -132,7 +132,7 @@ library DissolutionLibrary {
         shares = vault.shares;
         vault.shares = 0;
 
-        uint256 vaultDepositedUSD = vaultStorage.vaultDepositedUSD[vaultId];
+        uint256 vaultDepositedUSD = vault.depositedUSD;
         require(daoState.totalDepositedUSD > 0 || vaultStorage.totalSharesSupply > 0, NoSharesToClaim());
 
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, -int256(shares));
@@ -166,7 +166,7 @@ library DissolutionLibrary {
         vaultStorage.totalSharesSupply -= shares;
         if (vaultDepositedUSD > 0) {
             daoState.totalDepositedUSD -= vaultDepositedUSD;
-            vaultStorage.vaultDepositedUSD[vaultId] = 0;
+            vault.depositedUSD = 0;
         }
     }
 

@@ -353,7 +353,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function setVaultDepositLimit(uint256 vaultId, uint256 limit) external onlyBoardMemberOrAdmin vaultExists(vaultId) {
         DataTypes.Vault storage vault = _vaultStorage.vaults[vaultId];
         require(limit >= vault.shares, DepositLimitBelowCurrentShares());
-        _vaultStorage.vaultDepositLimit[vaultId] = limit;
+        vault.depositLimit = limit;
         emit VaultDepositLimitSet(vaultId, limit);
     }
 
@@ -878,7 +878,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @return True if account is a board member
     function isBoardMember(address account) external view returns (bool) {
         uint256 vaultId = _vaultStorage.addressToVaultId[account];
-        return vaultId > 0 && _vaultStorage.vaults[vaultId].shares >= Constants.BOARD_MEMBER_MIN_SHARES;
+        return vaultId > 0 && _vaultStorage.vaults[vaultId].votingShares >= Constants.BOARD_MEMBER_MIN_SHARES;
     }
 
     /// @notice Check if a vault is in exit queue
@@ -950,7 +950,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Getter for vaultMainCollateralDeposit (backward compatibility)
     function vaultMainCollateralDeposit(uint256 vaultId) external view returns (uint256) {
-        return _vaultStorage.vaultMainCollateralDeposit[vaultId];
+        return _vaultStorage.vaults[vaultId].mainCollateralDeposit;
     }
 
     /// @notice Getter for rewardPerShareStored (backward compatibility)
@@ -1038,7 +1038,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     function _onlyBoardMemberOrAdmin() internal view {
         uint256 vaultId = _vaultStorage.addressToVaultId[msg.sender];
-        bool isMemberOfBoard = vaultId > 0 && _vaultStorage.vaults[vaultId].shares >= Constants.BOARD_MEMBER_MIN_SHARES;
+        bool isMemberOfBoard =
+            vaultId > 0 && _vaultStorage.vaults[vaultId].votingShares >= Constants.BOARD_MEMBER_MIN_SHARES;
         require(isMemberOfBoard || msg.sender == admin || msg.sender == votingContract, NotBoardMemberOrAdmin());
     }
 

@@ -106,6 +106,9 @@ library DataTypes {
         address delegate; // Delegate address for voting (if zero, primary is delegate)
         uint256 delegateSetAt; // Timestamp when delegate was set
         uint256 votingShares; // Voting shares amount
+        uint256 mainCollateralDeposit; // Main collateral deposit amount
+        uint256 depositedUSD; // Deposited amount in USD
+        uint256 depositLimit; // Deposit limit in shares
     }
 
     // ============================================
@@ -314,9 +317,6 @@ library DataTypes {
     struct VaultStorage {
         mapping(uint256 => Vault) vaults;
         mapping(address => uint256) addressToVaultId;
-        mapping(uint256 => uint256) vaultMainCollateralDeposit;
-        mapping(uint256 => uint256) vaultDepositedUSD;
-        mapping(uint256 => uint256) vaultDepositLimit;
         uint256 nextVaultId;
         uint256 totalSharesSupply;
     }
