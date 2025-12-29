@@ -14,6 +14,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
+import "./VaultLibrary.sol";
 
 /// @title ExitQueueLibrary
 /// @notice Library for managing exit queue operations
@@ -48,7 +49,7 @@ library ExitQueueLibrary {
         function(uint256, int256) external updateVotesCallback
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[sender];
-        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(vault.primary == sender, OnlyPrimaryCanClaim());
@@ -340,7 +341,7 @@ library ExitQueueLibrary {
         address sender
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[sender];
-        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(vault.primary == sender, OnlyPrimaryCanClaim());

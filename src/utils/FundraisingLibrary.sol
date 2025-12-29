@@ -170,7 +170,7 @@ library FundraisingLibrary {
         address sender
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[sender];
-        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(vault.primary == sender, OnlyPrimaryCanClaim());
@@ -279,7 +279,7 @@ library FundraisingLibrary {
         if (vaultId == 0) {
             vaultId = vaultStorage.addressToVaultId[sender];
         }
-        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
 
@@ -348,7 +348,7 @@ library FundraisingLibrary {
         if (vaultId == 0) {
             vaultId = vaultStorage.addressToVaultId[sender];
         }
-        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
 

@@ -1018,12 +1018,13 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     }
 
     function _vaultExists(uint256 vaultId) internal view {
-        require(vaultId < _vaultStorage.nextVaultId, VaultDoesNotExist());
+        require(vaultId > 0 && vaultId < _vaultStorage.nextVaultId, VaultDoesNotExist());
     }
 
     function _onlyParticipantOrAdmin() internal view {
         uint256 vaultId = _vaultStorage.addressToVaultId[msg.sender];
-        bool isParticipant = vaultId < _vaultStorage.nextVaultId && _vaultStorage.vaults[vaultId].shares > 0;
+        bool isParticipant =
+            vaultId > 0 && vaultId < _vaultStorage.nextVaultId && _vaultStorage.vaults[vaultId].shares > 0;
         bool isAdminUser = msg.sender == admin || msg.sender == votingContract;
         require(isParticipant || isAdminUser, Unauthorized());
     }
@@ -1038,8 +1039,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     function _onlyBoardMemberOrAdmin() internal view {
         uint256 vaultId = _vaultStorage.addressToVaultId[msg.sender];
-        bool isMemberOfBoard =
-            vaultId > 0 && _vaultStorage.vaults[vaultId].votingShares >= Constants.BOARD_MEMBER_MIN_SHARES;
+        bool isMemberOfBoard = vaultId > 0 && vaultId < _vaultStorage.nextVaultId
+            && _vaultStorage.vaults[vaultId].votingShares >= Constants.BOARD_MEMBER_MIN_SHARES;
         require(isMemberOfBoard || msg.sender == admin || msg.sender == votingContract, NotBoardMemberOrAdmin());
     }
 

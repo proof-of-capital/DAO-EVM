@@ -123,7 +123,7 @@ library DissolutionLibrary {
     ) external returns (uint256 shares) {
         address sender = msg.sender;
         uint256 vaultId = vaultStorage.addressToVaultId[sender];
-        require(vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(vault.primary == sender, OnlyPrimaryCanClaim());

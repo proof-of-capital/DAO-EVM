@@ -35,6 +35,23 @@ library VaultLibrary {
         uint256 indexed vaultId, address indexed oldDelegate, address indexed newDelegate, uint256 timestamp
     );
 
+    /// @notice Validate that vault exists (vaultId > 0 && vaultId < nextVaultId)
+    /// @param vaultStorage Vault storage structure
+    /// @param vaultId Vault ID to validate
+    function _validateVaultExists(DataTypes.VaultStorage storage vaultStorage, uint256 vaultId) internal view {
+        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+    }
+
+    /// @notice Validate that vault exists and has shares (vaultId > 0 && vaultId < nextVaultId && shares > 0)
+    /// @param vaultStorage Vault storage structure
+    /// @param vaultId Vault ID to validate
+    function _validateVaultWithShares(DataTypes.VaultStorage storage vaultStorage, uint256 vaultId) internal view {
+        require(
+            vaultId > 0 && vaultId < vaultStorage.nextVaultId && vaultStorage.vaults[vaultId].shares > 0,
+            VaultDoesNotExist()
+        );
+    }
+
     /// @notice Create a new vault (without deposit)
     /// @param vaultStorage Vault storage structure
     /// @param rewardsStorage Rewards storage structure (for initializing reward indices)
@@ -102,7 +119,7 @@ library VaultLibrary {
         address sender,
         address newPrimary
     ) external {
-        require(vaultId < vaultStorage.nextVaultId && vaultStorage.vaults[vaultId].shares > 0, VaultDoesNotExist());
+        _validateVaultWithShares(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(sender == vault.primary || sender == vault.backup || sender == vault.emergency, Unauthorized());
@@ -129,7 +146,7 @@ library VaultLibrary {
         address sender,
         address newBackup
     ) external {
-        require(vaultId < vaultStorage.nextVaultId && vaultStorage.vaults[vaultId].shares > 0, VaultDoesNotExist());
+        _validateVaultWithShares(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(sender == vault.backup || sender == vault.emergency, Unauthorized());
@@ -152,7 +169,7 @@ library VaultLibrary {
         address sender,
         address newEmergency
     ) external {
-        require(vaultId < vaultStorage.nextVaultId && vaultStorage.vaults[vaultId].shares > 0, VaultDoesNotExist());
+        _validateVaultWithShares(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(sender == vault.emergency, Unauthorized());
@@ -178,7 +195,7 @@ library VaultLibrary {
         require(userAddress != address(0), InvalidAddress());
 
         uint256 vaultId = vaultStorage.addressToVaultId[userAddress];
-        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        _validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(vault.shares > 0, NoShares());
