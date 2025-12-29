@@ -8,7 +8,7 @@
 
 // https://github.com/proof-of-capital/DAO-EVM
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 import "../interfaces/IAggregatorV3.sol";
 import "./DataTypes.sol";

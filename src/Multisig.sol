@@ -7,7 +7,7 @@
 // (c) 2025 https://proofofcapital.org/
 
 // https://github.com/proof-of-capital/DAO-EVM
-pragma solidity ^0.8.29;
+pragma solidity ^0.8.33;
 
 import {IMultiAdminSingleHolderAccessControl} from "./interfaces/IMultiAdminSingleHolderAccessControl.sol";
 import {IPausable} from "./interfaces/IPausable.sol";

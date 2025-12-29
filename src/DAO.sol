@@ -27,7 +27,7 @@
 // All royalties collected are automatically used to repurchase the project's core token, as
 // specified on the website, and are returned to the contract.
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -1046,8 +1046,25 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         return abi.decode(returnData, (string));
     }
 
-
-
+    /// @notice Internal function to calculate dynamic closing threshold
+    /// @return Closing threshold in basis points (10000 = 100%), not less than CLOSING_EXIT_QUEUE_MIN_THRESHOLD
+    function _getClosingThreshold() internal view returns (uint256) {
+        uint256 daoShare = _getDAOProfitShare();
+        uint256 vetoThreshold = Constants.BASIS_POINTS - daoShare;
+        if (vetoThreshold < Constants.CLOSING_EXIT_QUEUE_MIN_THRESHOLD) {
+            return Constants.CLOSING_EXIT_QUEUE_MIN_THRESHOLD;
+        }
+        return vetoThreshold;
+    }
+    /// @notice Internal function to calculate DAO profit share
+    /// @return DAO profit share in basis points (10000 = 100%)
+    function _getDAOProfitShare() internal view returns (uint256) {
+        uint256 daoShare = Constants.BASIS_POINTS - _daoState.creatorProfitPercent - _daoState.royaltyPercent;
+        if (daoShare < Constants.MIN_DAO_PROFIT_SHARE) {
+            return Constants.MIN_DAO_PROFIT_SHARE;
+        }
+        return daoShare;
+    }
     /// @notice Set pending upgrade address (only voting contract can call)
     /// @param newImplementation Address of the new implementation to approve
     function setPendingUpgradeFromVoting(address newImplementation) external onlyVoting {
