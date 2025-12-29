@@ -104,8 +104,6 @@ contract Multisig is IMultisig {
         _;
     }
 
-    receive() external payable {}
-
     constructor(
         address[] memory _primaryAddrs,
         address[] memory _backupAddrs,
@@ -190,6 +188,8 @@ contract Multisig is IMultisig {
             });
         }
     }
+
+    receive() external payable {}
 
     /// @inheritdoc IMultisig
     function submitTransaction(ProposalCall[] calldata calls)
@@ -758,7 +758,7 @@ contract Multisig is IMultisig {
         address mainCollateral = dao.mainCollateral();
 
         uint256 collateralPrice = _getChainlinkPrice(collateralInfo.priceFeed);
-        
+
         CollateralInfo storage mainCollateralInfo = collaterals[mainCollateral];
         require(mainCollateralInfo.active, InvalidCollateralAddress());
         uint256 mainCollateralPrice = _getChainlinkPrice(mainCollateralInfo.priceFeed);

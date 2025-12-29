@@ -157,7 +157,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Initialize the DAO contract (replaces constructor for upgradeable pattern)
     /// @param params Constructor parameters struct
-    function initialize(DataTypes.ConstructorParams memory params) public initializer {
+    function initialize(DataTypes.ConstructorParams memory params) external initializer {
         require(params.launchToken != address(0), InvalidLaunchToken());
         require(params.mainCollateral != address(0), InvalidAddress());
         require(params.creator != address(0), InvalidAddress());
@@ -731,6 +731,23 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         emit IsVetoToCreatorSet(oldValue, value);
     }
 
+    /// @notice Set pending upgrade address (only voting contract can call)
+    /// @param newImplementation Address of the new implementation to approve
+    function setPendingUpgradeFromVoting(address newImplementation) external onlyVoting {
+        require(newImplementation != address(0), InvalidAddress());
+        pendingUpgradeFromVoting = newImplementation;
+        pendingUpgradeFromVotingTimestamp = block.timestamp;
+        emit PendingUpgradeSetFromVoting(newImplementation);
+    }
+
+    /// @notice Set pending upgrade address (only creator can call)
+    /// @param newImplementation Address of the new implementation to approve
+    function setPendingUpgradeFromCreator(address newImplementation) external onlyCreator {
+        require(newImplementation != address(0), InvalidAddress());
+        pendingUpgradeFromCreator = newImplementation;
+        emit PendingUpgradeSetFromCreator(newImplementation);
+    }
+
     /// @notice Push multisig to execute a proposal
     /// @dev Any participant or admin can trigger multisig execution
     /// @param proposalId Proposal ID to execute on multisig
@@ -813,7 +830,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         );
     }
 
-
     /// @notice Get weighted average launch token price from all active POC contracts (external wrapper for library calls)
     /// @return Weighted average launch price in USD (18 decimals)
     function getLaunchPriceFromPOC() external view returns (uint256) {
@@ -871,8 +887,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function isVaultInExitQueue(uint256 vaultId) external view returns (bool) {
         return _exitQueueStorage.vaultExitRequestIndex[vaultId] > 0;
     }
-
- 
 
     /// @notice Getter for vaults (backward compatibility)
     function vaults(uint256 vaultId) external view returns (DataTypes.Vault memory) {
@@ -1022,7 +1036,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(msg.sender == creator, OnlyCreator());
     }
 
-
     function _onlyBoardMemberOrAdmin() internal view {
         uint256 vaultId = _vaultStorage.addressToVaultId[msg.sender];
         bool isMemberOfBoard = vaultId > 0 && _vaultStorage.vaults[vaultId].shares >= Constants.BOARD_MEMBER_MIN_SHARES;
@@ -1056,6 +1069,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         }
         return vetoThreshold;
     }
+
     /// @notice Internal function to calculate DAO profit share
     /// @return DAO profit share in basis points (10000 = 100%)
     function _getDAOProfitShare() internal view returns (uint256) {
@@ -1064,22 +1078,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             return Constants.MIN_DAO_PROFIT_SHARE;
         }
         return daoShare;
-    }
-    /// @notice Set pending upgrade address (only voting contract can call)
-    /// @param newImplementation Address of the new implementation to approve
-    function setPendingUpgradeFromVoting(address newImplementation) external onlyVoting {
-        require(newImplementation != address(0), InvalidAddress());
-        pendingUpgradeFromVoting = newImplementation;
-        pendingUpgradeFromVotingTimestamp = block.timestamp;
-        emit PendingUpgradeSetFromVoting(newImplementation);
-    }
-
-    /// @notice Set pending upgrade address (only creator can call)
-    /// @param newImplementation Address of the new implementation to approve
-    function setPendingUpgradeFromCreator(address newImplementation) external onlyCreator {
-        require(newImplementation != address(0), InvalidAddress());
-        pendingUpgradeFromCreator = newImplementation;
-        emit PendingUpgradeSetFromCreator(newImplementation);
     }
 
     /// @notice Authorize upgrade (requires both voting and creator approval)
