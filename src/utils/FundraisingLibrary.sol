@@ -77,7 +77,7 @@ library FundraisingLibrary {
         DataTypes.POCConstructorParams[] memory pocParams
     ) external {
         uint256 totalPOCShare = 0;
-        for (uint256 i = 0; i < pocParams.length; i++) {
+        for (uint256 i = 0; i < pocParams.length; ++i) {
             DataTypes.POCConstructorParams memory poc = pocParams[i];
 
             require(poc.pocContract != address(0), InvalidAddress());
@@ -129,7 +129,7 @@ library FundraisingLibrary {
         DataTypes.RewardTokenConstructorParams[] memory rewardTokenParams,
         address launchToken
     ) external {
-        for (uint256 i = 0; i < rewardTokenParams.length; i++) {
+        for (uint256 i = 0; i < rewardTokenParams.length; ++i) {
             DataTypes.RewardTokenConstructorParams memory reward = rewardTokenParams[i];
 
             require(reward.token != address(0), InvalidAddress());
@@ -231,7 +231,7 @@ library FundraisingLibrary {
         uint256 creatorInfraPercent,
         uint256 totalSharesSupply
     ) external {
-        for (uint256 i = 0; i < pocContracts.length; i++) {
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
             require(pocContracts[i].exchanged, POCNotExchanged());
         }
 

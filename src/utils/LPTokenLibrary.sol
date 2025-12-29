@@ -230,13 +230,13 @@ library LPTokenLibrary {
         DataTypes.LPTokenStorage storage lpTokenStorage,
         mapping(address => uint256) storage accountedBalance
     ) external view returns (bool) {
-        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; i++) {
+        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; ++i) {
             if (accountedBalance[lpTokenStorage.v2LPTokens[i]] > 0) {
                 return true;
             }
         }
 
-        for (uint256 i = 0; i < lpTokenStorage.v3LPPositions.length; i++) {
+        for (uint256 i = 0; i < lpTokenStorage.v3LPPositions.length; ++i) {
             uint256 tokenId = lpTokenStorage.v3LPPositions[i].tokenId;
             INonfungiblePositionManager positionManager =
                 INonfungiblePositionManager(lpTokenStorage.v3LPPositions[i].positionManager);
@@ -380,7 +380,7 @@ library LPTokenLibrary {
             require(v3TokenIds.length > 0, InvalidAddress());
         }
 
-        for (uint256 i = 0; i < v2LPTokenAddresses.length; i++) {
+        for (uint256 i = 0; i < v2LPTokenAddresses.length; ++i) {
             address lpToken = v2LPTokenAddresses[i];
             uint256 lpAmount = v2LPAmounts[i];
 
@@ -403,7 +403,7 @@ library LPTokenLibrary {
         if (v3TokenIds.length > 0) {
             require(lpTokenStorage.v3PositionManager != address(0), InvalidAddress());
 
-            for (uint256 i = 0; i < v3TokenIds.length; i++) {
+            for (uint256 i = 0; i < v3TokenIds.length; ++i) {
                 uint256 tokenId = v3TokenIds[i];
                 require(lpTokenStorage.v3TokenIdToIndex[tokenId] == 0, TokenAlreadyAdded());
 

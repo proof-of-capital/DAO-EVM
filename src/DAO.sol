@@ -192,7 +192,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         if (params.v3LPPositions.length > 0) {
             _lpTokenStorage.v3PositionManager = params.v3LPPositions[0].positionManager;
             require(_lpTokenStorage.v3PositionManager != address(0), InvalidAddress());
-            for (uint256 i = 0; i < params.v3LPPositions.length; i++) {
+            for (uint256 i = 0; i < params.v3LPPositions.length; ++i) {
                 require(params.v3LPPositions[i].positionManager == _lpTokenStorage.v3PositionManager, InvalidAddress());
             }
         }
@@ -208,7 +208,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             extended: false
         });
 
-        for (uint256 i = 0; i < params.routers.length; i++) {
+        for (uint256 i = 0; i < params.routers.length; ++i) {
             address router = params.routers[i];
             require(router != address(0), InvalidAddress());
             require(!availableRouterByAdmin[router], RouterAlreadyAdded());
@@ -746,6 +746,15 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         emit MultisigExecutionPushed(proposalId, msg.sender);
     }
 
+    /// @notice Claim creator's share of launch tokens during dissolution
+    /// @dev Calculates and transfers creator's infrastructure share based on creatorInfraPercent
+    /// @dev Only launch tokens can be claimed, other tokens are not available in this function
+    function claimCreatorDissolution() external onlyCreator nonReentrant atStage(DataTypes.Stage.Dissolved) {
+        DissolutionLibrary.executeClaimCreatorDissolution(
+            accountedBalance, address(launchToken), creatorInfraPercent, creator
+        );
+    }
+
     /// @notice Distribute unaccounted balance of a token as profit
     /// @dev Splits profit into: royalty (10%) -> creator (N%) -> DAO participants (90%-N%)
     /// @dev Token must be a sellable collateral (from POC contracts)
@@ -804,15 +813,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         );
     }
 
-    /// @notice Update voting shares for delegate when vault shares change
-    /// @param vaultId Vault ID whose shares changed
-    /// @param sharesDelta Change in shares (positive for increase, negative for decrease)
-    function _updateDelegateVotingShares(uint256 vaultId, int256 sharesDelta) internal {
-        VaultLibrary.executeUpdateDelegateVotingShares(_vaultStorage, vaultId, sharesDelta);
-        if (votingContract != address(0)) {
-            IVoting(votingContract).updateVotesForVault(vaultId, sharesDelta);
-        }
-    }
 
     /// @notice Get weighted average launch token price from all active POC contracts (external wrapper for library calls)
     /// @return Weighted average launch price in USD (18 decimals)
@@ -857,26 +857,22 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         return _getClosingThreshold();
     }
 
-    /// @notice Internal function to calculate DAO profit share
-    /// @return DAO profit share in basis points (10000 = 100%)
-    function _getDAOProfitShare() internal view returns (uint256) {
-        uint256 daoShare = Constants.BASIS_POINTS - _daoState.creatorProfitPercent - _daoState.royaltyPercent;
-        if (daoShare < Constants.MIN_DAO_PROFIT_SHARE) {
-            return Constants.MIN_DAO_PROFIT_SHARE;
-        }
-        return daoShare;
+    /// @notice Check if an account is a board member (has >= 10 shares)
+    /// @param account Address to check
+    /// @return True if account is a board member
+    function isBoardMember(address account) external view returns (bool) {
+        uint256 vaultId = _vaultStorage.addressToVaultId[account];
+        return vaultId > 0 && _vaultStorage.vaults[vaultId].shares >= Constants.BOARD_MEMBER_MIN_SHARES;
     }
 
-    /// @notice Internal function to calculate dynamic closing threshold
-    /// @return Closing threshold in basis points (10000 = 100%), not less than CLOSING_EXIT_QUEUE_MIN_THRESHOLD
-    function _getClosingThreshold() internal view returns (uint256) {
-        uint256 daoShare = _getDAOProfitShare();
-        uint256 vetoThreshold = Constants.BASIS_POINTS - daoShare;
-        if (vetoThreshold < Constants.CLOSING_EXIT_QUEUE_MIN_THRESHOLD) {
-            return Constants.CLOSING_EXIT_QUEUE_MIN_THRESHOLD;
-        }
-        return vetoThreshold;
+    /// @notice Check if a vault is in exit queue
+    /// @param vaultId Vault ID to check
+    /// @return True if vault is in exit queue
+    function isVaultInExitQueue(uint256 vaultId) external view returns (bool) {
+        return _exitQueueStorage.vaultExitRequestIndex[vaultId] > 0;
     }
+
+ 
 
     /// @notice Getter for vaults (backward compatibility)
     function vaults(uint256 vaultId) external view returns (DataTypes.Vault memory) {
@@ -1026,14 +1022,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(msg.sender == creator, OnlyCreator());
     }
 
-    /// @notice Claim creator's share of launch tokens during dissolution
-    /// @dev Calculates and transfers creator's infrastructure share based on creatorInfraPercent
-    /// @dev Only launch tokens can be claimed, other tokens are not available in this function
-    function claimCreatorDissolution() external onlyCreator nonReentrant atStage(DataTypes.Stage.Dissolved) {
-        DissolutionLibrary.executeClaimCreatorDissolution(
-            accountedBalance, address(launchToken), creatorInfraPercent, creator
-        );
-    }
 
     function _onlyBoardMemberOrAdmin() internal view {
         uint256 vaultId = _vaultStorage.addressToVaultId[msg.sender];
@@ -1058,20 +1046,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         return abi.decode(returnData, (string));
     }
 
-    /// @notice Check if an account is a board member (has >= 10 shares)
-    /// @param account Address to check
-    /// @return True if account is a board member
-    function isBoardMember(address account) external view returns (bool) {
-        uint256 vaultId = _vaultStorage.addressToVaultId[account];
-        return vaultId > 0 && _vaultStorage.vaults[vaultId].shares >= Constants.BOARD_MEMBER_MIN_SHARES;
-    }
 
-    /// @notice Check if a vault is in exit queue
-    /// @param vaultId Vault ID to check
-    /// @return True if vault is in exit queue
-    function isVaultInExitQueue(uint256 vaultId) external view returns (bool) {
-        return _exitQueueStorage.vaultExitRequestIndex[vaultId] > 0;
-    }
 
     /// @notice Set pending upgrade address (only voting contract can call)
     /// @param newImplementation Address of the new implementation to approve

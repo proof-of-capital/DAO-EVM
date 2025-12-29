@@ -48,7 +48,7 @@ library RewardsLibrary {
 
         executeUpdateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
 
-        for (uint256 i = 0; i < tokens.length; i++) {
+        for (uint256 i = 0; i < tokens.length; ++i) {
             address token = tokens[i];
             uint256 rewards = rewardsStorage.earnedRewards[vaultId][token];
 
@@ -62,7 +62,7 @@ library RewardsLibrary {
             }
         }
 
-        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; i++) {
+        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; ++i) {
             address lpToken = lpTokenStorage.v2LPTokens[i];
             uint256 rewards = rewardsStorage.earnedRewards[vaultId][lpToken];
 
@@ -91,7 +91,7 @@ library RewardsLibrary {
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         if (vault.shares == 0) return;
 
-        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; i++) {
+        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; ++i) {
             address rewardToken = rewardsStorage.rewardTokens[i];
             if (rewardsStorage.rewardTokenInfo[rewardToken].active) {
                 uint256 pending = calculatePendingRewards(vaultStorage, rewardsStorage, vaultId, rewardToken);
@@ -104,7 +104,7 @@ library RewardsLibrary {
             }
         }
 
-        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; i++) {
+        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; ++i) {
             address lpToken = lpTokenStorage.v2LPTokens[i];
             uint256 pending = calculatePendingRewards(vaultStorage, rewardsStorage, vaultId, lpToken);
 

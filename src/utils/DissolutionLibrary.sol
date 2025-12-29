@@ -51,7 +51,7 @@ library DissolutionLibrary {
     ) external {
         require(pocContracts.length > 0, NoPOCContractsConfigured());
 
-        for (uint256 i = 0; i < pocContracts.length; i++) {
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
             DataTypes.POCInfo storage poc = pocContracts[i];
 
             if (poc.active) {
@@ -88,7 +88,7 @@ library DissolutionLibrary {
         );
         require(pocContracts.length > 0, NoPOCContractsConfigured());
 
-        for (uint256 i = 0; i < pocContracts.length; i++) {
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
             DataTypes.POCInfo storage poc = pocContracts[i];
 
             if (poc.active) {
@@ -137,7 +137,7 @@ library DissolutionLibrary {
 
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, -int256(shares));
 
-        for (uint256 i = 0; i < tokens.length; i++) {
+        for (uint256 i = 0; i < tokens.length; ++i) {
             address token = tokens[i];
             require(token != address(0), InvalidAddress());
 
@@ -204,7 +204,7 @@ library DissolutionLibrary {
         address launchToken
     ) external {
         uint256 v2Length = lpTokenStorage.v2LPTokens.length;
-        for (uint256 i = 0; i < v2Length; i++) {
+        for (uint256 i = 0; i < v2Length; ++i) {
             address lpToken = lpTokenStorage.v2LPTokens[i];
             if (accountedBalance[lpToken] > 0) {
                 (uint256 amount0, uint256 amount1) =
@@ -214,7 +214,7 @@ library DissolutionLibrary {
         }
 
         uint256 v3Length = lpTokenStorage.v3LPPositions.length;
-        for (uint256 i = 0; i < v3Length; i++) {
+        for (uint256 i = 0; i < v3Length; ++i) {
             uint256 tokenId = lpTokenStorage.v3LPPositions[i].tokenId;
             DataTypes.V3LPPositionInfo memory positionInfo = lpTokenStorage.v3LPPositions[i];
             INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
@@ -249,7 +249,7 @@ library DissolutionLibrary {
             accountedBalance[launchToken] = launchTokenBalance;
         }
 
-        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; i++) {
+        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; ++i) {
             address token = rewardsStorage.rewardTokens[i];
             if (rewardsStorage.rewardTokenInfo[token].active) {
                 uint256 actualBalance = IERC20(token).balanceOf(address(this));

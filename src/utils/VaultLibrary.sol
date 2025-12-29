@@ -73,14 +73,14 @@ library VaultLibrary {
 
         vaultStorage.addressToVaultId[primary] = vaultId;
 
-        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; i++) {
+        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; ++i) {
             address rewardToken = rewardsStorage.rewardTokens[i];
             if (rewardsStorage.rewardTokenInfo[rewardToken].active) {
                 rewardsStorage.vaultRewardIndex[vaultId][rewardToken] = rewardsStorage.rewardPerShareStored[rewardToken];
             }
         }
 
-        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; i++) {
+        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; ++i) {
             address token = lpTokenStorage.v2LPTokens[i];
             rewardsStorage.vaultRewardIndex[vaultId][token] = rewardsStorage.rewardPerShareStored[token];
         }

@@ -158,7 +158,7 @@ library POCLibrary {
         uint256 totalWeightedPrice = 0;
         uint256 totalSharePercent = 0;
 
-        for (uint256 i = 0; i < pocContracts.length; i++) {
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
             DataTypes.POCInfo storage poc = pocContracts[i];
 
             if (!poc.active) {
@@ -276,7 +276,7 @@ library POCLibrary {
         require(pocIndex[pocContract] == 0, POCAlreadyExists());
 
         uint256 totalShare = sharePercent;
-        for (uint256 i = 0; i < pocContracts.length; i++) {
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
             totalShare += pocContracts[i].sharePercent;
         }
         require(totalShare <= Constants.BASIS_POINTS, TotalShareExceeds100Percent());

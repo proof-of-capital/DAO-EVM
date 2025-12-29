@@ -130,7 +130,7 @@ library ExitQueueLibrary {
         for (
             uint256 i = exitQueueStorage.nextExitQueueIndex;
             i < exitQueueStorage.exitQueue.length && remainingFunds > 0;
-            i++
+            ++i
         ) {
             DataTypes.ExitRequest storage request = exitQueueStorage.exitQueue[i];
 

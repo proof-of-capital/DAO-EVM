@@ -652,7 +652,7 @@ contract Voting is IVoting {
         }
 
         bytes memory data = new bytes(callData.length - 4);
-        for (uint256 i = 4; i < callData.length; i++) {
+        for (uint256 i = 4; i < callData.length; ++i) {
             data[i - 4] = callData[i];
         }
 
