@@ -32,6 +32,7 @@ pragma solidity ^0.8.33;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./interfaces/IDAO.sol";
@@ -659,8 +660,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function executeProposal(address targetContract, bytes calldata callData) external {
         require(msg.sender == address(votingContract), OnlyVotingContract());
         require(targetContract != address(0), InvalidAddress());
-        (bool success, bytes memory returnData) = targetContract.call(callData);
-        require(success, ExecutionFailed(_getRevertMsg(returnData)));
+        Address.functionCall(targetContract, callData);
     }
 
     /// @notice Dissolve all LP tokens (V2 and V3) and transition to Dissolved stage
@@ -1046,18 +1046,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function _fundraisingActive() internal view {
         require(_daoState.currentStage == DataTypes.Stage.Fundraising, InvalidStage());
         require(block.timestamp < fundraisingConfig.deadline, FundraisingDeadlinePassed());
-    }
-
-    /// @notice Extract revert message from return data
-    /// @param returnData Return data from failed call
-    /// @return Revert message
-    function _getRevertMsg(bytes memory returnData) internal pure returns (string memory) {
-        if (returnData.length < 68) return "Transaction reverted silently";
-
-        assembly {
-            returnData := add(returnData, 0x04)
-        }
-        return abi.decode(returnData, (string));
     }
 
     /// @notice Internal function to calculate dynamic closing threshold
