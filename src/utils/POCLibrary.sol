@@ -84,7 +84,7 @@ library POCLibrary {
     ) external returns (uint256 launchReceived) {
         require(pocIdx < pocContracts.length, InvalidPOCIndex());
 
-        DataTypes.POCInfo storage poc = pocContracts[pocIdx];
+        DataTypes.POCInfo memory poc = pocContracts[pocIdx];
         require(poc.active, POCNotActive());
         require(!poc.exchanged, POCAlreadyExchanged());
 
@@ -140,6 +140,8 @@ library POCLibrary {
         if (poc.exchangedAmount >= totalAllocationForPOC) {
             poc.exchanged = true;
         }
+
+        pocContracts[pocIdx] = poc;
 
         daoState.totalLaunchBalance += launchReceived;
         accountedBalance[launchToken] += launchReceived;

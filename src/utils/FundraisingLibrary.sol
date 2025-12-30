@@ -170,7 +170,7 @@ library FundraisingLibrary {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
 
         uint256 shares = vault.shares;
@@ -201,6 +201,8 @@ library FundraisingLibrary {
             daoState.totalDepositedUSD -= vaultDepositedUSD;
             vault.depositedUSD = 0;
         }
+
+        vaultStorage.vaults[vaultId] = vault;
 
         IERC20(mainCollateral).safeTransfer(msg.sender, mainCollateralAmount);
 
@@ -278,7 +280,7 @@ library FundraisingLibrary {
         }
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
 
         uint256 shares = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         require(shares > 0, SharesCalculationFailed());
@@ -289,7 +291,7 @@ library FundraisingLibrary {
         uint256 mainCollateralPriceUSD = getOraclePrice(mainCollateral);
         uint256 usdDeposit = (amount * mainCollateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
-        DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
+        DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
         if (entry.entryTimestamp == 0) {
             entry.fixedSharePrice = fundraisingConfig.sharePrice;
             entry.fixedLaunchPrice = fundraisingConfig.launchPrice;
@@ -298,6 +300,7 @@ library FundraisingLibrary {
             entry.weightedAvgLaunchPrice = entry.fixedLaunchPrice;
         }
         entry.depositedMainCollateral += amount;
+        participantEntries[vaultId] = entry;
 
         vault.shares += shares;
         vaultStorage.totalSharesSupply += shares;
@@ -308,6 +311,7 @@ library FundraisingLibrary {
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
 
         vault.mainCollateralDeposit += amount;
+        vaultStorage.vaults[vaultId] = vault;
 
         IERC20(mainCollateral).safeTransferFrom(msg.sender, address(this), amount);
 
@@ -346,7 +350,7 @@ library FundraisingLibrary {
         }
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
 
         uint256 launchPriceUSD = getOraclePrice(launchToken);
         require(launchPriceUSD > 0, InvalidPrice());
@@ -359,21 +363,17 @@ library FundraisingLibrary {
 
         uint256 usdDeposit = (launchAmount * launchPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
-        DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
+        DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
 
-        DataTypes.Vault storage vaultForAvg = vaultStorage.vaults[vaultId];
-        DataTypes.ParticipantEntry storage entryForAvg = participantEntries[vaultId];
-
-        if (vaultForAvg.shares == 0) {
-            entryForAvg.weightedAvgLaunchPrice = launchPriceUSD / 2;
-            entryForAvg.weightedAvgSharePrice = fundraisingConfig.sharePrice;
+        if (vault.shares == 0) {
+            entry.weightedAvgLaunchPrice = launchPriceUSD / 2;
+            entry.weightedAvgSharePrice = fundraisingConfig.sharePrice;
         } else {
-            uint256 totalShares = vaultForAvg.shares + shares;
-            entryForAvg.weightedAvgLaunchPrice =
-                (entryForAvg.weightedAvgLaunchPrice * vaultForAvg.shares + (launchPriceUSD / 2) * shares) / totalShares;
-            entryForAvg.weightedAvgSharePrice =
-                (entryForAvg.weightedAvgSharePrice * vaultForAvg.shares + fundraisingConfig.sharePrice * shares)
-                    / totalShares;
+            uint256 totalShares = vault.shares + shares;
+            entry.weightedAvgLaunchPrice =
+                (entry.weightedAvgLaunchPrice * vault.shares + (launchPriceUSD / 2) * shares) / totalShares;
+            entry.weightedAvgSharePrice =
+                (entry.weightedAvgSharePrice * vault.shares + fundraisingConfig.sharePrice * shares) / totalShares;
         }
 
         if (entry.entryTimestamp == 0) {
@@ -381,6 +381,8 @@ library FundraisingLibrary {
             entry.fixedSharePrice = fundraisingConfig.sharePrice;
             entry.fixedLaunchPrice = fundraisingConfig.launchPrice;
         }
+
+        participantEntries[vaultId] = entry;
 
         RewardsLibrary.executeUpdateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
 
@@ -390,6 +392,7 @@ library FundraisingLibrary {
         daoState.totalDepositedUSD += usdDeposit;
 
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
+        vaultStorage.vaults[vaultId] = vault;
 
         IERC20(launchToken).safeTransferFrom(msg.sender, address(this), launchAmount);
         daoState.totalLaunchBalance += launchAmount;

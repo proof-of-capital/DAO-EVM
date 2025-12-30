@@ -117,7 +117,7 @@ library VaultLibrary {
     ) external {
         _validateVaultWithShares(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(
             msg.sender == vault.primary || msg.sender == vault.backup || msg.sender == vault.emergency, Unauthorized()
         );
@@ -128,6 +128,7 @@ library VaultLibrary {
         delete vaultStorage.addressToVaultId[oldPrimary];
 
         vault.primary = newPrimary;
+        vaultStorage.vaults[vaultId] = vault;
         vaultStorage.addressToVaultId[newPrimary] = vaultId;
 
         emit PrimaryAddressUpdated(vaultId, oldPrimary, newPrimary);
@@ -142,12 +143,13 @@ library VaultLibrary {
     {
         _validateVaultWithShares(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(msg.sender == vault.backup || msg.sender == vault.emergency, Unauthorized());
         require(newBackup != address(0), InvalidAddress());
 
         address oldBackup = vault.backup;
         vault.backup = newBackup;
+        vaultStorage.vaults[vaultId] = vault;
 
         emit BackupAddressUpdated(vaultId, oldBackup, newBackup);
     }
@@ -163,12 +165,13 @@ library VaultLibrary {
     ) external {
         _validateVaultWithShares(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(msg.sender == vault.emergency, Unauthorized());
         require(newEmergency != address(0), InvalidAddress());
 
         address oldEmergency = vault.emergency;
         vault.emergency = newEmergency;
+        vaultStorage.vaults[vaultId] = vault;
 
         emit EmergencyAddressUpdated(vaultId, oldEmergency, newEmergency);
     }
@@ -189,7 +192,7 @@ library VaultLibrary {
         uint256 vaultId = vaultStorage.addressToVaultId[userAddress];
         _validateVaultExists(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(vault.shares > 0, NoShares());
 
         address finalDelegate = delegate == address(0) ? vault.primary : delegate;
@@ -200,12 +203,13 @@ library VaultLibrary {
         if (oldDelegate != address(0) && oldDelegate != vault.primary) {
             uint256 oldDelegateVaultId = vaultStorage.addressToVaultId[oldDelegate];
             if (oldDelegateVaultId > 0 && oldDelegateVaultId < vaultStorage.nextVaultId) {
-                DataTypes.Vault storage oldDelegateVault = vaultStorage.vaults[oldDelegateVaultId];
+                DataTypes.Vault memory oldDelegateVault = vaultStorage.vaults[oldDelegateVaultId];
                 if (oldDelegateVault.votingShares >= vaultShares) {
                     oldDelegateVault.votingShares -= vaultShares;
                 } else {
                     oldDelegateVault.votingShares = 0;
                 }
+                vaultStorage.vaults[oldDelegateVaultId] = oldDelegateVault;
                 updateVotesCallback(oldDelegateVaultId, -int256(vaultShares));
             }
         }
@@ -216,11 +220,14 @@ library VaultLibrary {
         if (finalDelegate != address(0) && finalDelegate != vault.primary) {
             uint256 newDelegateVaultId = vaultStorage.addressToVaultId[finalDelegate];
             if (newDelegateVaultId > 0 && newDelegateVaultId < vaultStorage.nextVaultId) {
-                DataTypes.Vault storage newDelegateVault = vaultStorage.vaults[newDelegateVaultId];
+                DataTypes.Vault memory newDelegateVault = vaultStorage.vaults[newDelegateVaultId];
                 newDelegateVault.votingShares += vaultShares;
+                vaultStorage.vaults[newDelegateVaultId] = newDelegateVault;
                 updateVotesCallback(newDelegateVaultId, int256(vaultShares));
             }
         }
+
+        vaultStorage.vaults[vaultId] = vault;
 
         emit DelegateUpdated(vaultId, oldDelegate, finalDelegate, block.timestamp);
     }
@@ -234,7 +241,7 @@ library VaultLibrary {
         uint256 vaultId,
         int256 sharesDelta
     ) external {
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         address delegate = vault.delegate;
 
         if (delegate == address(0) || delegate == vault.primary) {
@@ -246,7 +253,7 @@ library VaultLibrary {
             return;
         }
 
-        DataTypes.Vault storage delegateVault = vaultStorage.vaults[delegateVaultId];
+        DataTypes.Vault memory delegateVault = vaultStorage.vaults[delegateVaultId];
 
         if (sharesDelta > 0) {
             delegateVault.votingShares += uint256(sharesDelta);
@@ -258,6 +265,8 @@ library VaultLibrary {
                 delegateVault.votingShares = 0;
             }
         }
+
+        vaultStorage.vaults[delegateVaultId] = delegateVault;
     }
 
     /// @notice Set allowed exit token for a vault

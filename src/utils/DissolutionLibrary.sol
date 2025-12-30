@@ -124,7 +124,7 @@ library DissolutionLibrary {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
         require(vault.shares > 0, NoSharesToClaim());
 
@@ -167,6 +167,8 @@ library DissolutionLibrary {
             daoState.totalDepositedUSD -= vaultDepositedUSD;
             vault.depositedUSD = 0;
         }
+
+        vaultStorage.vaults[vaultId] = vault;
     }
 
     /// @notice Claim creator's share of launch tokens during dissolution

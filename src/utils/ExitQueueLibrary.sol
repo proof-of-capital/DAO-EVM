@@ -51,7 +51,7 @@ library ExitQueueLibrary {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
         require(vault.shares >= Constants.MIN_EXIT_SHARES, AmountMustBeGreaterThanZero());
         require(exitQueueStorage.vaultExitRequestIndex[vaultId] == 0, AlreadyInExitQueue());
@@ -62,12 +62,13 @@ library ExitQueueLibrary {
         if (delegate != address(0) && delegate != vault.primary) {
             uint256 delegateVaultId = vaultStorage.addressToVaultId[delegate];
             if (delegateVaultId > 0 && delegateVaultId < vaultStorage.nextVaultId) {
-                DataTypes.Vault storage delegateVault = vaultStorage.vaults[delegateVaultId];
+                DataTypes.Vault memory delegateVault = vaultStorage.vaults[delegateVaultId];
                 if (delegateVault.votingShares >= vaultShares) {
                     delegateVault.votingShares -= vaultShares;
                 } else {
                     delegateVault.votingShares = 0;
                 }
+                vaultStorage.vaults[delegateVaultId] = delegateVault;
             }
         }
 
@@ -90,6 +91,8 @@ library ExitQueueLibrary {
         exitQueueStorage.vaultExitRequestIndex[vaultId] = exitQueueStorage.exitQueue.length;
 
         daoState.totalExitQueueShares += vault.shares;
+
+        vaultStorage.vaults[vaultId] = vault;
 
         emit ExitRequested(vaultId, vault.shares, launchPriceNow);
     }
@@ -137,7 +140,7 @@ library ExitQueueLibrary {
             i < exitQueueStorage.exitQueue.length && remainingFunds > 0;
             ++i
         ) {
-            DataTypes.ExitRequest storage request = exitQueueStorage.exitQueue[i];
+            DataTypes.ExitRequest memory request = exitQueueStorage.exitQueue[i];
 
             if (request.processed) {
                 if (exitQueueStorage.nextExitQueueIndex == i) {
@@ -230,10 +233,10 @@ library ExitQueueLibrary {
         address token,
         uint256 totalSharesSupply
     ) internal returns (uint256 newTotalSharesSupply) {
-        DataTypes.ExitRequest storage request = exitQueueStorage.exitQueue[exitIndex];
+        DataTypes.ExitRequest memory request = exitQueueStorage.exitQueue[exitIndex];
         uint256 vaultId = request.vaultId;
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         uint256 shares = vault.shares;
 
         vault.shares -= shares;
@@ -241,6 +244,7 @@ library ExitQueueLibrary {
         newTotalSharesSupply = totalSharesSupply - shares;
 
         request.processed = true;
+        exitQueueStorage.exitQueue[exitIndex] = request;
         exitQueueStorage.vaultExitRequestIndex[vaultId] = 0;
 
         daoState.totalExitQueueShares -= shares;
@@ -253,6 +257,8 @@ library ExitQueueLibrary {
             fundraisingConfig.sharePrice = newSharePrice;
             emit SharePriceIncreased(oldSharePrice, newSharePrice, shares);
         }
+
+        vaultStorage.vaults[vaultId] = vault;
 
         emit ExitProcessed(vaultId, shares, exitValue, token);
     }
@@ -277,7 +283,7 @@ library ExitQueueLibrary {
         address token,
         uint256 totalSharesSupply
     ) internal returns (uint256 newTotalSharesSupply) {
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
 
         vault.shares -= shares;
         uint256 previousTotalShares = totalSharesSupply;
@@ -293,6 +299,8 @@ library ExitQueueLibrary {
             fundraisingConfig.sharePrice = newSharePrice;
             emit SharePriceIncreased(oldSharePrice, newSharePrice, shares);
         }
+
+        vaultStorage.vaults[vaultId] = vault;
 
         emit PartialExitProcessed(vaultId, shares, payoutAmount, token);
     }
@@ -313,7 +321,7 @@ library ExitQueueLibrary {
         address launchToken,
         function(address) external returns (uint256) getOraclePrice
     ) internal returns (uint256) {
-        DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
+        DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
 
         uint256 shareValue = entry.fixedSharePrice;
         if (shareValue == 0) {
@@ -362,14 +370,14 @@ library ExitQueueLibrary {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
 
         uint256 exitRequestIndex = exitQueueStorage.vaultExitRequestIndex[vaultId];
         require(exitRequestIndex != 0, NotInExitQueue());
 
         uint256 arrayIndex = exitRequestIndex - 1;
-        DataTypes.ExitRequest storage request = exitQueueStorage.exitQueue[arrayIndex];
+        DataTypes.ExitRequest memory request = exitQueueStorage.exitQueue[arrayIndex];
         require(!request.processed, NotInExitQueue());
 
         uint256 vaultShares = vault.shares;
@@ -379,12 +387,14 @@ library ExitQueueLibrary {
         if (delegate != address(0) && delegate != vault.primary) {
             uint256 delegateVaultId = vaultStorage.addressToVaultId[delegate];
             if (delegateVaultId > 0 && delegateVaultId < vaultStorage.nextVaultId) {
-                DataTypes.Vault storage delegateVault = vaultStorage.vaults[delegateVaultId];
+                DataTypes.Vault memory delegateVault = vaultStorage.vaults[delegateVaultId];
                 delegateVault.votingShares += vaultShares;
+                vaultStorage.vaults[delegateVaultId] = delegateVault;
             }
         }
 
         request.processed = true;
+        exitQueueStorage.exitQueue[arrayIndex] = request;
         exitQueueStorage.vaultExitRequestIndex[vaultId] = 0;
 
         daoState.totalExitQueueShares -= vaultShares;
