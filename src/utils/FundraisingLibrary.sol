@@ -246,6 +246,7 @@ library FundraisingLibrary {
     /// @param amount Amount of mainCollateral to deposit
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
     /// @param getOraclePrice Function pointer to get oracle price for a token
+    /// @param votingContract Address of voting contract to update votes in active proposals
     function executeDepositFundraising(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.DAOState storage daoState,
@@ -254,7 +255,8 @@ library FundraisingLibrary {
         address mainCollateral,
         uint256 amount,
         uint256 vaultId,
-        function(address) external returns (uint256) getOraclePrice
+        function(address) external returns (uint256) getOraclePrice,
+        address votingContract
     ) external {
         require(amount > 0, AmountMustBeGreaterThanZero());
         require(amount >= fundraisingConfig.minDeposit, DepositBelowMinimum());
@@ -294,7 +296,7 @@ library FundraisingLibrary {
         vault.depositedUSD += usdDeposit;
         daoState.totalDepositedUSD += usdDeposit;
 
-        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
+        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares), votingContract);
 
         vault.mainCollateralDeposit += amount;
         vaultStorage.vaults[vaultId] = vault;
@@ -314,6 +316,7 @@ library FundraisingLibrary {
     /// @param launchAmount Amount of launch tokens to deposit
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
     /// @param getOraclePrice Function pointer to get oracle price for a token
+    /// @param votingContract Address of voting contract to update votes in active proposals
     function executeDepositLaunches(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.DAOState storage daoState,
@@ -325,7 +328,8 @@ library FundraisingLibrary {
         address launchToken,
         uint256 launchAmount,
         uint256 vaultId,
-        function(address) external returns (uint256) getOraclePrice
+        function(address) external returns (uint256) getOraclePrice,
+        address votingContract
     ) external {
         require(launchAmount >= fundraisingConfig.minLaunchDeposit, BelowMinLaunchDeposit());
 
@@ -376,7 +380,7 @@ library FundraisingLibrary {
         vault.depositedUSD += usdDeposit;
         daoState.totalDepositedUSD += usdDeposit;
 
-        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
+        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares), votingContract);
         vaultStorage.vaults[vaultId] = vault;
 
         accountedBalance[launchToken] += launchAmount;

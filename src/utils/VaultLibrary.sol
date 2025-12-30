@@ -239,10 +239,12 @@ library VaultLibrary {
     /// @param vaultStorage Vault storage structure
     /// @param vaultId Vault ID whose shares changed
     /// @param sharesDelta Change in shares (positive for increase, negative for decrease)
+    /// @param votingContract Address of voting contract to update votes in active proposals
     function executeUpdateDelegateVotingShares(
         DataTypes.VaultStorage storage vaultStorage,
         uint256 vaultId,
-        int256 sharesDelta
+        int256 sharesDelta,
+        address votingContract
     ) external {
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         uint256 delegateId = vault.delegateId;
@@ -267,6 +269,10 @@ library VaultLibrary {
         }
 
         vaultStorage.vaults[targetVaultId] = targetVault;
+
+        if (votingContract != address(0)) {
+            IVoting(votingContract).updateVotesForVault(targetVaultId, sharesDelta);
+        }
     }
 
     /// @notice Set allowed exit token for a vault

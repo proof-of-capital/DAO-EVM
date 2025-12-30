@@ -305,7 +305,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             mainCollateral,
             amount,
             vaultId,
-            this.getOraclePrice
+            this.getOraclePrice,
+            votingContract
         );
     }
 
@@ -325,7 +326,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             address(launchToken),
             launchAmount,
             vaultId,
-            this.getOraclePrice
+            this.getOraclePrice,
+            votingContract
         );
     }
 
