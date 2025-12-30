@@ -180,7 +180,7 @@ library ProfitDistributionLibrary {
         uint256 usedForExits = 0;
 
         if (
-            exitQueueStorage.exitQueue.length > 0 && !ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage)
+            !ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage)
                 && participantsShare > 0 && !lpTokenStorage.isV2LPToken[token]
                 && daoState.currentStage != DataTypes.Stage.Closing
         ) {
