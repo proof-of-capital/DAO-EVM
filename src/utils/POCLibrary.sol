@@ -38,6 +38,7 @@ library POCLibrary {
     error InvalidPercentage();
     error POCAlreadyExists();
     error TotalShareExceeds100Percent();
+    error MaxPOCContractsReached();
 
     event POCExchangeCompleted(
         uint256 indexed pocIdx,
@@ -220,6 +221,7 @@ library POCLibrary {
         address priceFeed,
         uint256 sharePercent
     ) external {
+        require(pocContracts.length < Constants.MAX_POC_CONTRACTS, MaxPOCContractsReached());
         require(pocContract != address(0), InvalidAddress());
         require(collateralToken != address(0), InvalidAddress());
         require(priceFeed != address(0), InvalidAddress());
