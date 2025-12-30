@@ -698,10 +698,12 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         emit VotingContractSet(_votingContract);
     }
 
-    /// @notice Set admin address (only callable by voting)
+    /// @notice Set admin address (callable by voting or current admin)
     /// @param newAdmin New admin address
-    function setAdmin(address newAdmin) external onlyVoting {
+    function setAdmin(address newAdmin) external {
         require(newAdmin != address(0), InvalidAddress());
+        require(msg.sender == address(this) || msg.sender == admin, Unauthorized());
+        require(votingContract != address(0) || msg.sender == admin, InvalidAddress());
 
         address oldAdmin = admin;
         admin = newAdmin;
@@ -716,6 +718,19 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         isVetoToCreator = value;
 
         emit IsVetoToCreatorSet(oldValue, value);
+    }
+
+    /// @notice Set royalty recipient address (callable by current royalty recipient)
+    /// @param newRoyaltyRecipient New royalty recipient address
+    function setRoyaltyRecipient(address newRoyaltyRecipient) external {
+        require(newRoyaltyRecipient != address(0), InvalidAddress());
+        require(msg.sender == daoState.royaltyRecipient, Unauthorized());
+        require(votingContract != address(0) || msg.sender == daoState.royaltyRecipient, InvalidAddress());
+
+        address oldRoyaltyRecipient = daoState.royaltyRecipient;
+        daoState.royaltyRecipient = newRoyaltyRecipient;
+
+        emit RoyaltyRecipientSet(oldRoyaltyRecipient, newRoyaltyRecipient);
     }
 
     /// @notice Set pending upgrade address (only voting contract can call)

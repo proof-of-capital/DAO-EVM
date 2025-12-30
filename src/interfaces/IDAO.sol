@@ -161,6 +161,7 @@ interface IDAO {
     event AdminSet(address indexed oldAdmin, address indexed newAdmin);
     event MainCollateralSet(address indexed mainCollateral);
     event IsVetoToCreatorSet(bool oldValue, bool newValue);
+    event RoyaltyRecipientSet(address indexed oldRoyaltyRecipient, address indexed newRoyaltyRecipient);
     event RouterAvailabilityChanged(address indexed router, bool isAvailable);
     event TokenAvailabilityChanged(address indexed token, bool isAvailable);
     event MultisigExecutionPushed(uint256 indexed proposalId, address indexed pusher);
@@ -298,6 +299,7 @@ interface IDAO {
     function setVotingContract(address votingContract) external;
     function setAdmin(address newAdmin) external;
     function setIsVetoToCreator(bool value) external;
+    function setRoyaltyRecipient(address newRoyaltyRecipient) external;
     function setPendingUpgradeFromVoting(address newImplementation) external;
     function pushMultisigExecution(uint256 proposalId, IMultisig.ProposalCall[] calldata calls) external;
 
