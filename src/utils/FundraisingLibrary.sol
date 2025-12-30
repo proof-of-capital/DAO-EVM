@@ -275,6 +275,8 @@ library FundraisingLibrary {
         require(amount > 0, AmountMustBeGreaterThanZero());
         require(amount >= fundraisingConfig.minDeposit, DepositBelowMinimum());
 
+        IERC20(mainCollateral).safeTransferFrom(msg.sender, address(this), amount);
+
         if (vaultId == 0) {
             vaultId = vaultStorage.addressToVaultId[msg.sender];
         }
@@ -313,8 +315,6 @@ library FundraisingLibrary {
         vault.mainCollateralDeposit += amount;
         vaultStorage.vaults[vaultId] = vault;
 
-        IERC20(mainCollateral).safeTransferFrom(msg.sender, address(this), amount);
-
         emit FundraisingDeposit(vaultId, msg.sender, amount, shares);
     }
 
@@ -349,6 +349,7 @@ library FundraisingLibrary {
             vaultId = vaultStorage.addressToVaultId[msg.sender];
         }
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+        IERC20(launchToken).safeTransferFrom(msg.sender, address(this), launchAmount);
 
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
 
@@ -394,7 +395,6 @@ library FundraisingLibrary {
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
         vaultStorage.vaults[vaultId] = vault;
 
-        IERC20(launchToken).safeTransferFrom(msg.sender, address(this), launchAmount);
         daoState.totalLaunchBalance += launchAmount;
         accountedBalance[launchToken] += launchAmount;
 
