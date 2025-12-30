@@ -205,23 +205,5 @@ library Orderbook {
         orderbookParams.cachedBaseVolumeAtLevel = currentBaseVolume;
         orderbookParams.currentTotalSold = orderbookParams.totalSold;
     }
-
-    /// @notice Get current price based on orderbook state
-    /// @dev Returns cached price at current level, which is updated on each sale
-    /// @param orderbookParams Orderbook parameters from storage
-    /// @return Current price in USD (18 decimals)
-    function getCurrentPrice(
-        DataTypes.OrderbookParams storage orderbookParams,
-        uint256,
-        /* totalShares */
-        uint256 /* sharePrice */
-    )
-        internal
-        view
-        returns (uint256)
-    {
-        require(orderbookParams.initialPrice > 0, OrderbookNotInitialized());
-        return orderbookParams.cachedPriceAtLevel;
-    }
 }
 

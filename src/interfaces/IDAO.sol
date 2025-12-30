@@ -249,7 +249,6 @@ interface IDAO {
         DataTypes.SwapType swapType,
         bytes calldata swapData
     ) external;
-    function getCurrentPrice() external view returns (uint256);
     function getCollateralPrice(address collateral) external view returns (uint256);
 
     // ============================================

@@ -471,12 +471,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         );
     }
 
-    /// @notice Get current price based on orderbook state
-    /// @return Current price in USD (18 decimals)
-    function getCurrentPrice() public view returns (uint256) {
-        return Orderbook.getCurrentPrice(orderbookParams, vaultStorage.totalSharesSupply, fundraisingConfig.sharePrice);
-    }
-
     /// @notice Get total launch tokens sold
     /// @return Total amount of launch tokens sold
     function totalLaunchTokensSold() external view returns (uint256) {
