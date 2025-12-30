@@ -390,7 +390,6 @@ library DataTypes {
     /// @notice Storage structure for DAO state
     struct DAOState {
         Stage currentStage;
-        uint256 totalLaunchBalance;
         uint256 sharePriceInLaunches;
         address royaltyRecipient;
         uint256 royaltyPercent;

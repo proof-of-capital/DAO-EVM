@@ -141,7 +141,6 @@ library POCLibrary {
 
         pocContracts[pocIdx] = poc;
 
-        daoState.totalLaunchBalance += launchReceived;
         accountedBalance[launchToken] += launchReceived;
 
         emit POCExchangeCompleted(pocIdx, poc.pocContract, collateralAmountForPOC, collateralAmount, launchReceived);

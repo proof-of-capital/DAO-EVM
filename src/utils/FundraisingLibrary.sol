@@ -51,7 +51,7 @@ library FundraisingLibrary {
     event RewardTokenAdded(address indexed token, address indexed priceFeed);
     event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
     event FundraisingWithdrawal(uint256 indexed vaultId, address indexed sender, uint256 mainCollateralAmount);
-    event ExchangeFinalized(uint256 totalLaunchBalance, uint256 sharePriceInLaunches, uint256 infraLaunches);
+    event ExchangeFinalized(uint256 accountedLaunchBalance, uint256 sharePriceInLaunches, uint256 infraLaunches);
     event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
     event FundraisingDeposit(uint256 indexed vaultId, address indexed depositor, uint256 amount, uint256 shares);
     event LaunchDeposit(
@@ -220,19 +220,18 @@ library FundraisingLibrary {
 
         require(totalSharesSupply > 0, NoSharesIssued());
         daoState.sharePriceInLaunches =
-            (daoState.totalLaunchBalance * Constants.PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
+            (accountedBalance[launchToken] * Constants.PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
 
-        uint256 infraLaunches = (daoState.totalLaunchBalance * creatorInfraPercent) / Constants.BASIS_POINTS;
+        uint256 infraLaunches = (accountedBalance[launchToken] * creatorInfraPercent) / Constants.BASIS_POINTS;
         if (infraLaunches > 0) {
             IERC20(launchToken).safeTransfer(creator, infraLaunches);
             accountedBalance[address(launchToken)] -= infraLaunches;
         }
 
-        daoState.totalLaunchBalance -= infraLaunches;
         DataTypes.Stage oldStage = daoState.currentStage;
         daoState.currentStage = DataTypes.Stage.WaitingForLP;
 
-        emit ExchangeFinalized(daoState.totalLaunchBalance, daoState.sharePriceInLaunches, infraLaunches);
+        emit ExchangeFinalized(accountedBalance[launchToken], daoState.sharePriceInLaunches, infraLaunches);
         emit StageChanged(oldStage, daoState.currentStage);
     }
 
@@ -378,7 +377,6 @@ library FundraisingLibrary {
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
         vaultStorage.vaults[vaultId] = vault;
 
-        daoState.totalLaunchBalance += launchAmount;
         accountedBalance[launchToken] += launchAmount;
 
         emit LaunchDeposit(vaultId, msg.sender, launchAmount, shares, launchPriceUSD);

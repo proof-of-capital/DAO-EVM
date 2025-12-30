@@ -50,7 +50,7 @@ library CreatorLibrary {
         require(launchAmount > 0, AmountMustBeGreaterThanZero());
 
         uint256 maxAllocation =
-            (daoState.totalLaunchBalance * Constants.MAX_CREATOR_ALLOCATION_PERCENT) / Constants.BASIS_POINTS;
+            (accountedBalance[launchToken] * Constants.MAX_CREATOR_ALLOCATION_PERCENT) / Constants.BASIS_POINTS;
         require(launchAmount <= maxAllocation, ExceedsMaxAllocation());
 
         require(daoState.sharePriceInLaunches > 0, InvalidSharePrice());
@@ -71,7 +71,6 @@ library CreatorLibrary {
         daoState.creatorProfitPercent = newCreatorProfitPercent;
 
         IERC20(launchToken).safeTransfer(creator, launchAmount);
-        daoState.totalLaunchBalance -= launchAmount;
         accountedBalance[launchToken] -= launchAmount;
         daoState.lastCreatorAllocation = block.timestamp;
 

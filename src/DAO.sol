@@ -181,7 +181,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         creator = params.creator;
         creatorInfraPercent = params.creatorInfraPercent;
         daoState.currentStage = DataTypes.Stage.Fundraising;
-        daoState.totalLaunchBalance = 0;
         daoState.sharePriceInLaunches = 0;
         daoState.creator = params.creator;
         daoState.creatorProfitPercent = params.creatorProfitPercent;
