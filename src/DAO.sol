@@ -659,7 +659,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Executes a call to targetContract with callData on behalf of DAO
     /// @param targetContract Target contract address
     /// @param callData Encoded call data
-    function executeProposal(address targetContract, bytes calldata callData) external {
+    function executeProposal(address targetContract, bytes calldata callData) external atStage(DataTypes.Stage.Active) {
         require(msg.sender == address(votingContract), OnlyVotingContract());
         require(targetContract != address(0), InvalidAddress());
         Address.functionCall(targetContract, callData);
@@ -788,7 +788,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Token must be a sellable collateral (from POC contracts)
     /// @param token Token address to distribute
     /// @param amount Amount to distribute (0 means distribute all unaccounted)
-    function distributeProfit(address token, uint256 amount) external nonReentrant {
+    function distributeProfit(address token, uint256 amount) external nonReentrant atActiveOrClosingStage {
         ProfitDistributionLibrary.executeDistributeProfit(
             daoState,
             rewardsStorage,
