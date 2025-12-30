@@ -714,18 +714,16 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     }
 
     /// @notice Set pending upgrade address (only voting contract can call)
-    /// @param newImplementation Address of the new implementation to approve
+    /// @param newImplementation Address of the new implementation to approve (address(0) to cancel)
     function setPendingUpgradeFromVoting(address newImplementation) external onlyVoting {
-        require(newImplementation != address(0), InvalidAddress());
         pendingUpgradeFromVoting = newImplementation;
         pendingUpgradeFromVotingTimestamp = block.timestamp;
         emit PendingUpgradeSetFromVoting(newImplementation);
     }
 
     /// @notice Set pending upgrade address (only creator can call)
-    /// @param newImplementation Address of the new implementation to approve
+    /// @param newImplementation Address of the new implementation to approve (address(0) to cancel)
     function setPendingUpgradeFromCreator(address newImplementation) external onlyCreator {
-        require(newImplementation != address(0), InvalidAddress());
         pendingUpgradeFromCreator = newImplementation;
         emit PendingUpgradeSetFromCreator(newImplementation);
     }
