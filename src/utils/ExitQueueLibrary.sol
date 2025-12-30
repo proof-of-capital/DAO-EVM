@@ -77,6 +77,7 @@ library ExitQueueLibrary {
         IVoting(votingContract).updateVotesForVault(vaultId, -int256(vaultShares));
 
         uint256 launchPriceNow = getOraclePrice(launchToken);
+        exitQueueStorage.vaultExitRequestIndex[vaultId] = exitQueueStorage.exitQueue.length;
 
         exitQueueStorage.exitQueue
             .push(
@@ -87,8 +88,6 @@ library ExitQueueLibrary {
                     processed: false
                 })
             );
-
-        exitQueueStorage.vaultExitRequestIndex[vaultId] = exitQueueStorage.exitQueue.length;
 
         daoState.totalExitQueueShares += vault.shares;
 
@@ -374,7 +373,7 @@ library ExitQueueLibrary {
         uint256 exitRequestIndex = exitQueueStorage.vaultExitRequestIndex[vaultId];
         require(exitRequestIndex != 0, NotInExitQueue());
 
-        uint256 arrayIndex = exitRequestIndex - 1;
+        uint256 arrayIndex = exitRequestIndex;
         DataTypes.ExitRequest memory request = exitQueueStorage.exitQueue[arrayIndex];
         require(!request.processed, NotInExitQueue());
 
