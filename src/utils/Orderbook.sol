@@ -138,26 +138,23 @@ library Orderbook {
         uint256 totalShares,
         uint256 sharePrice
     ) internal {
-        uint256 proportionalityCoefficient = orderbookParams.proportionalityCoefficient; // КП in basis points (7500 = 0.75)
-        uint256 totalSupply = orderbookParams.totalSupply; // С - total supply
-        uint256 priceStepPercent = orderbookParams.priceStepPercent; // ШПЦ in basis points (500 = 5%)
-        int256 volumeStepPercent = orderbookParams.volumeStepPercent; // ШПРУ in basis points (-100 = -1%)
+        uint256 proportionalityCoefficient = orderbookParams.proportionalityCoefficient; // in basis points (7500 = 0.75)
+        uint256 totalSupply = orderbookParams.totalSupply; // total supply
+        uint256 priceStepPercent = orderbookParams.priceStepPercent; // in basis points (500 = 5%)
+        int256 volumeStepPercent = orderbookParams.volumeStepPercent; // in basis points (-100 = -1%)
 
         // Current level state
         uint256 currentLevel = orderbookParams.currentLevel;
-        uint256 cumulativeVolume = orderbookParams.currentCumulativeVolume;
-        uint256 currentPrice = orderbookParams.cachedPriceAtLevel; // ЦУ - price at current level
-        uint256 currentBaseVolume = orderbookParams.cachedBaseVolumeAtLevel; // ТРУ - base volume at current level
+        uint256 currentPrice = orderbookParams.cachedPriceAtLevel; // price at current level
+        uint256 currentBaseVolume = orderbookParams.cachedBaseVolumeAtLevel; // base volume at current level
 
         // Track expected USD and remaining tokens to process
         uint256 expectedUsd = 0;
         uint256 remainingTokens = launchTokenAmount;
 
-        uint256 totalSoldBeforeSale = orderbookParams.totalSold - launchTokenAmount;
-        uint256 soldOnCurrentLevel = totalSoldBeforeSale > cumulativeVolume ? totalSoldBeforeSale - cumulativeVolume : 0;
-
+        uint256 soldOnCurrentLevel = orderbookParams.currentCumulativeVolume;
         while (remainingTokens > 0) {
-            // Calculate adjusted level volume: вТРУ = ТРУ * КП * КШ * СШ / С
+            // Calculate adjusted level volume
             // All values need to be scaled properly:
             // - currentBaseVolume is in token units (18 decimals)
             // - proportionalityCoefficient is in basis points (10000 = 100%)
@@ -180,13 +177,12 @@ library Orderbook {
                 }
 
                 currentLevel += 1;
-                cumulativeVolume += adjustedLevelVolume;
                 soldOnCurrentLevel = 0;
 
-                // Update price: ЦУ1 = ЦУ0 * (1 + ШПЦ) = ЦУ0 * (10000 + priceStepPercent) / 10000
+                // Update price: price1 = price0 * (1 + priceStepPercent) = price0 * (10000 + priceStepPercent) / 10000
                 currentPrice = (currentPrice * (Constants.BASIS_POINTS + priceStepPercent)) / Constants.BASIS_POINTS;
 
-                // Update base volume: ТРУ1 = ТРУ0 * (1 + ШПРУ)
+                // Update base volume: volume1 = volume0 * (1 + volumeStepPercent)
                 // Note: volumeStepPercent can be negative
                 if (volumeStepPercent >= 0) {
                     currentBaseVolume = (currentBaseVolume * (Constants.BASIS_POINTS + uint256(volumeStepPercent)))
@@ -204,7 +200,7 @@ library Orderbook {
         );
 
         orderbookParams.currentLevel = currentLevel;
-        orderbookParams.currentCumulativeVolume = cumulativeVolume;
+        orderbookParams.currentCumulativeVolume = soldOnCurrentLevel;
         orderbookParams.cachedPriceAtLevel = currentPrice;
         orderbookParams.cachedBaseVolumeAtLevel = currentBaseVolume;
         orderbookParams.currentTotalSold = orderbookParams.totalSold;
