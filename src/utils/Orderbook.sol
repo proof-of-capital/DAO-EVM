@@ -165,8 +165,8 @@ library Orderbook {
             // - proportionalityCoefficient is in basis points (10000 = 100%)
             // - sharePrice is in USD (18 decimals)
             // - totalSupply is in token units (18 decimals)
-            uint256 adjustedLevelVolume = (currentBaseVolume * proportionalityCoefficient * totalShares * sharePrice)
-                / (totalSupply * Constants.BASIS_POINTS * Constants.PRICE_DECIMALS_MULTIPLIER);
+            uint256 adjustedLevelVolume = currentBaseVolume * proportionalityCoefficient * totalShares
+                / (totalSupply * Constants.BASIS_POINTS) * sharePrice / Constants.PRICE_DECIMALS_MULTIPLIER;
 
             uint256 tokensRemainingOnLevel =
                 adjustedLevelVolume > soldOnCurrentLevel ? adjustedLevelVolume - soldOnCurrentLevel : 0;
