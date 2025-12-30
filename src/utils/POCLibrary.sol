@@ -181,8 +181,7 @@ library POCLibrary {
 
         require(totalSharesSupply > 0, NoShares());
 
-        uint256 daoProfitPercent =
-            Constants.BASIS_POINTS - daoState.creatorProfitPercent - daoState.royaltyPercent;
+        uint256 daoProfitPercent = Constants.BASIS_POINTS - daoState.creatorProfitPercent - daoState.royaltyPercent;
 
         profitPercentEquivalent = (sharesEquivalent * daoProfitPercent) / totalSharesSupply;
 
@@ -191,7 +190,8 @@ library POCLibrary {
 
         if (newDaoProfitPercent < Constants.MIN_DAO_PROFIT_SHARE) {
             newDaoProfitPercent = Constants.MIN_DAO_PROFIT_SHARE;
-            profitPercentEquivalent = ((daoProfitPercent - newDaoProfitPercent) * Constants.BASIS_POINTS) / daoProfitPercent;
+            profitPercentEquivalent =
+                ((daoProfitPercent - newDaoProfitPercent) * Constants.BASIS_POINTS) / daoProfitPercent;
         }
 
         uint256 newCreatorProfitPercent = Constants.BASIS_POINTS - newDaoProfitPercent - daoState.royaltyPercent;

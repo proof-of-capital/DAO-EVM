@@ -60,8 +60,7 @@ library CreatorLibrary {
 
         require(totalSharesSupply > 0, NoShares());
 
-        uint256 daoProfitPercent =
-            Constants.BASIS_POINTS - daoState.creatorProfitPercent - daoState.royaltyPercent;
+        uint256 daoProfitPercent = Constants.BASIS_POINTS - daoState.creatorProfitPercent - daoState.royaltyPercent;
 
         uint256 profitPercentEquivalent = (sharesEquivalent * daoProfitPercent) / totalSharesSupply;
 

@@ -434,7 +434,13 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param launchAmount Amount of launch tokens to allocate
     function allocateLaunchesToCreator(uint256 launchAmount) external onlyVoting atStage(DataTypes.Stage.Active) {
         CreatorLibrary.executeAllocateLaunchesToCreator(
-            daoState, fundraisingConfig, accountedBalance, address(launchToken), creator, vaultStorage.totalSharesSupply, launchAmount
+            daoState,
+            fundraisingConfig,
+            accountedBalance,
+            address(launchToken),
+            creator,
+            vaultStorage.totalSharesSupply,
+            launchAmount
         );
     }
 
@@ -677,11 +683,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param amount Amount of launch tokens to return
     function upgradeOwnerShare(uint256 amount) external {
         POCLibrary.executeUpgradeOwnerShare(
-            isPocContract,
-            daoState,
-            fundraisingConfig.sharePrice,
-            vaultStorage.totalSharesSupply,
-            amount
+            isPocContract, daoState, fundraisingConfig.sharePrice, vaultStorage.totalSharesSupply, amount
         );
     }
 
