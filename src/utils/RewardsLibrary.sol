@@ -8,12 +8,13 @@
 
 // https://github.com/proof-of-capital/DAO-EVM
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
+import "./VaultLibrary.sol";
 
 /// @title RewardsLibrary
 /// @notice Library for managing rewards system
@@ -30,25 +31,23 @@ library RewardsLibrary {
     /// @param rewardsStorage Rewards storage structure
     /// @param lpTokenStorage LP token storage structure
     /// @param accountedBalance Accounted balance mapping
-    /// @param sender Sender address
     /// @param tokens Array of token addresses to claim
     function executeClaimReward(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.RewardsStorage storage rewardsStorage,
         DataTypes.LPTokenStorage storage lpTokenStorage,
         mapping(address => uint256) storage accountedBalance,
-        address sender,
         address[] calldata tokens
     ) external {
-        uint256 vaultId = vaultStorage.addressToVaultId[sender];
-        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(vault.primary == sender, OnlyPrimaryCanClaim());
+        require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
 
         executeUpdateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
 
-        for (uint256 i = 0; i < tokens.length; i++) {
+        for (uint256 i = 0; i < tokens.length; ++i) {
             address token = tokens[i];
             uint256 rewards = rewardsStorage.earnedRewards[vaultId][token];
 
@@ -56,13 +55,13 @@ library RewardsLibrary {
                 rewardsStorage.earnedRewards[vaultId][token] = 0;
                 accountedBalance[token] -= rewards;
 
-                IERC20(token).safeTransfer(sender, rewards);
+                IERC20(token).safeTransfer(msg.sender, rewards);
 
                 emit RewardClaimed(vaultId, token, rewards);
             }
         }
 
-        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; i++) {
+        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; ++i) {
             address lpToken = lpTokenStorage.v2LPTokens[i];
             uint256 rewards = rewardsStorage.earnedRewards[vaultId][lpToken];
 
@@ -70,7 +69,7 @@ library RewardsLibrary {
                 rewardsStorage.earnedRewards[vaultId][lpToken] = 0;
                 accountedBalance[lpToken] -= rewards;
 
-                IERC20(lpToken).safeTransfer(sender, rewards);
+                IERC20(lpToken).safeTransfer(msg.sender, rewards);
 
                 emit RewardClaimed(vaultId, lpToken, rewards);
             }
@@ -89,9 +88,8 @@ library RewardsLibrary {
         uint256 vaultId
     ) internal {
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
-        if (vault.shares == 0) return;
 
-        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; i++) {
+        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; ++i) {
             address rewardToken = rewardsStorage.rewardTokens[i];
             if (rewardsStorage.rewardTokenInfo[rewardToken].active) {
                 uint256 pending = calculatePendingRewards(vaultStorage, rewardsStorage, vaultId, rewardToken);
@@ -104,7 +102,7 @@ library RewardsLibrary {
             }
         }
 
-        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; i++) {
+        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; ++i) {
             address lpToken = lpTokenStorage.v2LPTokens[i];
             uint256 pending = calculatePendingRewards(vaultStorage, rewardsStorage, vaultId, lpToken);
 

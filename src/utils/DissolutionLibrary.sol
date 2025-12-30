@@ -8,7 +8,7 @@
 
 // https://github.com/proof-of-capital/DAO-EVM
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -32,6 +32,7 @@ library DissolutionLibrary {
     error InvalidAddress();
     error NoRewardsToClaim();
     error InvalidStage();
+    error TokenNotActive();
 
     event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
     event CreatorDissolutionClaimed(address indexed creator, uint256 launchAmount);
@@ -51,7 +52,7 @@ library DissolutionLibrary {
     ) external {
         require(pocContracts.length > 0, NoPOCContractsConfigured());
 
-        for (uint256 i = 0; i < pocContracts.length; i++) {
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
             DataTypes.POCInfo storage poc = pocContracts[i];
 
             if (poc.active) {
@@ -88,7 +89,7 @@ library DissolutionLibrary {
         );
         require(pocContracts.length > 0, NoPOCContractsConfigured());
 
-        for (uint256 i = 0; i < pocContracts.length; i++) {
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
             DataTypes.POCInfo storage poc = pocContracts[i];
 
             if (poc.active) {
@@ -121,32 +122,27 @@ library DissolutionLibrary {
         address launchToken,
         address[] calldata tokens
     ) external returns (uint256 shares) {
-        address sender = msg.sender;
-        uint256 vaultId = vaultStorage.addressToVaultId[sender];
-        require(vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(vault.primary == sender, OnlyPrimaryCanClaim());
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
+        require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
         require(vault.shares > 0, NoSharesToClaim());
 
         shares = vault.shares;
         vault.shares = 0;
 
-        uint256 vaultDepositedUSD = vaultStorage.vaultDepositedUSD[vaultId];
+        uint256 vaultDepositedUSD = vault.depositedUSD;
         require(daoState.totalDepositedUSD > 0 || vaultStorage.totalSharesSupply > 0, NoSharesToClaim());
 
-        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, -int256(shares));
-
-        for (uint256 i = 0; i < tokens.length; i++) {
+        for (uint256 i = 0; i < tokens.length; ++i) {
             address token = tokens[i];
             require(token != address(0), InvalidAddress());
 
             uint256 tokenBalance = IERC20(token).balanceOf(address(this));
             if (tokenBalance == 0) continue;
 
-            bool isValidToken = token == address(launchToken) || rewardsStorage.rewardTokenInfo[token].active;
-
-            require(isValidToken, InvalidAddress());
+            require(rewardsStorage.rewardTokenInfo[token].active && token != address(launchToken), TokenNotActive());
 
             uint256 tokenShare;
             if (daoState.totalDepositedUSD > 0 && vaultDepositedUSD > 0) {
@@ -156,18 +152,18 @@ library DissolutionLibrary {
             }
 
             if (tokenShare > 0) {
-                IERC20(token).safeTransfer(sender, tokenShare);
-                if (token == address(launchToken)) {
-                    accountedBalance[address(launchToken)] -= tokenShare;
-                }
+                IERC20(token).safeTransfer(msg.sender, tokenShare);
+                accountedBalance[token] -= tokenShare;
             }
         }
 
         vaultStorage.totalSharesSupply -= shares;
         if (vaultDepositedUSD > 0) {
             daoState.totalDepositedUSD -= vaultDepositedUSD;
-            vaultStorage.vaultDepositedUSD[vaultId] = 0;
+            vault.depositedUSD = 0;
         }
+
+        vaultStorage.vaults[vaultId] = vault;
     }
 
     /// @notice Claim creator's share of launch tokens during dissolution
@@ -204,7 +200,7 @@ library DissolutionLibrary {
         address launchToken
     ) external {
         uint256 v2Length = lpTokenStorage.v2LPTokens.length;
-        for (uint256 i = 0; i < v2Length; i++) {
+        for (uint256 i = 0; i < v2Length; ++i) {
             address lpToken = lpTokenStorage.v2LPTokens[i];
             if (accountedBalance[lpToken] > 0) {
                 (uint256 amount0, uint256 amount1) =
@@ -214,7 +210,7 @@ library DissolutionLibrary {
         }
 
         uint256 v3Length = lpTokenStorage.v3LPPositions.length;
-        for (uint256 i = 0; i < v3Length; i++) {
+        for (uint256 i = 0; i < v3Length; ++i) {
             uint256 tokenId = lpTokenStorage.v3LPPositions[i].tokenId;
             DataTypes.V3LPPositionInfo memory positionInfo = lpTokenStorage.v3LPPositions[i];
             INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
@@ -229,35 +225,8 @@ library DissolutionLibrary {
         delete lpTokenStorage.v2LPTokens;
         delete lpTokenStorage.v3LPPositions;
 
-        executeSyncAllTokenBalances(rewardsStorage, accountedBalance, launchToken);
-
         daoState.currentStage = DataTypes.Stage.Dissolved;
         emit StageChanged(DataTypes.Stage.WaitingForLPDissolution, DataTypes.Stage.Dissolved);
-    }
-
-    /// @notice Sync accountedBalance for all reward tokens and launch token with actual contract balances
-    /// @param rewardsStorage Rewards storage structure
-    /// @param accountedBalance Accounted balance mapping
-    /// @param launchToken Launch token address
-    function executeSyncAllTokenBalances(
-        DataTypes.RewardsStorage storage rewardsStorage,
-        mapping(address => uint256) storage accountedBalance,
-        address launchToken
-    ) public {
-        uint256 launchTokenBalance = IERC20(launchToken).balanceOf(address(this));
-        if (launchTokenBalance > accountedBalance[launchToken]) {
-            accountedBalance[launchToken] = launchTokenBalance;
-        }
-
-        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; i++) {
-            address token = rewardsStorage.rewardTokens[i];
-            if (rewardsStorage.rewardTokenInfo[token].active) {
-                uint256 actualBalance = IERC20(token).balanceOf(address(this));
-                if (actualBalance > accountedBalance[token]) {
-                    accountedBalance[token] = actualBalance;
-                }
-            }
-        }
     }
 }
 

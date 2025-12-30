@@ -8,7 +8,7 @@
 
 // https://github.com/proof-of-capital/DAO-EVM
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -230,13 +230,13 @@ library LPTokenLibrary {
         DataTypes.LPTokenStorage storage lpTokenStorage,
         mapping(address => uint256) storage accountedBalance
     ) external view returns (bool) {
-        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; i++) {
+        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; ++i) {
             if (accountedBalance[lpTokenStorage.v2LPTokens[i]] > 0) {
                 return true;
             }
         }
 
-        for (uint256 i = 0; i < lpTokenStorage.v3LPPositions.length; i++) {
+        for (uint256 i = 0; i < lpTokenStorage.v3LPPositions.length; ++i) {
             uint256 tokenId = lpTokenStorage.v3LPPositions[i].tokenId;
             INonfungiblePositionManager positionManager =
                 INonfungiblePositionManager(lpTokenStorage.v3LPPositions[i].positionManager);
@@ -255,23 +255,21 @@ library LPTokenLibrary {
     /// @param totalSharesSupply Total shares supply
     /// @param lpTokenOrTokenId LP token address (V2) or token ID (V3)
     /// @param lpType Type of LP token (V2 or V3)
-    /// @param distributeProfit Function to distribute profit for a token
     function executeDistributeLPProfit(
         DataTypes.LPTokenStorage storage lpTokenStorage,
         mapping(address => uint256) storage accountedBalance,
         uint256 totalSharesSupply,
         address lpTokenOrTokenId,
-        DataTypes.LPTokenType lpType,
-        function(address) external distributeProfit
+        DataTypes.LPTokenType lpType
     ) external {
         require(totalSharesSupply > 0, NoShares());
 
         if (lpType == DataTypes.LPTokenType.V2) {
             address lpToken = lpTokenOrTokenId;
-            distributeV2LPProfit(lpTokenStorage, accountedBalance, lpToken, distributeProfit);
+            distributeV2LPProfit(lpTokenStorage, accountedBalance, lpToken);
         } else if (lpType == DataTypes.LPTokenType.V3) {
             uint256 tokenId = uint256(uint160(lpTokenOrTokenId));
-            distributeV3LPProfit(lpTokenStorage, tokenId, distributeProfit);
+            distributeV3LPProfit(lpTokenStorage, tokenId);
         } else {
             revert InvalidAddress();
         }
@@ -281,13 +279,11 @@ library LPTokenLibrary {
     /// @param lpTokenStorage LP token storage structure
     /// @param accountedBalance Accounted balance mapping
     /// @param lpToken LP token address
-    /// @param distributeProfit Function to distribute profit for a token
     /// @return toDistribute Amount distributed
     function distributeV2LPProfit(
         DataTypes.LPTokenStorage storage lpTokenStorage,
         mapping(address => uint256) storage accountedBalance,
-        address lpToken,
-        function(address) external distributeProfit
+        address lpToken
     ) internal returns (uint256 toDistribute) {
         require(lpTokenStorage.isV2LPToken[lpToken], NotLPToken());
         require(
@@ -301,8 +297,6 @@ library LPTokenLibrary {
         toDistribute = (lpBalance * Constants.LP_DISTRIBUTION_PERCENT) / Constants.BASIS_POINTS;
         require(toDistribute > 0, NoProfitToDistribute());
 
-        distributeProfit(lpToken);
-
         lpTokenStorage.lastLPDistribution[lpToken] = block.timestamp;
 
         emit LPProfitDistributed(lpToken, toDistribute);
@@ -311,14 +305,12 @@ library LPTokenLibrary {
     /// @notice Distribute 1% of V3 LP position as profit (monthly)
     /// @param lpTokenStorage LP token storage structure
     /// @param tokenId NFT token ID
-    /// @param distributeProfit Function to distribute profit for a token
     /// @return collected0 Amount of token0 collected
     /// @return collected1 Amount of token1 collected
-    function distributeV3LPProfit(
-        DataTypes.LPTokenStorage storage lpTokenStorage,
-        uint256 tokenId,
-        function(address) external distributeProfit
-    ) internal returns (uint256 collected0, uint256 collected1) {
+    function distributeV3LPProfit(DataTypes.LPTokenStorage storage lpTokenStorage, uint256 tokenId)
+        internal
+        returns (uint256 collected0, uint256 collected1)
+    {
         require(lpTokenStorage.v3TokenIdToIndex[tokenId] > 0, NotLPToken());
         require(
             block.timestamp >= lpTokenStorage.v3LastLPDistribution[tokenId] + Constants.LP_DISTRIBUTION_PERIOD,
@@ -339,13 +331,6 @@ library LPTokenLibrary {
 
         (collected0, collected1) = collectV3Tokens(lpTokenStorage, tokenId);
 
-        if (collected0 > 0) {
-            distributeProfit(positionInfo.token0);
-        }
-        if (collected1 > 0) {
-            distributeProfit(positionInfo.token1);
-        }
-
         lpTokenStorage.v3LastLPDistribution[tokenId] = block.timestamp;
 
         emit V3LiquidityDecreased(tokenId, liquidityToDecrease, collected0, collected1);
@@ -355,24 +340,43 @@ library LPTokenLibrary {
     /// @param lpTokenStorage LP token storage structure
     /// @param rewardsStorage Rewards storage structure
     /// @param daoState DAO state storage
+    /// @param pricePathsStorage Price paths storage structure
     /// @param accountedBalance Accounted balance mapping
     /// @param v2LPTokenAddresses Array of V2 LP token addresses
     /// @param v2LPAmounts Array of V2 LP token amounts to deposit
     /// @param v3TokenIds Array of V3 LP position token IDs
+    /// @param newV2PricePaths Array of new V2 price paths to add
+    /// @param newV3PricePaths Array of new V3 price paths to add
     /// @param primaryLPTokenType Primary LP token type
     function executeProvideLPTokens(
         DataTypes.LPTokenStorage storage lpTokenStorage,
         DataTypes.RewardsStorage storage rewardsStorage,
         DataTypes.DAOState storage daoState,
+        DataTypes.PricePathsStorage storage pricePathsStorage,
         mapping(address => uint256) storage accountedBalance,
         address[] calldata v2LPTokenAddresses,
         uint256[] calldata v2LPAmounts,
         uint256[] calldata v3TokenIds,
+        DataTypes.PricePathV2Params[] calldata newV2PricePaths,
+        DataTypes.PricePathV3Params[] calldata newV3PricePaths,
         DataTypes.LPTokenType primaryLPTokenType
     ) external returns (uint256 activeStageTimestamp) {
-        address sender = msg.sender;
         require(v2LPTokenAddresses.length == v2LPAmounts.length, InvalidAddresses());
         require(v2LPTokenAddresses.length > 0 || v3TokenIds.length > 0, InvalidAddress());
+
+        for (uint256 i = 0; i < newV2PricePaths.length; ++i) {
+            if (newV2PricePaths[i].router != address(0) && newV2PricePaths[i].path.length >= 2) {
+                pricePathsStorage.v2Paths
+                    .push(DataTypes.PricePathV2({router: newV2PricePaths[i].router, path: newV2PricePaths[i].path}));
+            }
+        }
+
+        for (uint256 i = 0; i < newV3PricePaths.length; ++i) {
+            if (newV3PricePaths[i].quoter != address(0) && newV3PricePaths[i].path.length >= 43) {
+                pricePathsStorage.v3Paths
+                    .push(DataTypes.PricePathV3({quoter: newV3PricePaths[i].quoter, path: newV3PricePaths[i].path}));
+            }
+        }
 
         if (primaryLPTokenType == DataTypes.LPTokenType.V2) {
             require(v2LPTokenAddresses.length > 0, InvalidAddress());
@@ -380,14 +384,14 @@ library LPTokenLibrary {
             require(v3TokenIds.length > 0, InvalidAddress());
         }
 
-        for (uint256 i = 0; i < v2LPTokenAddresses.length; i++) {
+        for (uint256 i = 0; i < v2LPTokenAddresses.length; ++i) {
             address lpToken = v2LPTokenAddresses[i];
             uint256 lpAmount = v2LPAmounts[i];
 
             require(lpToken != address(0), InvalidAddress());
             require(lpAmount > 0, AmountMustBeGreaterThanZero());
 
-            IERC20(lpToken).safeTransferFrom(sender, address(this), lpAmount);
+            IERC20(lpToken).safeTransferFrom(msg.sender, address(this), lpAmount);
 
             if (!lpTokenStorage.isV2LPToken[lpToken]) {
                 lpTokenStorage.v2LPTokens.push(lpToken);
@@ -403,7 +407,7 @@ library LPTokenLibrary {
         if (v3TokenIds.length > 0) {
             require(lpTokenStorage.v3PositionManager != address(0), InvalidAddress());
 
-            for (uint256 i = 0; i < v3TokenIds.length; i++) {
+            for (uint256 i = 0; i < v3TokenIds.length; ++i) {
                 uint256 tokenId = v3TokenIds[i];
                 require(lpTokenStorage.v3TokenIdToIndex[tokenId] == 0, TokenAlreadyAdded());
 

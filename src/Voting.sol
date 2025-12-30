@@ -27,7 +27,7 @@
 // All royalties collected are automatically used to repurchase the project's core token, as
 // specified on the website, and are returned to the contract.
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 import "./interfaces/IVoting.sol";
 import "./interfaces/IDAO.sol";
@@ -143,7 +143,7 @@ contract Voting is IVoting {
         if (vaultId > 0) {
             DataTypes.Vault memory vault = dao.vaults(vaultId);
             require(
-                isAdminUser || isCreator || vault.shares >= Constants.BOARD_MEMBER_MIN_SHARES,
+                isAdminUser || isCreator || vault.votingShares >= Constants.BOARD_MEMBER_MIN_SHARES,
                 InsufficientSharesToCreateProposal()
             );
             require(
@@ -211,7 +211,7 @@ contract Voting is IVoting {
         require(block.timestamp < proposal.endTime, VotingEnded());
         require(!proposal.executed, ProposalAlreadyExecuted());
 
-        DataTypes.DAOState memory daoState = dao.daoState();
+        DataTypes.DAOState memory daoState = dao.getDaoState();
         require(daoState.currentStage != DataTypes.Stage.Closing, VotingNotAllowedInClosing());
 
         uint256 vaultId = dao.addressToVaultId(msg.sender);
@@ -219,7 +219,6 @@ contract Voting is IVoting {
         DataTypes.Vault memory vault = dao.vaults(vaultId);
         require(vault.shares > 0, NoVotingPower());
         require(vault.primary == msg.sender, OnlyPrimaryCanVote());
-        require(block.timestamp >= vault.votingPausedUntil, VotingIsPaused());
         require(!hasVotedMapping[proposalId][vaultId], AlreadyVoted());
 
         require(!dao.isVaultInExitQueue(vaultId), VaultInExitQueue());
@@ -348,7 +347,7 @@ contract Voting is IVoting {
         }
 
         uint256 totalShares = dao.totalSharesSupply();
-        uint256 exitQueueShares = dao.daoState().totalExitQueueShares;
+        uint256 exitQueueShares = dao.getDaoState().totalExitQueueShares;
 
         uint256 adjustedForVotes = proposal.forVotes;
         uint256 adjustedAgainstVotes = proposal.againstVotes;
@@ -652,7 +651,7 @@ contract Voting is IVoting {
         }
 
         bytes memory data = new bytes(callData.length - 4);
-        for (uint256 i = 4; i < callData.length; i++) {
+        for (uint256 i = 4; i < callData.length; ++i) {
             data[i - 4] = callData[i];
         }
 

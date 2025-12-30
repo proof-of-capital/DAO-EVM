@@ -7,7 +7,7 @@
 // (c) 2025 https://proofofcapital.org/
 
 // https://github.com/proof-of-capital/DAO-EVM
-pragma solidity ^0.8.29;
+pragma solidity ^0.8.33;
 
 import {IMultiAdminSingleHolderAccessControl} from "./interfaces/IMultiAdminSingleHolderAccessControl.sol";
 import {IPausable} from "./interfaces/IPausable.sol";
@@ -104,8 +104,6 @@ contract Multisig is IMultisig {
         _;
     }
 
-    receive() external payable {}
-
     constructor(
         address[] memory _primaryAddrs,
         address[] memory _backupAddrs,
@@ -127,7 +125,7 @@ contract Multisig is IMultisig {
 
         uint8[8] memory shares = [20, 20, 15, 15, 15, 5, 5, 5];
 
-        for (uint256 i = 0; i < _primaryAddrs.length; i++) {
+        for (uint256 i = 0; i < _primaryAddrs.length; ++i) {
             require(_primaryAddrs[i] != address(0), InvalidPrimaryAddress());
             require(_backupAddrs[i] != address(0), InvalidBackupAddress());
             require(_emergencyAddrs[i] != address(0), InvalidEmergencyAddress());
@@ -174,7 +172,7 @@ contract Multisig is IMultisig {
         multisigStage = MultisigStage.Inactive;
         newMarketMaker = _newMarketMaker;
 
-        for (uint256 i = 0; i < _collateralParams.length; i++) {
+        for (uint256 i = 0; i < _collateralParams.length; ++i) {
             require(_collateralParams[i].token != address(0), InvalidCollateralAddress());
             require(_collateralParams[i].router != address(0), InvalidRouterAddress());
             require(_collateralParams[i].router == _uniswapV3Router, InvalidRouterAddress());
@@ -190,6 +188,8 @@ contract Multisig is IMultisig {
             });
         }
     }
+
+    receive() external payable {}
 
     /// @inheritdoc IMultisig
     function submitTransaction(ProposalCall[] calldata calls)
@@ -207,12 +207,12 @@ contract Multisig is IMultisig {
         VotingType votingType = _determineVotingType(calls);
 
         if (votingType == VotingType.TRANSFER_OWNERSHIP) {
-            DataTypes.DAOState memory daoState = dao.daoState();
+            DataTypes.DAOState memory daoState = dao.getDaoState();
             bool isDissolvedOrCancelled = daoState.currentStage == DataTypes.Stage.Dissolved
                 || daoState.currentStage == DataTypes.Stage.FundraisingCancelled;
 
             if (!isDissolvedOrCancelled) {
-                for (uint256 i = 0; i < calls.length; i++) {
+                for (uint256 i = 0; i < calls.length; ++i) {
                     require(!isVetoListContract[calls[i].targetContract], TransferOwnershipNotAllowedForVetoContract());
                 }
             }
@@ -304,12 +304,12 @@ contract Multisig is IMultisig {
         Transaction storage txn = transactions[txId];
 
         if (txn.votingType == VotingType.TRANSFER_OWNERSHIP) {
-            DataTypes.DAOState memory daoState = dao.daoState();
+            DataTypes.DAOState memory daoState = dao.getDaoState();
             bool isDissolvedOrCancelled = daoState.currentStage == DataTypes.Stage.Dissolved
                 || daoState.currentStage == DataTypes.Stage.FundraisingCancelled;
 
             if (!isDissolvedOrCancelled) {
-                for (uint256 i = 0; i < calls.length; i++) {
+                for (uint256 i = 0; i < calls.length; ++i) {
                     require(!isVetoListContract[calls[i].targetContract], TransferOwnershipNotAllowedForVetoContract());
                 }
             }
@@ -349,7 +349,7 @@ contract Multisig is IMultisig {
 
         txn.status = TransactionStatus.EXECUTED;
 
-        for (uint256 i = 0; i < calls.length; i++) {
+        for (uint256 i = 0; i < calls.length; ++i) {
             (bool success,) = calls[i].targetContract.call{value: calls[i].value}(calls[i].callData);
             if (!success) {
                 txn.status = TransactionStatus.FAILED;
@@ -693,7 +693,7 @@ contract Multisig is IMultisig {
     }
 
     function _determineVotingType(ProposalCall[] calldata calls) internal pure returns (VotingType) {
-        for (uint256 i = 0; i < calls.length; i++) {
+        for (uint256 i = 0; i < calls.length; ++i) {
             if (calls[i].callData.length < 4) {
                 continue;
             }
@@ -721,7 +721,7 @@ contract Multisig is IMultisig {
 
     function _checkDAOStageForVetoContracts(ProposalCall[] calldata calls) internal view {
         bool hasVetoContract = false;
-        for (uint256 i = 0; i < calls.length; i++) {
+        for (uint256 i = 0; i < calls.length; ++i) {
             if (isVetoListContract[calls[i].targetContract]) {
                 hasVetoContract = true;
                 break;
@@ -730,7 +730,7 @@ contract Multisig is IMultisig {
 
         if (hasVetoContract) {
             require(!dao.isVetoToCreator(), InvalidDAOStage());
-            DataTypes.DAOState memory daoState = dao.daoState();
+            DataTypes.DAOState memory daoState = dao.getDaoState();
             require(
                 daoState.currentStage == DataTypes.Stage.Active || daoState.currentStage == DataTypes.Stage.Dissolved,
                 InvalidDAOStage()
@@ -758,7 +758,7 @@ contract Multisig is IMultisig {
         address mainCollateral = dao.mainCollateral();
 
         uint256 collateralPrice = _getChainlinkPrice(collateralInfo.priceFeed);
-        
+
         CollateralInfo storage mainCollateralInfo = collaterals[mainCollateral];
         require(mainCollateralInfo.active, InvalidCollateralAddress());
         uint256 mainCollateralPrice = _getChainlinkPrice(mainCollateralInfo.priceFeed);
@@ -829,12 +829,15 @@ contract Multisig is IMultisig {
         uint256[] memory v3TokenIds = new uint256[](1);
         v3TokenIds[0] = tokenId;
 
-        dao.provideLPTokens(emptyV2Addresses, emptyV2Amounts, v3TokenIds);
+        DataTypes.PricePathV2Params[] memory emptyV2Paths = new DataTypes.PricePathV2Params[](0);
+        DataTypes.PricePathV3Params[] memory emptyV3Paths = new DataTypes.PricePathV3Params[](0);
+
+        dao.provideLPTokens(emptyV2Addresses, emptyV2Amounts, v3TokenIds, emptyV2Paths, emptyV3Paths);
 
         uint256 pocContractsCount = dao.getPOCContractsCount();
         uint256 newLockTimestamp = block.timestamp + Constants.LP_EXTEND_LOCK_PERIOD;
 
-        for (uint256 i = 0; i < pocContractsCount; i++) {
+        for (uint256 i = 0; i < pocContractsCount; ++i) {
             DataTypes.POCInfo memory pocInfo = dao.getPOCContract(i);
             if (pocInfo.active) {
                 IProofOfCapital pocContract = IProofOfCapital(pocInfo.pocContract);
@@ -854,7 +857,7 @@ contract Multisig is IMultisig {
             CannotEnterNonWorkingStage()
         );
 
-        DataTypes.DAOState memory daoState = dao.daoState();
+        DataTypes.DAOState memory daoState = dao.getDaoState();
         require(daoState.currentStage != DataTypes.Stage.Active, CannotEnterNonWorkingStage());
 
         MultisigStage oldStage = multisigStage;
@@ -880,8 +883,9 @@ contract Multisig is IMultisig {
     /// @return Price in USD (18 decimals)
     function _getChainlinkPrice(address priceFeed) internal view returns (uint256) {
         IAggregatorV3 aggregator = IAggregatorV3(priceFeed);
-        (, int256 price,,,) = aggregator.latestRoundData();
+        (, int256 price,, uint256 updatedAt,) = aggregator.latestRoundData();
         require(price > 0, InvalidPrice());
+        require(block.timestamp - updatedAt <= Constants.ORACLE_MAX_AGE, StalePrice());
 
         uint8 decimals = aggregator.decimals();
 

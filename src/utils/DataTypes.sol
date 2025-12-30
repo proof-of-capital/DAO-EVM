@@ -27,7 +27,7 @@
 // All royalties collected are automatically used to repurchase the project's core token, as
 // specified on the website, and are returned to the contract.
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 /// @title DataTypes
 /// @notice Library containing all data structures and enums for DAO system
@@ -103,9 +103,12 @@ library DataTypes {
         address emergency; // Emergency address for critical operations
         uint256 shares; // Amount of shares owned
         uint256 votingPausedUntil; // Timestamp until which voting is paused
-        address delegate; // Delegate address for voting (if zero, primary is delegate)
+        uint256 delegateId; // Delegate vault ID for voting (0 means self-delegation)
         uint256 delegateSetAt; // Timestamp when delegate was set
         uint256 votingShares; // Voting shares amount
+        uint256 mainCollateralDeposit; // Main collateral deposit amount
+        uint256 depositedUSD; // Deposited amount in USD
+        uint256 depositLimit; // Deposit limit in shares
     }
 
     // ============================================
@@ -148,7 +151,6 @@ library DataTypes {
         address collateral; // Collateral token address
         uint256 launchTokenAmount; // Amount of launch tokens to sell
         uint256 minCollateralAmount; // Minimum collateral to receive (slippage protection)
-        address seller; // Seller address
         address router; // Router address for swap (if swapType != None)
         SwapType swapType; // Type of swap to execute
         bytes swapData; // Encoded swap parameters
@@ -202,6 +204,8 @@ library DataTypes {
         uint256 minLaunchDeposit; // Minimum launch token deposit (18 decimals), e.g., 10000e18 = 10k launches
         uint256 sharePrice; // Fixed share price in USD (18 decimals)
         uint256 launchPrice; // Fixed launch token price in USD (18 decimals)
+        uint256 sharePriceStart; // Share price in launches after exchange finalized (18 decimals)
+        uint256 launchPriceStart; // Launch token price (oracle) at exchange finalization (18 decimals)
         uint256 targetAmountMainCollateral; // Target fundraising amount in main collateral (18 decimals)
         uint256 deadline; // Fundraising deadline timestamp
         uint256 extensionPeriod; // Extension period in seconds (if deadline missed)
@@ -249,6 +253,41 @@ library DataTypes {
     struct V3LPPositionParams {
         address positionManager; // Address of NonfungiblePositionManager
         uint256 tokenId; // NFT token ID of the position
+    }
+
+    // ============================================
+    // PRICE VALIDATION STRUCTURES
+    // ============================================
+
+    /// @notice V2 price path for pool price queries
+    struct PricePathV2 {
+        address router; // V2 Router address
+        address[] path; // Token path [tokenA, tokenB, ...]
+    }
+
+    /// @notice V3 price path for pool price queries
+    struct PricePathV3 {
+        address quoter; // QuoterV2 address
+        bytes path; // Encoded path (tokenIn, fee, tokenOut, fee, ...)
+    }
+
+    /// @notice V2 price path parameters for constructor (with fixed array workaround)
+    struct PricePathV2Params {
+        address router; // V2 Router address
+        address[] path; // Token path [tokenA, tokenB, ...]
+    }
+
+    /// @notice V3 price path parameters for constructor
+    struct PricePathV3Params {
+        address quoter; // QuoterV2 address
+        bytes path; // Encoded path (tokenIn, fee, tokenOut, fee, ...)
+    }
+
+    /// @notice Token price paths configuration
+    struct TokenPricePathsParams {
+        PricePathV2Params[] v2Paths; // Array of V2 paths
+        PricePathV3Params[] v3Paths; // Array of V3 paths
+        uint256 minLiquidity; // Minimum liquidity threshold (in launch tokens)
     }
 
     // ============================================
@@ -304,6 +343,9 @@ library DataTypes {
         OrderbookConstructorParams orderbookParams;
         LPTokenType primaryLPTokenType; // Primary LP token type (if specified, must be provided)
         V3LPPositionParams[] v3LPPositions; // V3 LP positions for initialization (optional)
+        address[] allowedExitTokens; // Tokens allowed for exit payments (global list)
+        TokenPricePathsParams launchTokenPricePaths; // Paths for launch token price validation
+        address votingContract; // Voting contract address (optional, can be set later)
     }
 
     // ============================================
@@ -314,11 +356,9 @@ library DataTypes {
     struct VaultStorage {
         mapping(uint256 => Vault) vaults;
         mapping(address => uint256) addressToVaultId;
-        mapping(uint256 => uint256) vaultMainCollateralDeposit;
-        mapping(uint256 => uint256) vaultDepositedUSD;
-        mapping(uint256 => uint256) vaultDepositLimit;
         uint256 nextVaultId;
         uint256 totalSharesSupply;
+        mapping(uint256 => mapping(address => bool)) vaultAllowedExitTokens; // Vault-specific allowed exit tokens
     }
 
     /// @notice Storage structure for Rewards system
@@ -353,8 +393,6 @@ library DataTypes {
     /// @notice Storage structure for DAO state
     struct DAOState {
         Stage currentStage;
-        uint256 totalLaunchBalance;
-        uint256 sharePriceInLaunches;
         address royaltyRecipient;
         uint256 royaltyPercent;
         address creator;
@@ -363,6 +401,14 @@ library DataTypes {
         uint256 lastCreatorAllocation;
         uint256 totalExitQueueShares;
         uint256 totalDepositedUSD;
+        uint256 lastPOCReturn;
+    }
+
+    /// @notice Storage structure for Price Paths
+    struct PricePathsStorage {
+        PricePathV2[] v2Paths; // Array of V2 paths
+        PricePathV3[] v3Paths; // Array of V3 paths
+        uint256 minLiquidity; // Minimum liquidity threshold (in launch tokens)
     }
 }
 

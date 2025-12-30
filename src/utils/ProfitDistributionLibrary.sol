@@ -8,7 +8,7 @@
 
 // https://github.com/proof-of-capital/DAO-EVM
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -40,8 +40,11 @@ library ProfitDistributionLibrary {
     /// @param accountedBalance Accounted balance mapping
     /// @param totalSharesSupply Total shares supply (will be updated)
     /// @param token Token address to distribute
-    /// @param getLaunchPriceFromPOC Function to get current launch price from POC
+    /// @param launchToken Launch token address
     /// @param getOraclePrice Function to get token price in USD
+    /// @param allowedExitTokens Global mapping of allowed exit tokens
+    /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
+    /// @param amount Amount to distribute (0 means distribute all unaccounted)
     /// @return newTotalSharesSupply Updated total shares supply
     function executeDistributeProfit(
         DataTypes.DAOState storage daoState,
@@ -54,8 +57,11 @@ library ProfitDistributionLibrary {
         mapping(address => uint256) storage accountedBalance,
         uint256 totalSharesSupply,
         address token,
-        function() external view returns (uint256) getLaunchPriceFromPOC,
-        function(address) external view returns (uint256) getOraclePrice
+        address launchToken,
+        function(address) external returns (uint256) getOraclePrice,
+        mapping(address => bool) storage allowedExitTokens,
+        mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens,
+        uint256 amount
     ) external returns (uint256 newTotalSharesSupply) {
         require(vaultStorage.totalSharesSupply > 0, NoShares());
         require(rewardsStorage.rewardTokenInfo[token].active || lpTokenStorage.isV2LPToken[token], TokenNotAdded());
@@ -63,14 +69,22 @@ library ProfitDistributionLibrary {
         newTotalSharesSupply = totalSharesSupply;
         uint256 unaccounted = IERC20(token).balanceOf(address(this)) - accountedBalance[token];
         if (unaccounted == 0) {
-            vaultStorage.totalSharesSupply = newTotalSharesSupply;
             return newTotalSharesSupply;
         }
 
-        uint256 royaltyShare = distributeRoyaltyShare(daoState, token, unaccounted);
-        uint256 creatorShare = distributeCreatorShare(daoState, token, unaccounted);
+        uint256 amountToDistribute = amount == 0 ? unaccounted : amount;
+        if (amountToDistribute > unaccounted) {
+            amountToDistribute = unaccounted;
+        }
 
-        uint256 participantsShare = unaccounted - royaltyShare - creatorShare;
+        if (amountToDistribute == 0) {
+            return newTotalSharesSupply;
+        }
+
+        uint256 royaltyShare = distributeRoyaltyShare(daoState, token, amountToDistribute);
+        uint256 creatorShare = distributeCreatorShare(daoState, token, amountToDistribute);
+
+        uint256 participantsShare = amountToDistribute - royaltyShare - creatorShare;
         uint256 remainingForParticipants;
         (remainingForParticipants, newTotalSharesSupply) = distributeToParticipants(
             daoState,
@@ -83,14 +97,16 @@ library ProfitDistributionLibrary {
             totalSharesSupply,
             token,
             participantsShare,
-            getLaunchPriceFromPOC,
-            getOraclePrice
+            launchToken,
+            getOraclePrice,
+            allowedExitTokens,
+            vaultAllowedExitTokens
         );
 
         accountedBalance[token] += remainingForParticipants;
         vaultStorage.totalSharesSupply = newTotalSharesSupply;
 
-        emit ProfitDistributed(token, unaccounted);
+        emit ProfitDistributed(token, amountToDistribute);
     }
 
     /// @notice Distribute royalty share
@@ -136,8 +152,10 @@ library ProfitDistributionLibrary {
     /// @param totalSharesSupply Total shares supply (will be updated)
     /// @param token Token address
     /// @param participantsShare Amount available for participants
-    /// @param getLaunchPriceFromPOC Function to get current launch price from POC
+    /// @param launchToken Launch token address
     /// @param getOraclePrice Function to get token price in USD
+    /// @param allowedExitTokens Global mapping of allowed exit tokens
+    /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
     /// @return remainingForParticipants Amount remaining after exit queue processing
     /// @return newTotalSharesSupply Updated total shares supply
     function distributeToParticipants(
@@ -151,16 +169,17 @@ library ProfitDistributionLibrary {
         uint256 totalSharesSupply,
         address token,
         uint256 participantsShare,
-        function() external view returns (uint256) getLaunchPriceFromPOC,
-        function(address) external view returns (uint256) getOraclePrice
+        address launchToken,
+        function(address) external returns (uint256) getOraclePrice,
+        mapping(address => bool) storage allowedExitTokens,
+        mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
     ) internal returns (uint256 remainingForParticipants, uint256 newTotalSharesSupply) {
         newTotalSharesSupply = totalSharesSupply;
         uint256 usedForExits = 0;
 
         if (
-            exitQueueStorage.exitQueue.length > 0 && !ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage)
-                && participantsShare > 0 && !lpTokenStorage.isV2LPToken[token]
-                && daoState.currentStage != DataTypes.Stage.Closing
+            !ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage) && participantsShare > 0
+                && !lpTokenStorage.isV2LPToken[token] && daoState.currentStage != DataTypes.Stage.Closing
         ) {
             uint256 balanceBefore = IERC20(token).balanceOf(address(this));
 
@@ -175,8 +194,10 @@ library ProfitDistributionLibrary {
                 totalSharesSupply,
                 availableFunds,
                 token,
-                getLaunchPriceFromPOC,
-                getOraclePrice
+                launchToken,
+                getOraclePrice,
+                allowedExitTokens,
+                vaultAllowedExitTokens
             );
 
             uint256 balanceAfter = IERC20(token).balanceOf(address(this));

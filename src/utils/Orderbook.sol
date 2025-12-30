@@ -27,7 +27,7 @@
 // All royalties collected are automatically used to repurchase the project's core token, as
 // specified on the website, and are returned to the contract.
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -46,6 +46,7 @@ library Orderbook {
     error SlippageExceeded();
     error OrderbookNotInitialized();
     error InvalidPrice();
+    error StalePrice();
     error InsufficientCollateralReceived(uint256 expected, uint256 received);
 
     event LaunchTokenSold(
@@ -94,8 +95,6 @@ library Orderbook {
         uint256 balanceAfter = IERC20(params.collateral).balanceOf(address(this));
         uint256 receivedCollateral = balanceAfter - balanceBefore;
 
-        accountedBalance[params.collateral] += receivedCollateral;
-
         uint256 receivedCollateralInUsd =
             (receivedCollateral * collateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
@@ -105,7 +104,7 @@ library Orderbook {
 
         updateCurrentLevel(orderbookParams, receivedCollateralInUsd, params.launchTokenAmount, totalShares, sharePrice);
 
-        emit LaunchTokenSold(params.seller, params.collateral, params.launchTokenAmount, receivedCollateral);
+        emit LaunchTokenSold(msg.sender, params.collateral, params.launchTokenAmount, receivedCollateral);
     }
 
     /// @notice Get collateral price from Chainlink oracle
@@ -113,8 +112,9 @@ library Orderbook {
     /// @return Price in USD (18 decimals)
     function getCollateralPrice(DataTypes.CollateralInfo storage collateralInfo) internal view returns (uint256) {
         IAggregatorV3 priceFeed = IAggregatorV3(collateralInfo.priceFeed);
-        (, int256 price,,,) = priceFeed.latestRoundData();
+        (, int256 price,, uint256 updatedAt,) = priceFeed.latestRoundData();
         require(price > 0, InvalidPrice());
+        require(block.timestamp - updatedAt <= Constants.ORACLE_MAX_AGE, StalePrice());
 
         uint8 decimals = priceFeed.decimals();
 
@@ -140,33 +140,30 @@ library Orderbook {
         uint256 totalShares,
         uint256 sharePrice
     ) internal {
-        uint256 proportionalityCoefficient = orderbookParams.proportionalityCoefficient; // КП in basis points (7500 = 0.75)
-        uint256 totalSupply = orderbookParams.totalSupply; // С - total supply
-        uint256 priceStepPercent = orderbookParams.priceStepPercent; // ШПЦ in basis points (500 = 5%)
-        int256 volumeStepPercent = orderbookParams.volumeStepPercent; // ШПРУ in basis points (-100 = -1%)
+        uint256 proportionalityCoefficient = orderbookParams.proportionalityCoefficient; // in basis points (7500 = 0.75)
+        uint256 totalSupply = orderbookParams.totalSupply; // total supply
+        uint256 priceStepPercent = orderbookParams.priceStepPercent; // in basis points (500 = 5%)
+        int256 volumeStepPercent = orderbookParams.volumeStepPercent; // in basis points (-100 = -1%)
 
         // Current level state
         uint256 currentLevel = orderbookParams.currentLevel;
-        uint256 cumulativeVolume = orderbookParams.currentCumulativeVolume;
-        uint256 currentPrice = orderbookParams.cachedPriceAtLevel; // ЦУ - price at current level
-        uint256 currentBaseVolume = orderbookParams.cachedBaseVolumeAtLevel; // ТРУ - base volume at current level
+        uint256 currentPrice = orderbookParams.cachedPriceAtLevel; // price at current level
+        uint256 currentBaseVolume = orderbookParams.cachedBaseVolumeAtLevel; // base volume at current level
 
         // Track expected USD and remaining tokens to process
         uint256 expectedUsd = 0;
         uint256 remainingTokens = launchTokenAmount;
 
-        uint256 totalSoldBeforeSale = orderbookParams.totalSold - launchTokenAmount;
-        uint256 soldOnCurrentLevel = totalSoldBeforeSale > cumulativeVolume ? totalSoldBeforeSale - cumulativeVolume : 0;
-
+        uint256 soldOnCurrentLevel = orderbookParams.currentCumulativeVolume;
         while (remainingTokens > 0) {
-            // Calculate adjusted level volume: вТРУ = ТРУ * КП * КШ * СШ / С
+            // Calculate adjusted level volume
             // All values need to be scaled properly:
             // - currentBaseVolume is in token units (18 decimals)
             // - proportionalityCoefficient is in basis points (10000 = 100%)
             // - sharePrice is in USD (18 decimals)
             // - totalSupply is in token units (18 decimals)
-            uint256 adjustedLevelVolume = (currentBaseVolume * proportionalityCoefficient * totalShares * sharePrice)
-                / (totalSupply * Constants.BASIS_POINTS * Constants.PRICE_DECIMALS_MULTIPLIER);
+            uint256 adjustedLevelVolume = currentBaseVolume * proportionalityCoefficient * totalShares
+                / (totalSupply * Constants.BASIS_POINTS) * sharePrice / Constants.PRICE_DECIMALS_MULTIPLIER;
 
             uint256 tokensRemainingOnLevel =
                 adjustedLevelVolume > soldOnCurrentLevel ? adjustedLevelVolume - soldOnCurrentLevel : 0;
@@ -182,13 +179,12 @@ library Orderbook {
                 }
 
                 currentLevel += 1;
-                cumulativeVolume += adjustedLevelVolume;
                 soldOnCurrentLevel = 0;
 
-                // Update price: ЦУ1 = ЦУ0 * (1 + ШПЦ) = ЦУ0 * (10000 + priceStepPercent) / 10000
+                // Update price: price1 = price0 * (1 + priceStepPercent) = price0 * (10000 + priceStepPercent) / 10000
                 currentPrice = (currentPrice * (Constants.BASIS_POINTS + priceStepPercent)) / Constants.BASIS_POINTS;
 
-                // Update base volume: ТРУ1 = ТРУ0 * (1 + ШПРУ)
+                // Update base volume: volume1 = volume0 * (1 + volumeStepPercent)
                 // Note: volumeStepPercent can be negative
                 if (volumeStepPercent >= 0) {
                     currentBaseVolume = (currentBaseVolume * (Constants.BASIS_POINTS + uint256(volumeStepPercent)))
@@ -206,28 +202,10 @@ library Orderbook {
         );
 
         orderbookParams.currentLevel = currentLevel;
-        orderbookParams.currentCumulativeVolume = cumulativeVolume;
+        orderbookParams.currentCumulativeVolume = soldOnCurrentLevel;
         orderbookParams.cachedPriceAtLevel = currentPrice;
         orderbookParams.cachedBaseVolumeAtLevel = currentBaseVolume;
         orderbookParams.currentTotalSold = orderbookParams.totalSold;
-    }
-
-    /// @notice Get current price based on orderbook state
-    /// @dev Returns cached price at current level, which is updated on each sale
-    /// @param orderbookParams Orderbook parameters from storage
-    /// @return Current price in USD (18 decimals)
-    function getCurrentPrice(
-        DataTypes.OrderbookParams storage orderbookParams,
-        uint256,
-        /* totalShares */
-        uint256 /* sharePrice */
-    )
-        internal
-        view
-        returns (uint256)
-    {
-        require(orderbookParams.initialPrice > 0, OrderbookNotInitialized());
-        return orderbookParams.cachedPriceAtLevel;
     }
 }
 

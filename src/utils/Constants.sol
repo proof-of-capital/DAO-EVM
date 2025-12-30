@@ -27,7 +27,7 @@
 // All royalties collected are automatically used to repurchase the project's core token, as
 // specified on the website, and are returned to the contract.
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 /// @title Constants
 /// @notice Library containing all constants used across the DAO system
@@ -61,6 +61,18 @@ library Constants {
     uint256 public constant CLOSING_EXIT_QUEUE_THRESHOLD = 5000; // 50% in basis points
     uint256 public constant MIN_DAO_PROFIT_SHARE = 2500; // 25% in basis points
     uint256 public constant CLOSING_EXIT_QUEUE_MIN_THRESHOLD = 3000; // 30% in basis points
+    uint256 public constant MAX_POC_CONTRACTS = 30;
+    uint256 public constant POC_RETURN_PERIOD = 30 days;
+    uint256 public constant POC_RETURN_MAX_PERCENT = 200; // 2% in basis points
+
+    // ============================================
+    // PRICE VALIDATION CONSTANTS
+    // ============================================
+
+    uint256 public constant MAX_PRICE_DEVIATION_BP = 500; // 5% max deviation allowed
+    uint256 public constant MIN_POOL_LIQUIDITY = 1000e18; // Min 1000 launch tokens in pool
+    uint256 public constant PRICE_QUOTE_AMOUNT = 1e18; // 1 token for price query
+    uint256 public constant ORACLE_MAX_AGE = 1 days; // Maximum age of oracle price data (24 hours)
 
     // ============================================
     // VOTING CONSTANTS

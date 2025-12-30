@@ -8,7 +8,7 @@
 
 // https://github.com/proof-of-capital/DAO-EVM
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -51,7 +51,7 @@ library FundraisingLibrary {
     event RewardTokenAdded(address indexed token, address indexed priceFeed);
     event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
     event FundraisingWithdrawal(uint256 indexed vaultId, address indexed sender, uint256 mainCollateralAmount);
-    event ExchangeFinalized(uint256 totalLaunchBalance, uint256 sharePriceInLaunches, uint256 infraLaunches);
+    event ExchangeFinalized(uint256 accountedLaunchBalance, uint256 sharePrice, uint256 infraLaunches);
     event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
     event FundraisingDeposit(uint256 indexed vaultId, address indexed depositor, uint256 amount, uint256 shares);
     event LaunchDeposit(
@@ -77,7 +77,7 @@ library FundraisingLibrary {
         DataTypes.POCConstructorParams[] memory pocParams
     ) external {
         uint256 totalPOCShare = 0;
-        for (uint256 i = 0; i < pocParams.length; i++) {
+        for (uint256 i = 0; i < pocParams.length; ++i) {
             DataTypes.POCConstructorParams memory poc = pocParams[i];
 
             require(poc.pocContract != address(0), InvalidAddress());
@@ -129,7 +129,7 @@ library FundraisingLibrary {
         DataTypes.RewardTokenConstructorParams[] memory rewardTokenParams,
         address launchToken
     ) external {
-        for (uint256 i = 0; i < rewardTokenParams.length; i++) {
+        for (uint256 i = 0; i < rewardTokenParams.length; ++i) {
             DataTypes.RewardTokenConstructorParams memory reward = rewardTokenParams[i];
 
             require(reward.token != address(0), InvalidAddress());
@@ -154,26 +154,20 @@ library FundraisingLibrary {
     /// @param vaultStorage Vault storage structure
     /// @param daoState DAO state storage structure
     /// @param participantEntries Mapping of participant entries
-    /// @param accountedBalance Mapping of accounted balances
     /// @param mainCollateral Main collateral token address
-    /// @param launchToken Launch token address
     /// @param totalSharesSupply Total shares supply
-    /// @param sender Sender address
     function executeWithdrawFundraising(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.DAOState storage daoState,
         mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
-        mapping(address => uint256) storage accountedBalance,
         address mainCollateral,
-        address launchToken,
-        uint256 totalSharesSupply,
-        address sender
+        uint256 totalSharesSupply
     ) external {
-        uint256 vaultId = vaultStorage.addressToVaultId[sender];
-        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(vault.primary == sender, OnlyPrimaryCanClaim());
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
+        require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
 
         uint256 shares = vault.shares;
         require(shares > 0, NoSharesToClaim());
@@ -182,74 +176,69 @@ library FundraisingLibrary {
         uint256 mainCollateralAmount = (daoState.totalCollectedMainCollateral * shares) / totalSharesSupply;
         require(mainCollateralAmount > 0, NoDepositToWithdraw());
 
-        uint256 launchTokenAmount = 0;
-        if (daoState.totalLaunchBalance > 0) {
-            launchTokenAmount = (daoState.totalLaunchBalance * shares) / totalSharesSupply;
-        }
-
         vault.shares = 0;
         vaultStorage.totalSharesSupply -= shares;
         daoState.totalCollectedMainCollateral -= mainCollateralAmount;
-        if (launchTokenAmount > 0) {
-            daoState.totalLaunchBalance -= launchTokenAmount;
-        }
 
         DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
         entry.depositedMainCollateral = 0;
-        vaultStorage.vaultMainCollateralDeposit[vaultId] = 0;
+        vault.mainCollateralDeposit = 0;
 
-        uint256 vaultDepositedUSD = vaultStorage.vaultDepositedUSD[vaultId];
+        uint256 vaultDepositedUSD = vault.depositedUSD;
         if (vaultDepositedUSD > 0) {
             daoState.totalDepositedUSD -= vaultDepositedUSD;
-            vaultStorage.vaultDepositedUSD[vaultId] = 0;
+            vault.depositedUSD = 0;
         }
 
-        IERC20(mainCollateral).safeTransfer(sender, mainCollateralAmount);
+        vaultStorage.vaults[vaultId] = vault;
 
-        if (launchTokenAmount > 0) {
-            accountedBalance[address(launchToken)] -= launchTokenAmount;
-            IERC20(launchToken).safeTransfer(sender, launchTokenAmount);
-        }
+        IERC20(mainCollateral).safeTransfer(msg.sender, mainCollateralAmount);
 
-        emit FundraisingWithdrawal(vaultId, sender, mainCollateralAmount);
+        emit FundraisingWithdrawal(vaultId, msg.sender, mainCollateralAmount);
     }
 
     /// @notice Finalize exchange process and calculate share price in launches
     /// @param pocContracts Array of POC contracts
     /// @param daoState DAO state storage
+    /// @param fundraisingConfig Fundraising configuration
     /// @param accountedBalance Mapping of accounted balances
     /// @param launchToken Launch token address
     /// @param creator Creator address
     /// @param creatorInfraPercent Creator infrastructure percent
     /// @param totalSharesSupply Total shares supply
+    /// @param getOraclePrice Function pointer to get oracle price for a token
     function executeFinalizeExchange(
         DataTypes.POCInfo[] storage pocContracts,
         DataTypes.DAOState storage daoState,
+        DataTypes.FundraisingConfig storage fundraisingConfig,
         mapping(address => uint256) storage accountedBalance,
         address launchToken,
         address creator,
         uint256 creatorInfraPercent,
-        uint256 totalSharesSupply
+        uint256 totalSharesSupply,
+        function(address) external returns (uint256) getOraclePrice
     ) external {
-        for (uint256 i = 0; i < pocContracts.length; i++) {
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
             require(pocContracts[i].exchanged, POCNotExchanged());
         }
 
         require(totalSharesSupply > 0, NoSharesIssued());
-        daoState.sharePriceInLaunches =
-            (daoState.totalLaunchBalance * Constants.PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
+        fundraisingConfig.sharePrice =
+            (accountedBalance[launchToken] * Constants.PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
 
-        uint256 infraLaunches = (daoState.totalLaunchBalance * creatorInfraPercent) / Constants.BASIS_POINTS;
+        fundraisingConfig.sharePriceStart = fundraisingConfig.sharePrice;
+        fundraisingConfig.launchPriceStart = getOraclePrice(launchToken);
+
+        uint256 infraLaunches = (accountedBalance[launchToken] * creatorInfraPercent) / Constants.BASIS_POINTS;
         if (infraLaunches > 0) {
             IERC20(launchToken).safeTransfer(creator, infraLaunches);
             accountedBalance[address(launchToken)] -= infraLaunches;
         }
 
-        daoState.totalLaunchBalance -= infraLaunches;
         DataTypes.Stage oldStage = daoState.currentStage;
         daoState.currentStage = DataTypes.Stage.WaitingForLP;
 
-        emit ExchangeFinalized(daoState.totalLaunchBalance, daoState.sharePriceInLaunches, infraLaunches);
+        emit ExchangeFinalized(accountedBalance[launchToken], fundraisingConfig.sharePrice, infraLaunches);
         emit StageChanged(oldStage, daoState.currentStage);
     }
 
@@ -262,6 +251,7 @@ library FundraisingLibrary {
     /// @param amount Amount of mainCollateral to deposit
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
     /// @param getOraclePrice Function pointer to get oracle price for a token
+    /// @param votingContract Address of voting contract to update votes in active proposals
     function executeDepositFundraising(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.DAOState storage daoState,
@@ -270,51 +260,53 @@ library FundraisingLibrary {
         address mainCollateral,
         uint256 amount,
         uint256 vaultId,
-        function(address) external view returns (uint256) getOraclePrice
+        function(address) external returns (uint256) getOraclePrice,
+        address votingContract
     ) external {
         require(amount > 0, AmountMustBeGreaterThanZero());
         require(amount >= fundraisingConfig.minDeposit, DepositBelowMinimum());
 
-        address sender = msg.sender;
-        if (vaultId == 0) {
-            vaultId = vaultStorage.addressToVaultId[sender];
-        }
-        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        IERC20(mainCollateral).safeTransferFrom(msg.sender, address(this), amount);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        if (vaultId == 0) {
+            vaultId = vaultStorage.addressToVaultId[msg.sender];
+        }
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
 
         uint256 shares = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         require(shares > 0, SharesCalculationFailed());
 
-        uint256 depositLimit = vaultStorage.vaultDepositLimit[vaultId];
+        uint256 depositLimit = vault.depositLimit;
         require(vault.shares + shares <= depositLimit, DepositLimitExceeded());
 
-        uint256 mainCollateralPriceUSD = getOraclePrice(mainCollateral);
+        uint256 mainCollateralPriceUSD = getOraclePrice(mainCollateral) / 2;
         uint256 usdDeposit = (amount * mainCollateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
-        DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
+        DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
         if (entry.entryTimestamp == 0) {
-            entry.fixedSharePrice = fundraisingConfig.sharePrice;
-            entry.fixedLaunchPrice = fundraisingConfig.launchPrice;
+            entry.fixedSharePrice = 0;
+            entry.fixedLaunchPrice = 0;
             entry.entryTimestamp = block.timestamp;
-            entry.weightedAvgSharePrice = entry.fixedSharePrice;
-            entry.weightedAvgLaunchPrice = entry.fixedLaunchPrice;
+            entry.weightedAvgSharePrice = 0;
+            entry.weightedAvgLaunchPrice = 0;
         }
         entry.depositedMainCollateral += amount;
+        participantEntries[vaultId] = entry;
 
         vault.shares += shares;
         vaultStorage.totalSharesSupply += shares;
         daoState.totalCollectedMainCollateral += amount;
-        vaultStorage.vaultDepositedUSD[vaultId] += usdDeposit;
+        vault.depositedUSD += usdDeposit;
         daoState.totalDepositedUSD += usdDeposit;
 
-        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
+        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares), votingContract);
 
-        vaultStorage.vaultMainCollateralDeposit[vaultId] += amount;
+        vault.mainCollateralDeposit += amount;
+        vaultStorage.vaults[vaultId] = vault;
 
-        IERC20(mainCollateral).safeTransferFrom(sender, address(this), amount);
-
-        emit FundraisingDeposit(vaultId, sender, amount, shares);
+        emit FundraisingDeposit(vaultId, msg.sender, amount, shares);
     }
 
     /// @notice Deposit launch tokens during active stage to receive shares
@@ -328,7 +320,8 @@ library FundraisingLibrary {
     /// @param launchToken Launch token address
     /// @param launchAmount Amount of launch tokens to deposit
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
-    /// @param getLaunchPriceFromPOC Function pointer to get launch price from POC
+    /// @param getOraclePrice Function pointer to get oracle price for a token
+    /// @param votingContract Address of voting contract to update votes in active proposals
     function executeDepositLaunches(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.DAOState storage daoState,
@@ -340,66 +333,65 @@ library FundraisingLibrary {
         address launchToken,
         uint256 launchAmount,
         uint256 vaultId,
-        function() external view returns (uint256) getLaunchPriceFromPOC
+        function(address) external returns (uint256) getOraclePrice,
+        address votingContract
     ) external {
         require(launchAmount >= fundraisingConfig.minLaunchDeposit, BelowMinLaunchDeposit());
 
-        address sender = msg.sender;
         if (vaultId == 0) {
-            vaultId = vaultStorage.addressToVaultId[sender];
+            vaultId = vaultStorage.addressToVaultId[msg.sender];
         }
-        require(vaultId > 0 && vaultId < vaultStorage.nextVaultId, NoVaultFound());
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+        IERC20(launchToken).safeTransferFrom(msg.sender, address(this), launchAmount);
 
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
 
-        uint256 launchPriceUSD = getLaunchPriceFromPOC();
+        uint256 launchPriceUSD = getOraclePrice(launchToken) / 2;
         require(launchPriceUSD > 0, InvalidPrice());
 
         uint256 shares = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         require(shares > 0, SharesCalculationFailed());
 
-        uint256 depositLimit = vaultStorage.vaultDepositLimit[vaultId];
+        uint256 depositLimit = vault.depositLimit;
         require(vault.shares + shares <= depositLimit, DepositLimitExceeded());
 
-        uint256 usdDeposit = (launchAmount * launchPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
+        uint256 usdDeposit = (shares * fundraisingConfig.sharePrice * launchPriceUSD)
+            / (Constants.PRICE_DECIMALS_MULTIPLIER * Constants.PRICE_DECIMALS_MULTIPLIER);
 
-        DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
+        DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
 
-        DataTypes.Vault storage vaultForAvg = vaultStorage.vaults[vaultId];
-        DataTypes.ParticipantEntry storage entryForAvg = participantEntries[vaultId];
-
-        if (vaultForAvg.shares == 0) {
-            entryForAvg.weightedAvgLaunchPrice = launchPriceUSD / 2;
-            entryForAvg.weightedAvgSharePrice = fundraisingConfig.sharePrice;
+        if (vault.shares == 0) {
+            entry.weightedAvgLaunchPrice = launchPriceUSD;
+            entry.weightedAvgSharePrice = fundraisingConfig.sharePrice;
         } else {
-            uint256 totalShares = vaultForAvg.shares + shares;
-            entryForAvg.weightedAvgLaunchPrice =
-                (entryForAvg.weightedAvgLaunchPrice * vaultForAvg.shares + (launchPriceUSD / 2) * shares) / totalShares;
-            entryForAvg.weightedAvgSharePrice =
-                (entryForAvg.weightedAvgSharePrice * vaultForAvg.shares + fundraisingConfig.sharePrice * shares)
-                    / totalShares;
+            uint256 totalShares = vault.shares + shares;
+            entry.weightedAvgLaunchPrice =
+                (entry.weightedAvgLaunchPrice * vault.shares + launchPriceUSD * shares) / totalShares;
+            entry.weightedAvgSharePrice =
+                (entry.weightedAvgSharePrice * vault.shares + fundraisingConfig.sharePrice * shares) / totalShares;
         }
 
         if (entry.entryTimestamp == 0) {
             entry.entryTimestamp = block.timestamp;
-            entry.fixedSharePrice = fundraisingConfig.sharePrice;
-            entry.fixedLaunchPrice = fundraisingConfig.launchPrice;
+            entry.fixedSharePrice = fundraisingConfig.sharePriceStart;
+            entry.fixedLaunchPrice = fundraisingConfig.launchPriceStart;
         }
+
+        participantEntries[vaultId] = entry;
 
         RewardsLibrary.executeUpdateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
 
         vault.shares += shares;
         vaultStorage.totalSharesSupply += shares;
-        vaultStorage.vaultDepositedUSD[vaultId] += usdDeposit;
+        vault.depositedUSD += usdDeposit;
         daoState.totalDepositedUSD += usdDeposit;
 
-        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
+        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares), votingContract);
+        vaultStorage.vaults[vaultId] = vault;
 
-        IERC20(launchToken).safeTransferFrom(sender, address(this), launchAmount);
-        daoState.totalLaunchBalance += launchAmount;
         accountedBalance[launchToken] += launchAmount;
 
-        emit LaunchDeposit(vaultId, sender, launchAmount, shares, launchPriceUSD);
+        emit LaunchDeposit(vaultId, msg.sender, launchAmount, shares, launchPriceUSD);
     }
 
     /// @notice Extend fundraising deadline (only once)

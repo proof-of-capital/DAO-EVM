@@ -8,7 +8,7 @@
 
 // https://github.com/proof-of-capital/DAO-EVM
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -38,6 +38,13 @@ library POCLibrary {
     error InvalidPercentage();
     error POCAlreadyExists();
     error TotalShareExceeds100Percent();
+    error MaxPOCContractsReached();
+    error POCIsActive();
+    error POCStillHasBalances();
+    error POCNotFound();
+    error POCReturnTooSoon();
+    error POCReturnExceedsMaxAmount();
+    error NoPOCContractsActive();
 
     event POCExchangeCompleted(
         uint256 indexed pocIdx,
@@ -48,13 +55,16 @@ library POCLibrary {
     );
     event CreatorLaunchesReturned(uint256 amount, uint256 profitPercentEquivalent, uint256 newCreatorProfitPercent);
     event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
+    event POCContractRemoved(address indexed pocContract);
     event SellableCollateralAdded(address indexed token, address indexed priceFeed);
+    event LaunchesReturnedToPOC(uint256 totalAmount, uint256 pocCount);
 
     /// @notice Exchange mainCollateral for launch tokens from a specific POC contract
     /// @param daoState DAO state storage structure
     /// @param pocContracts Array of POC contracts
     /// @param accountedBalance Mapping of accounted balances
     /// @param availableRouterByAdmin Mapping of available routers
+    /// @param sellableCollaterals Mapping of sellable collaterals
     /// @param mainCollateral Main collateral token address
     /// @param launchToken Launch token address
     /// @param totalCollectedMainCollateral Total collected main collateral
@@ -63,14 +73,13 @@ library POCLibrary {
     /// @param router Router address for swap (if collateral != mainCollateral)
     /// @param swapType Type of swap to execute
     /// @param swapData Encoded swap parameters
-    /// @param getOraclePrice Function pointer to get oracle price
-    /// @param getPOCCollateralPriceFunc Function pointer to get POC collateral price
     /// @return launchReceived Amount of launch tokens received
     function executeExchangeForPOC(
         DataTypes.DAOState storage daoState,
         DataTypes.POCInfo[] storage pocContracts,
         mapping(address => uint256) storage accountedBalance,
         mapping(address => bool) storage availableRouterByAdmin,
+        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
         address mainCollateral,
         address launchToken,
         uint256 totalCollectedMainCollateral,
@@ -78,13 +87,11 @@ library POCLibrary {
         uint256 amount,
         address router,
         DataTypes.SwapType swapType,
-        bytes calldata swapData,
-        function(address) external view returns (uint256) getOraclePrice,
-        function(uint256) external view returns (uint256) getPOCCollateralPriceFunc
+        bytes calldata swapData
     ) external returns (uint256 launchReceived) {
         require(pocIdx < pocContracts.length, InvalidPOCIndex());
 
-        DataTypes.POCInfo storage poc = pocContracts[pocIdx];
+        DataTypes.POCInfo memory poc = pocContracts[pocIdx];
         require(poc.active, POCNotActive());
         require(!poc.exchanged, POCAlreadyExchanged());
 
@@ -106,8 +113,8 @@ library POCLibrary {
             require(router != address(0), InvalidAddress());
             require(availableRouterByAdmin[router], RouterNotAvailable());
 
-            uint256 mainCollateralPrice = getOraclePrice(mainCollateral);
-            uint256 collateralPrice = getPOCCollateralPriceFunc(pocIdx);
+            uint256 mainCollateralPrice = OracleLibrary.getOraclePrice(sellableCollaterals, mainCollateral);
+            uint256 collateralPrice = OracleLibrary.getChainlinkPrice(poc.priceFeed);
 
             uint256 expectedCollateral = (collateralAmountForPOC * mainCollateralPrice) / collateralPrice;
 
@@ -141,54 +148,11 @@ library POCLibrary {
             poc.exchanged = true;
         }
 
-        daoState.totalLaunchBalance += launchReceived;
+        pocContracts[pocIdx] = poc;
+
         accountedBalance[launchToken] += launchReceived;
 
         emit POCExchangeCompleted(pocIdx, poc.pocContract, collateralAmountForPOC, collateralAmount, launchReceived);
-    }
-
-    /// @notice Get weighted average launch token price from all active POC contracts
-    /// @param pocContracts Array of POC contracts
-    /// @param getPOCCollateralPriceFunc Function pointer to get POC collateral price
-    /// @return Weighted average launch price in USD (18 decimals)
-    function getLaunchPriceFromPOC(
-        DataTypes.POCInfo[] storage pocContracts,
-        function(uint256) external view returns (uint256) getPOCCollateralPriceFunc
-    ) external view returns (uint256) {
-        uint256 totalWeightedPrice = 0;
-        uint256 totalSharePercent = 0;
-
-        for (uint256 i = 0; i < pocContracts.length; i++) {
-            DataTypes.POCInfo storage poc = pocContracts[i];
-
-            if (!poc.active) {
-                continue;
-            }
-
-            uint256 launchPriceInCollateral = IProofOfCapital(poc.pocContract).currentPrice();
-
-            if (launchPriceInCollateral == 0) {
-                continue;
-            }
-
-            uint256 collateralPriceUSD = getPOCCollateralPriceFunc(i);
-
-            if (collateralPriceUSD == 0) {
-                continue;
-            }
-
-            uint256 launchPriceUSD =
-                (launchPriceInCollateral * collateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
-
-            if (launchPriceUSD == 0) {
-                continue;
-            }
-
-            totalWeightedPrice += (launchPriceUSD * poc.sharePercent);
-            totalSharePercent += poc.sharePercent;
-        }
-
-        return totalWeightedPrice / totalSharePercent;
     }
 
     /// @notice Get POC collateral price from its oracle
@@ -207,43 +171,39 @@ library POCLibrary {
     /// @notice Return launch tokens from POC contract, restoring creator's profit share
     /// @param isPocContract Mapping to check if address is POC contract
     /// @param daoState DAO state storage
-    /// @param launchToken Launch token address
-    /// @param sharePriceInLaunches Share price in launches
+    /// @param sharePrice Share price
     /// @param totalSharesSupply Total shares supply
     /// @param amount Amount of launch tokens to return
     /// @return profitPercentEquivalent Profit percent equivalent returned
     function executeUpgradeOwnerShare(
         mapping(address => bool) storage isPocContract,
         DataTypes.DAOState storage daoState,
-        address launchToken,
-        uint256 sharePriceInLaunches,
+        uint256 sharePrice,
         uint256 totalSharesSupply,
         uint256 amount
     ) external returns (uint256 profitPercentEquivalent) {
-        address sender = msg.sender;
-        require(isPocContract[sender], OnlyPOCContract());
+        require(isPocContract[msg.sender], OnlyPOCContract());
         require(amount > 0, AmountMustBeGreaterThanZero());
 
-        IERC20(launchToken).safeTransferFrom(sender, address(this), amount);
-
-        require(sharePriceInLaunches > 0, InvalidSharePrice());
-        uint256 sharesEquivalent = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / sharePriceInLaunches;
+        require(sharePrice > 0, InvalidSharePrice());
+        uint256 sharesEquivalent = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / sharePrice;
 
         require(totalSharesSupply > 0, NoShares());
-        profitPercentEquivalent = (sharesEquivalent * Constants.BASIS_POINTS) / totalSharesSupply;
 
-        uint256 newCreatorProfitPercent = daoState.creatorProfitPercent + profitPercentEquivalent;
-        if (newCreatorProfitPercent > Constants.BASIS_POINTS) {
-            newCreatorProfitPercent = Constants.BASIS_POINTS;
-            profitPercentEquivalent = Constants.BASIS_POINTS - daoState.creatorProfitPercent;
+        uint256 daoProfitPercent = Constants.BASIS_POINTS - daoState.creatorProfitPercent - daoState.royaltyPercent;
+
+        profitPercentEquivalent = (sharesEquivalent * daoProfitPercent) / totalSharesSupply;
+
+        uint256 newDaoProfitPercent =
+            (daoProfitPercent * Constants.BASIS_POINTS) / (Constants.BASIS_POINTS + profitPercentEquivalent);
+
+        if (newDaoProfitPercent < Constants.MIN_DAO_PROFIT_SHARE) {
+            newDaoProfitPercent = Constants.MIN_DAO_PROFIT_SHARE;
+            profitPercentEquivalent =
+                ((daoProfitPercent - newDaoProfitPercent) * Constants.BASIS_POINTS) / daoProfitPercent;
         }
 
-        uint256 maxCreatorProfitPercent =
-            Constants.BASIS_POINTS - Constants.MIN_DAO_PROFIT_SHARE - daoState.royaltyPercent;
-        if (newCreatorProfitPercent > maxCreatorProfitPercent) {
-            newCreatorProfitPercent = maxCreatorProfitPercent;
-            profitPercentEquivalent = maxCreatorProfitPercent - daoState.creatorProfitPercent;
-        }
+        uint256 newCreatorProfitPercent = Constants.BASIS_POINTS - newDaoProfitPercent - daoState.royaltyPercent;
 
         daoState.creatorProfitPercent = newCreatorProfitPercent;
 
@@ -269,6 +229,7 @@ library POCLibrary {
         address priceFeed,
         uint256 sharePercent
     ) external {
+        require(pocContracts.length < Constants.MAX_POC_CONTRACTS, MaxPOCContractsReached());
         require(pocContract != address(0), InvalidAddress());
         require(collateralToken != address(0), InvalidAddress());
         require(priceFeed != address(0), InvalidAddress());
@@ -276,7 +237,7 @@ library POCLibrary {
         require(pocIndex[pocContract] == 0, POCAlreadyExists());
 
         uint256 totalShare = sharePercent;
-        for (uint256 i = 0; i < pocContracts.length; i++) {
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
             totalShare += pocContracts[i].sharePercent;
         }
         require(totalShare <= Constants.BASIS_POINTS, TotalShareExceeds100Percent());
@@ -303,6 +264,123 @@ library POCLibrary {
         isPocContract[pocContract] = true;
 
         emit POCContractAdded(pocContract, collateralToken, sharePercent);
+    }
+
+    /// @notice Remove an inactive POC contract from the list
+    /// @param pocContracts Array of POC contracts
+    /// @param pocIndex Mapping of POC contract address to index
+    /// @param isPocContract Mapping to check if address is POC contract
+    /// @param pocContract POC contract address to remove
+    function executeRemovePOCContract(
+        DataTypes.POCInfo[] storage pocContracts,
+        mapping(address => uint256) storage pocIndex,
+        mapping(address => bool) storage isPocContract,
+        address pocContract
+    ) external {
+        require(pocContract != address(0), InvalidAddress());
+        require(pocIndex[pocContract] != 0, POCNotFound());
+
+        IProofOfCapital poc = IProofOfCapital(pocContract);
+        require(!poc.isActive(), POCIsActive());
+        require(poc.launchBalance() == 0, POCStillHasBalances());
+        require(poc.contractCollateralBalance() == 0, POCStillHasBalances());
+
+        uint256 idx = pocIndex[pocContract] - 1;
+        uint256 lastIdx = pocContracts.length - 1;
+
+        if (idx != lastIdx) {
+            DataTypes.POCInfo storage lastPoc = pocContracts[lastIdx];
+            pocContracts[idx] = lastPoc;
+            pocIndex[lastPoc.pocContract] = idx + 1;
+        }
+
+        pocContracts.pop();
+        pocIndex[pocContract] = 0;
+        isPocContract[pocContract] = false;
+
+        emit POCContractRemoved(pocContract);
+    }
+
+    /// @notice Return launch tokens to POC contracts proportionally to their share percentages
+    /// @param pocContracts Array of POC contracts
+    /// @param daoState DAO state storage
+    /// @param accountedBalance Mapping of accounted balances
+    /// @param launchToken Launch token address
+    /// @param amount Total amount of launch tokens to return
+    function executeReturnLaunchesToPOC(
+        DataTypes.POCInfo[] storage pocContracts,
+        DataTypes.DAOState storage daoState,
+        mapping(address => uint256) storage accountedBalance,
+        address launchToken,
+        uint256 amount
+    ) external {
+        require(block.timestamp >= daoState.lastPOCReturn + Constants.POC_RETURN_PERIOD, POCReturnTooSoon());
+        require(amount > 0, AmountMustBeGreaterThanZero());
+
+        uint256 maxReturn = (accountedBalance[launchToken] * Constants.POC_RETURN_MAX_PERCENT) / Constants.BASIS_POINTS;
+        require(amount <= maxReturn, POCReturnExceedsMaxAmount());
+
+        uint256 totalActiveSharePercent = 0;
+        uint256 activePocCount = 0;
+
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
+            if (pocContracts[i].active) {
+                totalActiveSharePercent += pocContracts[i].sharePercent;
+                ++activePocCount;
+            }
+        }
+
+        require(activePocCount > 0, NoPOCContractsActive());
+
+        uint256 distributed = 0;
+
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
+            DataTypes.POCInfo storage poc = pocContracts[i];
+
+            if (!poc.active) {
+                continue;
+            }
+
+            uint256 pocAmount;
+            if (
+                i == pocContracts.length - 1 || (i < pocContracts.length - 1 && !_hasMoreActivePOC(pocContracts, i + 1))
+            ) {
+                pocAmount = amount - distributed;
+            } else {
+                pocAmount = (amount * poc.sharePercent) / totalActiveSharePercent;
+            }
+
+            if (pocAmount == 0) {
+                continue;
+            }
+
+            IERC20(launchToken).safeIncreaseAllowance(poc.pocContract, pocAmount);
+            IProofOfCapital(poc.pocContract).depositLaunch(pocAmount);
+
+            distributed += pocAmount;
+        }
+
+        accountedBalance[launchToken] -= distributed;
+        daoState.lastPOCReturn = block.timestamp;
+
+        emit LaunchesReturnedToPOC(distributed, activePocCount);
+    }
+
+    /// @notice Check if there are more active POC contracts after given index
+    /// @param pocContracts Array of POC contracts
+    /// @param startIdx Starting index to check from
+    /// @return hasMore True if there are more active POC contracts
+    function _hasMoreActivePOC(DataTypes.POCInfo[] storage pocContracts, uint256 startIdx)
+        private
+        view
+        returns (bool hasMore)
+    {
+        for (uint256 i = startIdx; i < pocContracts.length; ++i) {
+            if (pocContracts[i].active) {
+                return true;
+            }
+        }
+        return false;
     }
 }
 
