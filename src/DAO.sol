@@ -499,7 +499,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             address(launchToken),
             this.getOraclePrice,
             allowedExitTokens,
-            vaultStorage.vaultAllowedExitTokens
+            vaultStorage.vaultAllowedExitTokens,
+            0
         );
     }
 
@@ -792,7 +793,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Splits profit into: royalty (10%) -> creator (N%) -> DAO participants (90%-N%)
     /// @dev Token must be a sellable collateral (from POC contracts)
     /// @param token Token address to distribute
-    function distributeProfit(address token) external nonReentrant {
+    /// @param amount Amount to distribute (0 means distribute all unaccounted)
+    function distributeProfit(address token, uint256 amount) external nonReentrant {
         ProfitDistributionLibrary.executeDistributeProfit(
             daoState,
             rewardsStorage,
@@ -807,7 +809,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             address(launchToken),
             this.getOraclePrice,
             allowedExitTokens,
-            vaultStorage.vaultAllowedExitTokens
+            vaultStorage.vaultAllowedExitTokens,
+            amount
         );
     }
 
@@ -846,7 +849,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             address(launchToken),
             this.getOraclePrice,
             allowedExitTokens,
-            vaultStorage.vaultAllowedExitTokens
+            vaultStorage.vaultAllowedExitTokens,
+            0
         );
     }
 

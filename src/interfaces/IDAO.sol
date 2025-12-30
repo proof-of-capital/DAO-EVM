@@ -306,7 +306,7 @@ interface IDAO {
     // PROFIT DISTRIBUTION
     // ============================================
 
-    function distributeProfit(address token) external;
+    function distributeProfit(address token, uint256 amount) external;
     function distributeLPProfit(address lpTokenOrTokenId, DataTypes.LPTokenType lpType) external;
 
     // ============================================

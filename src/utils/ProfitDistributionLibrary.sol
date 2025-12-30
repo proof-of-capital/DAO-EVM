@@ -44,6 +44,7 @@ library ProfitDistributionLibrary {
     /// @param getOraclePrice Function to get token price in USD
     /// @param allowedExitTokens Global mapping of allowed exit tokens
     /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
+    /// @param amount Amount to distribute (0 means distribute all unaccounted)
     /// @return newTotalSharesSupply Updated total shares supply
     function executeDistributeProfit(
         DataTypes.DAOState storage daoState,
@@ -59,7 +60,8 @@ library ProfitDistributionLibrary {
         address launchToken,
         function(address) external returns (uint256) getOraclePrice,
         mapping(address => bool) storage allowedExitTokens,
-        mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
+        mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens,
+        uint256 amount
     ) external returns (uint256 newTotalSharesSupply) {
         require(vaultStorage.totalSharesSupply > 0, NoShares());
         require(rewardsStorage.rewardTokenInfo[token].active || lpTokenStorage.isV2LPToken[token], TokenNotAdded());
@@ -71,10 +73,20 @@ library ProfitDistributionLibrary {
             return newTotalSharesSupply;
         }
 
-        uint256 royaltyShare = distributeRoyaltyShare(daoState, token, unaccounted);
-        uint256 creatorShare = distributeCreatorShare(daoState, token, unaccounted);
+        uint256 amountToDistribute = amount == 0 ? unaccounted : amount;
+        if (amountToDistribute > unaccounted) {
+            amountToDistribute = unaccounted;
+        }
 
-        uint256 participantsShare = unaccounted - royaltyShare - creatorShare;
+        if (amountToDistribute == 0) {
+            vaultStorage.totalSharesSupply = newTotalSharesSupply;
+            return newTotalSharesSupply;
+        }
+
+        uint256 royaltyShare = distributeRoyaltyShare(daoState, token, amountToDistribute);
+        uint256 creatorShare = distributeCreatorShare(daoState, token, amountToDistribute);
+
+        uint256 participantsShare = amountToDistribute - royaltyShare - creatorShare;
         uint256 remainingForParticipants;
         (remainingForParticipants, newTotalSharesSupply) = distributeToParticipants(
             daoState,
@@ -96,7 +108,7 @@ library ProfitDistributionLibrary {
         accountedBalance[token] += remainingForParticipants;
         vaultStorage.totalSharesSupply = newTotalSharesSupply;
 
-        emit ProfitDistributed(token, unaccounted);
+        emit ProfitDistributed(token, amountToDistribute);
     }
 
     /// @notice Distribute royalty share
