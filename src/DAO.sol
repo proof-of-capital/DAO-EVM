@@ -597,6 +597,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             pocContracts,
             accountedBalance,
             availableRouterByAdmin,
+            sellableCollaterals,
             mainCollateral,
             address(launchToken),
             _daoState.totalCollectedMainCollateral,
@@ -604,9 +605,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             amount,
             router,
             swapType,
-            swapData,
-            this.getOraclePrice,
-            this.getPOCCollateralPrice
+            swapData
         );
     }
 

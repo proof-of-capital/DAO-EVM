@@ -55,6 +55,7 @@ library POCLibrary {
     /// @param pocContracts Array of POC contracts
     /// @param accountedBalance Mapping of accounted balances
     /// @param availableRouterByAdmin Mapping of available routers
+    /// @param sellableCollaterals Mapping of sellable collaterals
     /// @param mainCollateral Main collateral token address
     /// @param launchToken Launch token address
     /// @param totalCollectedMainCollateral Total collected main collateral
@@ -63,14 +64,13 @@ library POCLibrary {
     /// @param router Router address for swap (if collateral != mainCollateral)
     /// @param swapType Type of swap to execute
     /// @param swapData Encoded swap parameters
-    /// @param getOraclePrice Function pointer to get oracle price
-    /// @param getPOCCollateralPriceFunc Function pointer to get POC collateral price
     /// @return launchReceived Amount of launch tokens received
     function executeExchangeForPOC(
         DataTypes.DAOState storage daoState,
         DataTypes.POCInfo[] storage pocContracts,
         mapping(address => uint256) storage accountedBalance,
         mapping(address => bool) storage availableRouterByAdmin,
+        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
         address mainCollateral,
         address launchToken,
         uint256 totalCollectedMainCollateral,
@@ -78,9 +78,7 @@ library POCLibrary {
         uint256 amount,
         address router,
         DataTypes.SwapType swapType,
-        bytes calldata swapData,
-        function(address) external returns (uint256) getOraclePrice,
-        function(uint256) external view returns (uint256) getPOCCollateralPriceFunc
+        bytes calldata swapData
     ) external returns (uint256 launchReceived) {
         require(pocIdx < pocContracts.length, InvalidPOCIndex());
 
@@ -106,8 +104,8 @@ library POCLibrary {
             require(router != address(0), InvalidAddress());
             require(availableRouterByAdmin[router], RouterNotAvailable());
 
-            uint256 mainCollateralPrice = getOraclePrice(mainCollateral);
-            uint256 collateralPrice = getPOCCollateralPriceFunc(pocIdx);
+            uint256 mainCollateralPrice = OracleLibrary.getOraclePrice(sellableCollaterals, mainCollateral);
+            uint256 collateralPrice = OracleLibrary.getChainlinkPrice(poc.priceFeed);
 
             uint256 expectedCollateral = (collateralAmountForPOC * mainCollateralPrice) / collateralPrice;
 
