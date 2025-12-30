@@ -56,6 +56,8 @@ interface IDAO {
     error OnlyPrimaryCanTransfer();
     error AddressAlreadyUsedInAnotherVault();
     error InvalidAddress();
+    error InvalidV3PositionManager();
+    error V3PositionManagerMismatch();
     error NoVaultFound();
     error OnlyPrimaryCanClaim();
     error NoRewardsToClaim();

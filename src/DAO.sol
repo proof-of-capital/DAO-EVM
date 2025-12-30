@@ -192,9 +192,12 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
         if (params.v3LPPositions.length > 0) {
             _lpTokenStorage.v3PositionManager = params.v3LPPositions[0].positionManager;
-            require(_lpTokenStorage.v3PositionManager != address(0), InvalidAddress());
+            require(_lpTokenStorage.v3PositionManager != address(0), InvalidV3PositionManager());
             for (uint256 i = 0; i < params.v3LPPositions.length; ++i) {
-                require(params.v3LPPositions[i].positionManager == _lpTokenStorage.v3PositionManager, InvalidAddress());
+                require(
+                    params.v3LPPositions[i].positionManager == _lpTokenStorage.v3PositionManager,
+                    V3PositionManagerMismatch()
+                );
             }
         }
 
