@@ -181,7 +181,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         creator = params.creator;
         creatorInfraPercent = params.creatorInfraPercent;
         daoState.currentStage = DataTypes.Stage.Fundraising;
-        daoState.sharePriceInLaunches = 0;
         daoState.creator = params.creator;
         daoState.creatorProfitPercent = params.creatorProfitPercent;
         daoState.royaltyRecipient = params.royaltyRecipient;
@@ -435,7 +434,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param launchAmount Amount of launch tokens to allocate
     function allocateLaunchesToCreator(uint256 launchAmount) external onlyVoting atStage(DataTypes.Stage.Active) {
         CreatorLibrary.executeAllocateLaunchesToCreator(
-            daoState, accountedBalance, address(launchToken), creator, vaultStorage.totalSharesSupply, launchAmount
+            daoState, fundraisingConfig, accountedBalance, address(launchToken), creator, vaultStorage.totalSharesSupply, launchAmount
         );
     }
 
@@ -576,6 +575,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         FundraisingLibrary.executeFinalizeExchange(
             pocContracts,
             daoState,
+            fundraisingConfig,
             accountedBalance,
             address(launchToken),
             creator,
@@ -679,8 +679,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         POCLibrary.executeUpgradeOwnerShare(
             isPocContract,
             daoState,
-            address(launchToken),
-            daoState.sharePriceInLaunches,
+            fundraisingConfig.sharePrice,
             vaultStorage.totalSharesSupply,
             amount
         );

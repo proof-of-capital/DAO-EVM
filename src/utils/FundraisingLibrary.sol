@@ -51,7 +51,7 @@ library FundraisingLibrary {
     event RewardTokenAdded(address indexed token, address indexed priceFeed);
     event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
     event FundraisingWithdrawal(uint256 indexed vaultId, address indexed sender, uint256 mainCollateralAmount);
-    event ExchangeFinalized(uint256 accountedLaunchBalance, uint256 sharePriceInLaunches, uint256 infraLaunches);
+    event ExchangeFinalized(uint256 accountedLaunchBalance, uint256 sharePrice, uint256 infraLaunches);
     event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
     event FundraisingDeposit(uint256 indexed vaultId, address indexed depositor, uint256 amount, uint256 shares);
     event LaunchDeposit(
@@ -200,6 +200,7 @@ library FundraisingLibrary {
     /// @notice Finalize exchange process and calculate share price in launches
     /// @param pocContracts Array of POC contracts
     /// @param daoState DAO state storage
+    /// @param fundraisingConfig Fundraising configuration
     /// @param accountedBalance Mapping of accounted balances
     /// @param launchToken Launch token address
     /// @param creator Creator address
@@ -208,6 +209,7 @@ library FundraisingLibrary {
     function executeFinalizeExchange(
         DataTypes.POCInfo[] storage pocContracts,
         DataTypes.DAOState storage daoState,
+        DataTypes.FundraisingConfig storage fundraisingConfig,
         mapping(address => uint256) storage accountedBalance,
         address launchToken,
         address creator,
@@ -219,7 +221,7 @@ library FundraisingLibrary {
         }
 
         require(totalSharesSupply > 0, NoSharesIssued());
-        daoState.sharePriceInLaunches =
+        fundraisingConfig.sharePrice =
             (accountedBalance[launchToken] * Constants.PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
 
         uint256 infraLaunches = (accountedBalance[launchToken] * creatorInfraPercent) / Constants.BASIS_POINTS;
@@ -231,7 +233,7 @@ library FundraisingLibrary {
         DataTypes.Stage oldStage = daoState.currentStage;
         daoState.currentStage = DataTypes.Stage.WaitingForLP;
 
-        emit ExchangeFinalized(accountedBalance[launchToken], daoState.sharePriceInLaunches, infraLaunches);
+        emit ExchangeFinalized(accountedBalance[launchToken], fundraisingConfig.sharePrice, infraLaunches);
         emit StageChanged(oldStage, daoState.currentStage);
     }
 

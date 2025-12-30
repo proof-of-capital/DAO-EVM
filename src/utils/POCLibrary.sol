@@ -162,42 +162,39 @@ library POCLibrary {
     /// @notice Return launch tokens from POC contract, restoring creator's profit share
     /// @param isPocContract Mapping to check if address is POC contract
     /// @param daoState DAO state storage
-    /// @param launchToken Launch token address
-    /// @param sharePriceInLaunches Share price in launches
+    /// @param sharePrice Share price
     /// @param totalSharesSupply Total shares supply
     /// @param amount Amount of launch tokens to return
     /// @return profitPercentEquivalent Profit percent equivalent returned
     function executeUpgradeOwnerShare(
         mapping(address => bool) storage isPocContract,
         DataTypes.DAOState storage daoState,
-        address launchToken,
-        uint256 sharePriceInLaunches,
+        uint256 sharePrice,
         uint256 totalSharesSupply,
         uint256 amount
     ) external returns (uint256 profitPercentEquivalent) {
         require(isPocContract[msg.sender], OnlyPOCContract());
         require(amount > 0, AmountMustBeGreaterThanZero());
 
-        IERC20(launchToken).safeTransferFrom(msg.sender, address(this), amount);
-
-        require(sharePriceInLaunches > 0, InvalidSharePrice());
-        uint256 sharesEquivalent = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / sharePriceInLaunches;
+        require(sharePrice > 0, InvalidSharePrice());
+        uint256 sharesEquivalent = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / sharePrice;
 
         require(totalSharesSupply > 0, NoShares());
-        profitPercentEquivalent = (sharesEquivalent * Constants.BASIS_POINTS) / totalSharesSupply;
 
-        uint256 newCreatorProfitPercent = daoState.creatorProfitPercent + profitPercentEquivalent;
-        if (newCreatorProfitPercent > Constants.BASIS_POINTS) {
-            newCreatorProfitPercent = Constants.BASIS_POINTS;
-            profitPercentEquivalent = Constants.BASIS_POINTS - daoState.creatorProfitPercent;
+        uint256 daoProfitPercent =
+            Constants.BASIS_POINTS - daoState.creatorProfitPercent - daoState.royaltyPercent;
+
+        profitPercentEquivalent = (sharesEquivalent * daoProfitPercent) / totalSharesSupply;
+
+        uint256 newDaoProfitPercent =
+            (daoProfitPercent * Constants.BASIS_POINTS) / (Constants.BASIS_POINTS + profitPercentEquivalent);
+
+        if (newDaoProfitPercent < Constants.MIN_DAO_PROFIT_SHARE) {
+            newDaoProfitPercent = Constants.MIN_DAO_PROFIT_SHARE;
+            profitPercentEquivalent = ((daoProfitPercent - newDaoProfitPercent) * Constants.BASIS_POINTS) / daoProfitPercent;
         }
 
-        uint256 maxCreatorProfitPercent =
-            Constants.BASIS_POINTS - Constants.MIN_DAO_PROFIT_SHARE - daoState.royaltyPercent;
-        if (newCreatorProfitPercent > maxCreatorProfitPercent) {
-            newCreatorProfitPercent = maxCreatorProfitPercent;
-            profitPercentEquivalent = maxCreatorProfitPercent - daoState.creatorProfitPercent;
-        }
+        uint256 newCreatorProfitPercent = Constants.BASIS_POINTS - newDaoProfitPercent - daoState.royaltyPercent;
 
         daoState.creatorProfitPercent = newCreatorProfitPercent;
 

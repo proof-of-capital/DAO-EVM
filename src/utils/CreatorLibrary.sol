@@ -33,6 +33,7 @@ library CreatorLibrary {
 
     /// @notice Allocate launch tokens to creator, reducing their profit share proportionally
     /// @param daoState DAO state storage
+    /// @param fundraisingConfig Fundraising configuration
     /// @param accountedBalance Accounted balance mapping
     /// @param launchToken Launch token address
     /// @param creator Creator address
@@ -40,6 +41,7 @@ library CreatorLibrary {
     /// @param launchAmount Amount of launch tokens to allocate
     function executeAllocateLaunchesToCreator(
         DataTypes.DAOState storage daoState,
+        DataTypes.FundraisingConfig storage fundraisingConfig,
         mapping(address => uint256) storage accountedBalance,
         address launchToken,
         address creator,
@@ -53,21 +55,34 @@ library CreatorLibrary {
             (accountedBalance[launchToken] * Constants.MAX_CREATOR_ALLOCATION_PERCENT) / Constants.BASIS_POINTS;
         require(launchAmount <= maxAllocation, ExceedsMaxAllocation());
 
-        require(daoState.sharePriceInLaunches > 0, InvalidSharePrice());
-        uint256 sharesEquivalent = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / daoState.sharePriceInLaunches;
+        require(fundraisingConfig.sharePrice > 0, InvalidSharePrice());
+        uint256 sharesEquivalent = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
 
         require(totalSharesSupply > 0, NoShares());
-        uint256 profitPercentEquivalent = (sharesEquivalent * Constants.BASIS_POINTS) / totalSharesSupply;
 
-        require(daoState.creatorProfitPercent >= profitPercentEquivalent, CreatorShareTooLow());
+        uint256 daoProfitPercent =
+            Constants.BASIS_POINTS - daoState.creatorProfitPercent - daoState.royaltyPercent;
+
+        uint256 profitPercentEquivalent = (sharesEquivalent * daoProfitPercent) / totalSharesSupply;
+
+        uint256 newDaoProfitPercent =
+            (daoProfitPercent * (Constants.BASIS_POINTS + profitPercentEquivalent)) / Constants.BASIS_POINTS;
+
+        if (newDaoProfitPercent > Constants.BASIS_POINTS - daoState.royaltyPercent) {
+            newDaoProfitPercent = Constants.BASIS_POINTS - daoState.royaltyPercent;
+        }
+
+        uint256 newCreatorProfitPercent = Constants.BASIS_POINTS - newDaoProfitPercent - daoState.royaltyPercent;
 
         uint256 minCreatorProfitPercent =
             Constants.BASIS_POINTS - Constants.MIN_DAO_PROFIT_SHARE - daoState.royaltyPercent;
-        uint256 newCreatorProfitPercent = daoState.creatorProfitPercent - profitPercentEquivalent;
         if (newCreatorProfitPercent < minCreatorProfitPercent) {
             newCreatorProfitPercent = minCreatorProfitPercent;
-            profitPercentEquivalent = daoState.creatorProfitPercent - minCreatorProfitPercent;
+            newDaoProfitPercent = Constants.MIN_DAO_PROFIT_SHARE;
+            profitPercentEquivalent = newDaoProfitPercent - daoProfitPercent;
         }
+
+        require(daoState.creatorProfitPercent >= newCreatorProfitPercent, CreatorShareTooLow());
         daoState.creatorProfitPercent = newCreatorProfitPercent;
 
         IERC20(launchToken).safeTransfer(creator, launchAmount);

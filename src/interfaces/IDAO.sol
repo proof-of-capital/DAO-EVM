@@ -194,7 +194,7 @@ interface IDAO {
         uint256 collateralAmount,
         uint256 launchReceived
     );
-    event ExchangeFinalized(uint256 totalLaunches, uint256 sharePriceInLaunches, uint256 creatorInfraLaunches);
+    event ExchangeFinalized(uint256 totalLaunches, uint256 sharePrice, uint256 creatorInfraLaunches);
     event LPTokensProvided(address indexed lpToken, uint256 amount);
     event V3LPPositionProvided(uint256 indexed tokenId, address token0, address token1);
     event V3LiquidityDecreased(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
