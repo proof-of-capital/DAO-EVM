@@ -110,8 +110,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         _;
     }
 
-    modifier onlyVoting() {
-        _onlyVoting();
+    modifier onlyViaGovernanceExecution() {
+        _onlyViaGovernanceExecution();
         _;
     }
 
@@ -432,7 +432,11 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Allocate launch tokens to creator, reducing their profit share proportionally
     /// @dev Can only be done once per ALLOCATION_PERIOD; max MAX_CREATOR_ALLOCATION_PERCENT per period
     /// @param launchAmount Amount of launch tokens to allocate
-    function allocateLaunchesToCreator(uint256 launchAmount) external onlyVoting atStage(DataTypes.Stage.Active) {
+    function allocateLaunchesToCreator(uint256 launchAmount)
+        external
+        onlyViaGovernanceExecution
+        atStage(DataTypes.Stage.Active)
+    {
         CreatorLibrary.executeAllocateLaunchesToCreator(
             daoState,
             fundraisingConfig,
@@ -506,7 +510,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param sharePercent Allocation percentage in basis points (10000 = 100%)
     function addPOCContract(address pocContract, address collateralToken, address priceFeed, uint256 sharePercent)
         external
-        onlyVoting
+        onlyViaGovernanceExecution
         atStage(DataTypes.Stage.Active)
     {
         POCLibrary.executeAddPOCContract(
@@ -696,7 +700,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Set voting contract address
     /// @notice Only the current voting contract can replace itself through voting
     /// @param _votingContract Voting contract address
-    function setVotingContract(address _votingContract) external onlyVoting {
+    function setVotingContract(address _votingContract) external onlyViaGovernanceExecution {
         require(_votingContract != address(0), InvalidAddress());
         require(votingContract != address(0), InvalidAddress());
 
@@ -720,7 +724,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Set flag indicating creator has veto power (only callable by voting)
     /// @param value New value for the flag
-    function setIsVetoToCreator(bool value) external onlyVoting {
+    function setIsVetoToCreator(bool value) external onlyViaGovernanceExecution {
         bool oldValue = isVetoToCreator;
         isVetoToCreator = value;
 
@@ -742,7 +746,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Set pending upgrade address (only voting contract can call)
     /// @param newImplementation Address of the new implementation to approve (address(0) to cancel)
-    function setPendingUpgradeFromVoting(address newImplementation) external onlyVoting {
+    function setPendingUpgradeFromVoting(address newImplementation) external onlyViaGovernanceExecution {
         pendingUpgradeFromVoting = newImplementation;
         pendingUpgradeFromVotingTimestamp = block.timestamp;
         emit PendingUpgradeSetFromVoting(newImplementation);
@@ -985,7 +989,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(msg.sender == admin, Unauthorized());
     }
 
-    function _onlyVoting() internal view {
+    function _onlyViaGovernanceExecution() internal view {
         require(msg.sender == address(this), OnlyByDAOVoting());
     }
 
