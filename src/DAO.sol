@@ -557,13 +557,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Withdraw funds if fundraising was cancelled
     function withdrawFundraising() external nonReentrant atStage(DataTypes.Stage.FundraisingCancelled) {
         FundraisingLibrary.executeWithdrawFundraising(
-            _vaultStorage,
-            _daoState,
-            participantEntries,
-            accountedBalance,
-            mainCollateral,
-            address(launchToken),
-            _vaultStorage.totalSharesSupply
+            _vaultStorage, _daoState, participantEntries, mainCollateral, _vaultStorage.totalSharesSupply
         );
     }
 

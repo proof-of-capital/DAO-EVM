@@ -154,17 +154,13 @@ library FundraisingLibrary {
     /// @param vaultStorage Vault storage structure
     /// @param daoState DAO state storage structure
     /// @param participantEntries Mapping of participant entries
-    /// @param accountedBalance Mapping of accounted balances
     /// @param mainCollateral Main collateral token address
-    /// @param launchToken Launch token address
     /// @param totalSharesSupply Total shares supply
     function executeWithdrawFundraising(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.DAOState storage daoState,
         mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
-        mapping(address => uint256) storage accountedBalance,
         address mainCollateral,
-        address launchToken,
         uint256 totalSharesSupply
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
@@ -180,17 +176,9 @@ library FundraisingLibrary {
         uint256 mainCollateralAmount = (daoState.totalCollectedMainCollateral * shares) / totalSharesSupply;
         require(mainCollateralAmount > 0, NoDepositToWithdraw());
 
-        uint256 launchTokenAmount = 0;
-        if (daoState.totalLaunchBalance > 0) {
-            launchTokenAmount = (daoState.totalLaunchBalance * shares) / totalSharesSupply;
-        }
-
         vault.shares = 0;
         vaultStorage.totalSharesSupply -= shares;
         daoState.totalCollectedMainCollateral -= mainCollateralAmount;
-        if (launchTokenAmount > 0) {
-            daoState.totalLaunchBalance -= launchTokenAmount;
-        }
 
         DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
         entry.depositedMainCollateral = 0;
@@ -205,11 +193,6 @@ library FundraisingLibrary {
         vaultStorage.vaults[vaultId] = vault;
 
         IERC20(mainCollateral).safeTransfer(msg.sender, mainCollateralAmount);
-
-        if (launchTokenAmount > 0) {
-            accountedBalance[address(launchToken)] -= launchTokenAmount;
-            IERC20(launchToken).safeTransfer(msg.sender, launchTokenAmount);
-        }
 
         emit FundraisingWithdrawal(vaultId, msg.sender, mainCollateralAmount);
     }
