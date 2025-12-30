@@ -314,7 +314,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             address(launchToken),
             launchAmount,
             vaultId,
-            this.getLaunchPriceFromPOC
+            this.getOraclePrice
         );
     }
 
@@ -377,7 +377,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             _exitQueueStorage,
             _daoState,
             msg.sender,
-            this.getLaunchPriceFromPOC,
+            address(launchToken),
+            this.getOraclePrice,
             this.updateVotesForVaultWrapper
         );
     }
@@ -484,7 +485,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             accountedBalance,
             _vaultStorage.totalSharesSupply,
             collateral,
-            this.getLaunchPriceFromPOC,
+            address(launchToken),
             this.getOraclePrice
         );
     }
@@ -791,7 +792,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             accountedBalance,
             _vaultStorage.totalSharesSupply,
             token,
-            this.getLaunchPriceFromPOC,
+            address(launchToken),
             this.getOraclePrice
         );
     }
@@ -828,22 +829,17 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             accountedBalance,
             _vaultStorage.totalSharesSupply,
             token,
-            this.getLaunchPriceFromPOC,
+            address(launchToken),
             this.getOraclePrice
         );
     }
 
-    /// @notice Get weighted average launch token price from all active POC contracts (external wrapper for library calls)
-    /// @return Weighted average launch price in USD (18 decimals)
-    function getLaunchPriceFromPOC() external view returns (uint256) {
-        return POCLibrary.getLaunchPriceFromPOC(pocContracts, this.getPOCCollateralPrice);
-    }
-
-    /// @notice Get oracle price for a collateral token (external wrapper for library calls)
-    /// @param token Collateral token address
+    /// @notice Get oracle price for any token (external wrapper for library calls)
+    /// @dev For launch token returns weighted average from POC contracts, for collaterals returns Chainlink price
+    /// @param token Token address
     /// @return Price in USD (18 decimals)
     function getOraclePrice(address token) external view returns (uint256) {
-        return OracleLibrary.getOraclePrice(sellableCollaterals, token);
+        return OracleLibrary.getPrice(sellableCollaterals, pocContracts, address(launchToken), token);
     }
 
     /// @notice Get POC collateral price from its oracle (external wrapper for library calls)

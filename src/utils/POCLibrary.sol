@@ -147,50 +147,6 @@ library POCLibrary {
         emit POCExchangeCompleted(pocIdx, poc.pocContract, collateralAmountForPOC, collateralAmount, launchReceived);
     }
 
-    /// @notice Get weighted average launch token price from all active POC contracts
-    /// @param pocContracts Array of POC contracts
-    /// @param getPOCCollateralPriceFunc Function pointer to get POC collateral price
-    /// @return Weighted average launch price in USD (18 decimals)
-    function getLaunchPriceFromPOC(
-        DataTypes.POCInfo[] storage pocContracts,
-        function(uint256) external view returns (uint256) getPOCCollateralPriceFunc
-    ) external view returns (uint256) {
-        uint256 totalWeightedPrice = 0;
-        uint256 totalSharePercent = 0;
-
-        for (uint256 i = 0; i < pocContracts.length; ++i) {
-            DataTypes.POCInfo storage poc = pocContracts[i];
-
-            if (!poc.active) {
-                continue;
-            }
-
-            uint256 launchPriceInCollateral = IProofOfCapital(poc.pocContract).currentPrice();
-
-            if (launchPriceInCollateral == 0) {
-                continue;
-            }
-
-            uint256 collateralPriceUSD = getPOCCollateralPriceFunc(i);
-
-            if (collateralPriceUSD == 0) {
-                continue;
-            }
-
-            uint256 launchPriceUSD =
-                (launchPriceInCollateral * collateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
-
-            if (launchPriceUSD == 0) {
-                continue;
-            }
-
-            totalWeightedPrice += (launchPriceUSD * poc.sharePercent);
-            totalSharePercent += poc.sharePercent;
-        }
-
-        return totalWeightedPrice / totalSharePercent;
-    }
-
     /// @notice Get POC collateral price from its oracle
     /// @param pocContracts Array of POC contracts
     /// @param pocIdx POC index

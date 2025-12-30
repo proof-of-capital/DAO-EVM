@@ -11,6 +11,7 @@
 pragma solidity ^0.8.33;
 
 import "../interfaces/IAggregatorV3.sol";
+import "../interfaces/IProofOfCapital.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
 
@@ -19,6 +20,7 @@ import "./Constants.sol";
 library OracleLibrary {
     error InvalidPrice();
     error CollateralNotActive();
+    error NoPOCContracts();
 
     /// @notice Get price from Chainlink aggregator and normalize to 18 decimals (internal)
     /// @param priceFeed Address of Chainlink price feed aggregator
@@ -54,6 +56,68 @@ library OracleLibrary {
         view
         returns (uint256)
     {
+        DataTypes.CollateralInfo storage info = sellableCollaterals[token];
+        require(info.active, CollateralNotActive());
+        return _getChainlinkPrice(info.priceFeed);
+    }
+
+    /// @notice Get weighted average launch token price from all active POC contracts
+    /// @param pocContracts Array of POC contracts
+    /// @return Weighted average launch price in USD (18 decimals)
+    function _getLaunchPriceFromPOC(DataTypes.POCInfo[] storage pocContracts) internal view returns (uint256) {
+        uint256 totalWeightedPrice = 0;
+        uint256 totalSharePercent = 0;
+
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
+            DataTypes.POCInfo storage poc = pocContracts[i];
+
+            if (!poc.active) {
+                continue;
+            }
+
+            uint256 launchPriceInCollateral = IProofOfCapital(poc.pocContract).currentPrice();
+
+            if (launchPriceInCollateral == 0) {
+                continue;
+            }
+
+            uint256 collateralPriceUSD = _getChainlinkPrice(poc.priceFeed);
+
+            if (collateralPriceUSD == 0) {
+                continue;
+            }
+
+            uint256 launchPriceUSD =
+                (launchPriceInCollateral * collateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
+
+            if (launchPriceUSD == 0) {
+                continue;
+            }
+
+            totalWeightedPrice += (launchPriceUSD * poc.sharePercent);
+            totalSharePercent += poc.sharePercent;
+        }
+
+        require(totalSharePercent > 0, NoPOCContracts());
+        return totalWeightedPrice / totalSharePercent;
+    }
+
+    /// @notice Get price for any token - handles launch token via POC and collaterals via Chainlink
+    /// @param sellableCollaterals Mapping of collateral info
+    /// @param pocContracts Array of POC contracts
+    /// @param launchToken Launch token address
+    /// @param token Token address to get price for
+    /// @return Price in USD (18 decimals)
+    function getPrice(
+        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
+        DataTypes.POCInfo[] storage pocContracts,
+        address launchToken,
+        address token
+    ) external view returns (uint256) {
+        if (token == launchToken) {
+            return _getLaunchPriceFromPOC(pocContracts);
+        }
+
         DataTypes.CollateralInfo storage info = sellableCollaterals[token];
         require(info.active, CollateralNotActive());
         return _getChainlinkPrice(info.priceFeed);

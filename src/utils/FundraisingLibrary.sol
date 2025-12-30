@@ -328,7 +328,7 @@ library FundraisingLibrary {
     /// @param launchToken Launch token address
     /// @param launchAmount Amount of launch tokens to deposit
     /// @param vaultId Vault ID to deposit to (0 = use sender's vault)
-    /// @param getLaunchPriceFromPOC Function pointer to get launch price from POC
+    /// @param getOraclePrice Function pointer to get oracle price for a token
     function executeDepositLaunches(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.DAOState storage daoState,
@@ -340,7 +340,7 @@ library FundraisingLibrary {
         address launchToken,
         uint256 launchAmount,
         uint256 vaultId,
-        function() external view returns (uint256) getLaunchPriceFromPOC
+        function(address) external view returns (uint256) getOraclePrice
     ) external {
         require(launchAmount >= fundraisingConfig.minLaunchDeposit, BelowMinLaunchDeposit());
 
@@ -352,7 +352,7 @@ library FundraisingLibrary {
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
 
-        uint256 launchPriceUSD = getLaunchPriceFromPOC();
+        uint256 launchPriceUSD = getOraclePrice(launchToken);
         require(launchPriceUSD > 0, InvalidPrice());
 
         uint256 shares = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;

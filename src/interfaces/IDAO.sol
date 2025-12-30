@@ -251,7 +251,6 @@ interface IDAO {
     ) external;
     function getCurrentPrice() external view returns (uint256);
     function getCollateralPrice(address collateral) external view returns (uint256);
-    function getLaunchPriceFromPOC() external view returns (uint256);
 
     // ============================================
     // FUNDRAISING MANAGEMENT

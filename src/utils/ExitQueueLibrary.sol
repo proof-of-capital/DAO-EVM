@@ -38,14 +38,16 @@ library ExitQueueLibrary {
     /// @param exitQueueStorage Exit queue storage structure
     /// @param daoState DAO state storage structure
     /// @param sender Sender address
-    /// @param getLaunchPriceFromPOC Function to get current launch price from POC
+    /// @param launchToken Launch token address
+    /// @param getOraclePrice Function to get token price in USD
     /// @param updateVotesCallback Function to update votes in voting contract
     function executeRequestExit(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.ExitQueueStorage storage exitQueueStorage,
         DataTypes.DAOState storage daoState,
         address sender,
-        function() external view returns (uint256) getLaunchPriceFromPOC,
+        address launchToken,
+        function(address) external view returns (uint256) getOraclePrice,
         function(uint256, int256) external updateVotesCallback
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[sender];
@@ -75,7 +77,7 @@ library ExitQueueLibrary {
 
         updateVotesCallback(vaultId, -int256(vaultShares));
 
-        uint256 launchPriceNow = getLaunchPriceFromPOC();
+        uint256 launchPriceNow = getOraclePrice(launchToken);
 
         exitQueueStorage.exitQueue
             .push(
@@ -103,7 +105,7 @@ library ExitQueueLibrary {
     /// @param totalSharesSupply Total shares supply (will be updated)
     /// @param availableFunds Amount of funds available for buyback (in tokens)
     /// @param token Token used for buyback
-    /// @param getLaunchPriceFromPOC Function to get current launch price from POC
+    /// @param launchToken Launch token address
     /// @param getOraclePrice Function to get token price in USD
     /// @return remainingFunds Remaining funds after processing (in tokens)
     /// @return newTotalSharesSupply Updated total shares supply
@@ -116,7 +118,7 @@ library ExitQueueLibrary {
         uint256 totalSharesSupply,
         uint256 availableFunds,
         address token,
-        function() external view returns (uint256) getLaunchPriceFromPOC,
+        address launchToken,
         function(address) external view returns (uint256) getOraclePrice
     ) external returns (uint256 remainingFunds, uint256 newTotalSharesSupply) {
         newTotalSharesSupply = totalSharesSupply;
@@ -149,7 +151,7 @@ library ExitQueueLibrary {
             }
 
             uint256 exitValueUSD = calculateExitValue(
-                participantEntries, fundraisingConfig, request.vaultId, shares, getLaunchPriceFromPOC
+                participantEntries, fundraisingConfig, request.vaultId, shares, launchToken, getOraclePrice
             );
             uint256 exitValueInTokens = convertUSDToTokens(exitValueUSD, tokenPriceUSD);
 
@@ -170,7 +172,12 @@ library ExitQueueLibrary {
                 uint256 partialShares = (remainingFunds * shares) / exitValueInTokens;
                 if (partialShares > 0) {
                     uint256 partialExitValueUSD = calculateExitValue(
-                        participantEntries, fundraisingConfig, request.vaultId, partialShares, getLaunchPriceFromPOC
+                        participantEntries,
+                        fundraisingConfig,
+                        request.vaultId,
+                        partialShares,
+                        launchToken,
+                        getOraclePrice
                     );
                     uint256 partialExitValueInTokens = convertUSDToTokens(partialExitValueUSD, tokenPriceUSD);
                     if (partialExitValueInTokens > 0 && partialExitValueInTokens <= remainingFunds) {
@@ -283,14 +290,16 @@ library ExitQueueLibrary {
     /// @param fundraisingConfig Fundraising config
     /// @param vaultId Vault ID
     /// @param shares Number of shares to exit
-    /// @param getLaunchPriceFromPOC Function to get current launch price from POC
+    /// @param launchToken Launch token address
+    /// @param getOraclePrice Function to get token price in USD
     /// @return Exit value in USD (18 decimals)
     function calculateExitValue(
         mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
         DataTypes.FundraisingConfig storage fundraisingConfig,
         uint256 vaultId,
         uint256 shares,
-        function() external view returns (uint256) getLaunchPriceFromPOC
+        address launchToken,
+        function(address) external view returns (uint256) getOraclePrice
     ) internal view returns (uint256) {
         DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
 
@@ -304,7 +313,7 @@ library ExitQueueLibrary {
                 (shareValue * (Constants.BASIS_POINTS - Constants.EXIT_DISCOUNT_PERCENT)) / Constants.BASIS_POINTS;
         }
 
-        uint256 launchPriceNow = getLaunchPriceFromPOC();
+        uint256 launchPriceNow = getOraclePrice(launchToken);
         uint256 fixedLaunchPrice = entry.fixedLaunchPrice > 0 ? entry.fixedLaunchPrice : fundraisingConfig.launchPrice;
 
         if (launchPriceNow < fixedLaunchPrice) {
