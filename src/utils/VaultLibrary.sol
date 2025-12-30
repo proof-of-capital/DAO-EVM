@@ -27,6 +27,7 @@ library VaultLibrary {
     error NoShares();
     error OnlyVotingContract();
     error Unauthorized();
+    error CannotChangeDelegateInExitQueue();
 
     event VaultCreated(uint256 indexed vaultId, address indexed primary, uint256 shares);
     event PrimaryAddressUpdated(uint256 indexed vaultId, address indexed oldPrimary, address indexed newPrimary);
@@ -179,11 +180,13 @@ library VaultLibrary {
 
     /// @notice Set delegate address for voting
     /// @param vaultStorage Vault storage structure
+    /// @param exitQueueStorage Exit queue storage structure
     /// @param userAddress User address to find vault and set delegate
     /// @param delegate New delegate address (if zero, self-delegation)
     /// @param votingContract Address of voting contract
     function executeSetDelegate(
         DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.ExitQueueStorage storage exitQueueStorage,
         address userAddress,
         address delegate,
         address votingContract
@@ -195,6 +198,7 @@ library VaultLibrary {
 
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(vault.shares > 0, NoShares());
+        require(exitQueueStorage.vaultExitRequestIndex[vaultId] == 0, CannotChangeDelegateInExitQueue());
 
         uint256 newDelegateId = delegate == address(0) ? 0 : vaultStorage.addressToVaultId[delegate];
 

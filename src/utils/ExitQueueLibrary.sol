@@ -380,16 +380,6 @@ library ExitQueueLibrary {
 
         uint256 vaultShares = vault.shares;
 
-        uint256 delegateId = vault.delegateId;
-
-        if (delegateId != 0 && delegateId != vaultId) {
-            if (delegateId > 0 && delegateId < vaultStorage.nextVaultId) {
-                DataTypes.Vault memory delegateVault = vaultStorage.vaults[delegateId];
-                delegateVault.votingShares += vaultShares;
-                vaultStorage.vaults[delegateId] = delegateVault;
-            }
-        }
-
         request.processed = true;
         exitQueueStorage.exitQueue[arrayIndex] = request;
         exitQueueStorage.vaultExitRequestIndex[vaultId] = 0;

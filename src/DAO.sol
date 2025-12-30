@@ -359,7 +359,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function setDelegate(address userAddress, address delegate) external {
         require(msg.sender == address(votingContract), OnlyVotingContract());
         require(votingContract != address(0), InvalidAddress());
-        VaultLibrary.executeSetDelegate(vaultStorage, userAddress, delegate, votingContract);
+        VaultLibrary.executeSetDelegate(vaultStorage, exitQueueStorage, userAddress, delegate, votingContract);
     }
 
     /// @notice Set deposit limit for a vault (in shares)
