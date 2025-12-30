@@ -655,6 +655,10 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Checks all active POC contracts to see if their lock periods have ended
     /// @dev If all locks are ended, transitions DAO to WaitingForLPDissolution if LP tokens exist, otherwise to Dissolved
     function dissolveIfLocksEnded() external {
+        require(
+            daoState.currentStage == DataTypes.Stage.Active || daoState.currentStage == DataTypes.Stage.Closing,
+            InvalidStage()
+        );
         DissolutionLibrary.executeDissolveIfLocksEnded(daoState, pocContracts, lpTokenStorage, accountedBalance);
     }
 
