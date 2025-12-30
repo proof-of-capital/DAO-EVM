@@ -133,6 +133,11 @@ interface IDAO {
     error POCStillHasBalances();
     error POCNotFound();
 
+    // POC return errors
+    error POCReturnTooSoon();
+    error POCReturnExceedsMaxAmount();
+    error NoPOCContractsActive();
+
     // ============================================
     // EVENTS
     // ============================================
@@ -216,6 +221,7 @@ interface IDAO {
     );
     event CreatorLaunchesReturned(uint256 launchAmount, uint256 profitPercentIncrease, uint256 newCreatorProfitPercent);
     event LPProfitDistributed(address indexed lpToken, uint256 amount);
+    event LaunchesReturnedToPOC(uint256 totalAmount, uint256 pocCount);
 
     // LP dissolution events
     event V2LPTokenDissolved(address indexed lpToken, uint256 amount0, uint256 amount1);
@@ -241,6 +247,7 @@ interface IDAO {
     function cancelExit() external;
     function allocateLaunchesToCreator(uint256 launchAmount) external;
     function upgradeOwnerShare(uint256 amount) external;
+    function returnLaunchesToPOC(uint256 amount) external;
 
     // ============================================
     // ORDERBOOK OPERATIONS

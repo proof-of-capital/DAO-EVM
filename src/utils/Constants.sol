@@ -62,6 +62,8 @@ library Constants {
     uint256 public constant MIN_DAO_PROFIT_SHARE = 2500; // 25% in basis points
     uint256 public constant CLOSING_EXIT_QUEUE_MIN_THRESHOLD = 3000; // 30% in basis points
     uint256 public constant MAX_POC_CONTRACTS = 30;
+    uint256 public constant POC_RETURN_PERIOD = 30 days;
+    uint256 public constant POC_RETURN_MAX_PERCENT = 200; // 2% in basis points
 
     // ============================================
     // PRICE VALIDATION CONSTANTS

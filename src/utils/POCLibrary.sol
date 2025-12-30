@@ -42,6 +42,9 @@ library POCLibrary {
     error POCIsActive();
     error POCStillHasBalances();
     error POCNotFound();
+    error POCReturnTooSoon();
+    error POCReturnExceedsMaxAmount();
+    error NoPOCContractsActive();
 
     event POCExchangeCompleted(
         uint256 indexed pocIdx,
@@ -54,6 +57,7 @@ library POCLibrary {
     event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
     event POCContractRemoved(address indexed pocContract);
     event SellableCollateralAdded(address indexed token, address indexed priceFeed);
+    event LaunchesReturnedToPOC(uint256 totalAmount, uint256 pocCount);
 
     /// @notice Exchange mainCollateral for launch tokens from a specific POC contract
     /// @param daoState DAO state storage structure
@@ -295,6 +299,89 @@ library POCLibrary {
         isPocContract[pocContract] = false;
 
         emit POCContractRemoved(pocContract);
+    }
+
+    /// @notice Return launch tokens to POC contracts proportionally to their share percentages
+    /// @param pocContracts Array of POC contracts
+    /// @param daoState DAO state storage
+    /// @param accountedBalance Mapping of accounted balances
+    /// @param launchToken Launch token address
+    /// @param amount Total amount of launch tokens to return
+    function executeReturnLaunchesToPOC(
+        DataTypes.POCInfo[] storage pocContracts,
+        DataTypes.DAOState storage daoState,
+        mapping(address => uint256) storage accountedBalance,
+        address launchToken,
+        uint256 amount
+    ) external {
+        require(
+            block.timestamp >= daoState.lastPOCReturn + Constants.POC_RETURN_PERIOD,
+            POCReturnTooSoon()
+        );
+        require(amount > 0, AmountMustBeGreaterThanZero());
+
+        uint256 maxReturn = (accountedBalance[launchToken] * Constants.POC_RETURN_MAX_PERCENT) / Constants.BASIS_POINTS;
+        require(amount <= maxReturn, POCReturnExceedsMaxAmount());
+
+        uint256 totalActiveSharePercent = 0;
+        uint256 activePocCount = 0;
+
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
+            if (pocContracts[i].active) {
+                totalActiveSharePercent += pocContracts[i].sharePercent;
+                ++activePocCount;
+            }
+        }
+
+        require(activePocCount > 0, NoPOCContractsActive());
+
+        uint256 distributed = 0;
+
+        for (uint256 i = 0; i < pocContracts.length; ++i) {
+            DataTypes.POCInfo storage poc = pocContracts[i];
+
+            if (!poc.active) {
+                continue;
+            }
+
+            uint256 pocAmount;
+            if (i == pocContracts.length - 1 || (i < pocContracts.length - 1 && !_hasMoreActivePOC(pocContracts, i + 1))) {
+                pocAmount = amount - distributed;
+            } else {
+                pocAmount = (amount * poc.sharePercent) / totalActiveSharePercent;
+            }
+
+            if (pocAmount == 0) {
+                continue;
+            }
+
+            IERC20(launchToken).safeIncreaseAllowance(poc.pocContract, pocAmount);
+            IProofOfCapital(poc.pocContract).depositLaunch(pocAmount);
+
+            distributed += pocAmount;
+        }
+
+        accountedBalance[launchToken] -= distributed;
+        daoState.lastPOCReturn = block.timestamp;
+
+        emit LaunchesReturnedToPOC(distributed, activePocCount);
+    }
+
+    /// @notice Check if there are more active POC contracts after given index
+    /// @param pocContracts Array of POC contracts
+    /// @param startIdx Starting index to check from
+    /// @return hasMore True if there are more active POC contracts
+    function _hasMoreActivePOC(DataTypes.POCInfo[] storage pocContracts, uint256 startIdx)
+        private
+        view
+        returns (bool hasMore)
+    {
+        for (uint256 i = startIdx; i < pocContracts.length; ++i) {
+            if (pocContracts[i].active) {
+                return true;
+            }
+        }
+        return false;
     }
 }
 

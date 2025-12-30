@@ -399,6 +399,7 @@ library DataTypes {
         uint256 lastCreatorAllocation;
         uint256 totalExitQueueShares;
         uint256 totalDepositedUSD;
+        uint256 lastPOCReturn;
     }
 
     /// @notice Storage structure for Price Paths
