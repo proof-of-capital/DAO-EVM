@@ -103,7 +103,7 @@ library DataTypes {
         address emergency; // Emergency address for critical operations
         uint256 shares; // Amount of shares owned
         uint256 votingPausedUntil; // Timestamp until which voting is paused
-        address delegate; // Delegate address for voting (if zero, primary is delegate)
+        uint256 delegateId; // Delegate vault ID for voting (0 means self-delegation)
         uint256 delegateSetAt; // Timestamp when delegate was set
         uint256 votingShares; // Voting shares amount
         uint256 mainCollateralDeposit; // Main collateral deposit amount

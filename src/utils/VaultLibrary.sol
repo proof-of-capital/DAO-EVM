@@ -32,7 +32,7 @@ library VaultLibrary {
     event BackupAddressUpdated(uint256 indexed vaultId, address indexed oldBackup, address indexed newBackup);
     event EmergencyAddressUpdated(uint256 indexed vaultId, address indexed oldEmergency, address indexed newEmergency);
     event DelegateUpdated(
-        uint256 indexed vaultId, address indexed oldDelegate, address indexed newDelegate, uint256 timestamp
+        uint256 indexed vaultId, uint256 indexed oldDelegateId, uint256 indexed newDelegateId, uint256 timestamp
     );
 
     /// @notice Validate that vault exists (vaultId > 0 && vaultId < nextVaultId)
@@ -58,7 +58,7 @@ library VaultLibrary {
     /// @param lpTokenStorage LP token storage structure (for initializing reward indices)
     /// @param backup Backup address for recovery
     /// @param emergency Emergency address for recovery
-    /// @param delegate Delegate address for voting (if zero, primary is delegate)
+    /// @param delegate Delegate address for voting (if zero, self-delegation)
     /// @return vaultId The ID of the created vault
     function executeCreateVault(
         DataTypes.VaultStorage storage vaultStorage,
@@ -73,7 +73,7 @@ library VaultLibrary {
 
         vaultId = vaultStorage.nextVaultId++;
 
-        address finalDelegate = delegate == address(0) ? msg.sender : delegate;
+        uint256 delegateId = delegate == address(0) ? 0 : vaultStorage.addressToVaultId[delegate];
 
         vaultStorage.vaults[vaultId] = DataTypes.Vault({
             primary: msg.sender,
@@ -81,7 +81,7 @@ library VaultLibrary {
             emergency: emergency,
             shares: 0,
             votingPausedUntil: 0,
-            delegate: finalDelegate,
+            delegateId: delegateId,
             delegateSetAt: block.timestamp,
             votingShares: 0,
             mainCollateralDeposit: 0,
@@ -179,7 +179,7 @@ library VaultLibrary {
     /// @notice Set delegate address for voting
     /// @param vaultStorage Vault storage structure
     /// @param userAddress User address to find vault and set delegate
-    /// @param delegate New delegate address (if zero, primary is set as delegate)
+    /// @param delegate New delegate address (if zero, self-delegation)
     /// @param updateVotesCallback Function to update votes in voting contract
     function executeSetDelegate(
         DataTypes.VaultStorage storage vaultStorage,
@@ -195,41 +195,39 @@ library VaultLibrary {
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(vault.shares > 0, NoShares());
 
-        address finalDelegate = delegate == address(0) ? vault.primary : delegate;
+        uint256 newDelegateId = delegate == address(0) ? 0 : vaultStorage.addressToVaultId[delegate];
 
-        address oldDelegate = vault.delegate;
+        uint256 oldDelegateId = vault.delegateId;
         uint256 vaultShares = vault.shares;
 
-        if (oldDelegate != address(0) && oldDelegate != vault.primary) {
-            uint256 oldDelegateVaultId = vaultStorage.addressToVaultId[oldDelegate];
-            if (oldDelegateVaultId > 0 && oldDelegateVaultId < vaultStorage.nextVaultId) {
-                DataTypes.Vault memory oldDelegateVault = vaultStorage.vaults[oldDelegateVaultId];
+        if (oldDelegateId != 0 && oldDelegateId != vaultId) {
+            if (oldDelegateId > 0 && oldDelegateId < vaultStorage.nextVaultId) {
+                DataTypes.Vault memory oldDelegateVault = vaultStorage.vaults[oldDelegateId];
                 if (oldDelegateVault.votingShares >= vaultShares) {
                     oldDelegateVault.votingShares -= vaultShares;
                 } else {
                     oldDelegateVault.votingShares = 0;
                 }
-                vaultStorage.vaults[oldDelegateVaultId] = oldDelegateVault;
-                updateVotesCallback(oldDelegateVaultId, -int256(vaultShares));
+                vaultStorage.vaults[oldDelegateId] = oldDelegateVault;
+                updateVotesCallback(oldDelegateId, -int256(vaultShares));
             }
         }
 
-        vault.delegate = finalDelegate;
+        vault.delegateId = newDelegateId;
         vault.delegateSetAt = block.timestamp;
 
-        if (finalDelegate != address(0) && finalDelegate != vault.primary) {
-            uint256 newDelegateVaultId = vaultStorage.addressToVaultId[finalDelegate];
-            if (newDelegateVaultId > 0 && newDelegateVaultId < vaultStorage.nextVaultId) {
-                DataTypes.Vault memory newDelegateVault = vaultStorage.vaults[newDelegateVaultId];
+        if (newDelegateId != 0 && newDelegateId != vaultId) {
+            if (newDelegateId > 0 && newDelegateId < vaultStorage.nextVaultId) {
+                DataTypes.Vault memory newDelegateVault = vaultStorage.vaults[newDelegateId];
                 newDelegateVault.votingShares += vaultShares;
-                vaultStorage.vaults[newDelegateVaultId] = newDelegateVault;
-                updateVotesCallback(newDelegateVaultId, int256(vaultShares));
+                vaultStorage.vaults[newDelegateId] = newDelegateVault;
+                updateVotesCallback(newDelegateId, int256(vaultShares));
             }
         }
 
         vaultStorage.vaults[vaultId] = vault;
 
-        emit DelegateUpdated(vaultId, oldDelegate, finalDelegate, block.timestamp);
+        emit DelegateUpdated(vaultId, oldDelegateId, newDelegateId, block.timestamp);
     }
 
     /// @notice Update voting shares for delegate when vault shares change
@@ -242,31 +240,28 @@ library VaultLibrary {
         int256 sharesDelta
     ) external {
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
-        address delegate = vault.delegate;
+        uint256 delegateId = vault.delegateId;
 
-        if (delegate == address(0) || delegate == vault.primary) {
+        uint256 targetVaultId = (delegateId == 0 || delegateId == vaultId) ? vaultId : delegateId;
+
+        if (targetVaultId >= vaultStorage.nextVaultId) {
             return;
         }
 
-        uint256 delegateVaultId = vaultStorage.addressToVaultId[delegate];
-        if (delegateVaultId == 0 || delegateVaultId >= vaultStorage.nextVaultId) {
-            return;
-        }
-
-        DataTypes.Vault memory delegateVault = vaultStorage.vaults[delegateVaultId];
+        DataTypes.Vault memory targetVault = vaultStorage.vaults[targetVaultId];
 
         if (sharesDelta > 0) {
-            delegateVault.votingShares += uint256(sharesDelta);
+            targetVault.votingShares += uint256(sharesDelta);
         } else if (sharesDelta < 0) {
             uint256 decreaseAmount = uint256(-sharesDelta);
-            if (delegateVault.votingShares >= decreaseAmount) {
-                delegateVault.votingShares -= decreaseAmount;
+            if (targetVault.votingShares >= decreaseAmount) {
+                targetVault.votingShares -= decreaseAmount;
             } else {
-                delegateVault.votingShares = 0;
+                targetVault.votingShares = 0;
             }
         }
 
-        vaultStorage.vaults[delegateVaultId] = delegateVault;
+        vaultStorage.vaults[targetVaultId] = targetVault;
     }
 
     /// @notice Set allowed exit token for a vault

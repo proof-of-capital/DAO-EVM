@@ -56,23 +56,22 @@ library ExitQueueLibrary {
         require(vault.shares >= Constants.MIN_EXIT_SHARES, AmountMustBeGreaterThanZero());
         require(exitQueueStorage.vaultExitRequestIndex[vaultId] == 0, AlreadyInExitQueue());
 
-        address delegate = vault.delegate;
+        uint256 delegateId = vault.delegateId;
         uint256 vaultShares = vault.shares;
 
-        if (delegate != address(0) && delegate != vault.primary) {
-            uint256 delegateVaultId = vaultStorage.addressToVaultId[delegate];
-            if (delegateVaultId > 0 && delegateVaultId < vaultStorage.nextVaultId) {
-                DataTypes.Vault memory delegateVault = vaultStorage.vaults[delegateVaultId];
+        if (delegateId != 0 && delegateId != vaultId) {
+            if (delegateId > 0 && delegateId < vaultStorage.nextVaultId) {
+                DataTypes.Vault memory delegateVault = vaultStorage.vaults[delegateId];
                 if (delegateVault.votingShares >= vaultShares) {
                     delegateVault.votingShares -= vaultShares;
                 } else {
                     delegateVault.votingShares = 0;
                 }
-                vaultStorage.vaults[delegateVaultId] = delegateVault;
+                vaultStorage.vaults[delegateId] = delegateVault;
             }
         }
 
-        vault.delegate = vault.primary;
+        vault.delegateId = 0;
 
         updateVotesCallback(vaultId, -int256(vaultShares));
 
@@ -382,14 +381,13 @@ library ExitQueueLibrary {
 
         uint256 vaultShares = vault.shares;
 
-        address delegate = vault.delegate;
+        uint256 delegateId = vault.delegateId;
 
-        if (delegate != address(0) && delegate != vault.primary) {
-            uint256 delegateVaultId = vaultStorage.addressToVaultId[delegate];
-            if (delegateVaultId > 0 && delegateVaultId < vaultStorage.nextVaultId) {
-                DataTypes.Vault memory delegateVault = vaultStorage.vaults[delegateVaultId];
+        if (delegateId != 0 && delegateId != vaultId) {
+            if (delegateId > 0 && delegateId < vaultStorage.nextVaultId) {
+                DataTypes.Vault memory delegateVault = vaultStorage.vaults[delegateId];
                 delegateVault.votingShares += vaultShares;
-                vaultStorage.vaults[delegateVaultId] = delegateVault;
+                vaultStorage.vaults[delegateId] = delegateVault;
             }
         }
 
