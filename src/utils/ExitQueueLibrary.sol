@@ -60,6 +60,7 @@ library ExitQueueLibrary {
         uint256 delegateId = vault.delegateId;
         uint256 vaultShares = vault.shares;
 
+        uint256 targetVaultId = vaultId;
         if (delegateId != 0 && delegateId != vaultId) {
             if (delegateId > 0 && delegateId < vaultStorage.nextVaultId) {
                 DataTypes.Vault memory delegateVault = vaultStorage.vaults[delegateId];
@@ -69,12 +70,13 @@ library ExitQueueLibrary {
                     delegateVault.votingShares = 0;
                 }
                 vaultStorage.vaults[delegateId] = delegateVault;
+                targetVaultId = delegateId;
             }
         }
 
         vault.delegateId = 0;
 
-        IVoting(votingContract).updateVotesForVault(vaultId, -int256(vaultShares));
+        IVoting(votingContract).updateVotesForVault(targetVaultId, -int256(vaultShares));
 
         uint256 launchPriceNow = getOraclePrice(launchToken);
         exitQueueStorage.vaultExitRequestIndex[vaultId] = exitQueueStorage.exitQueue.length;
