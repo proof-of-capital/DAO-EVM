@@ -228,6 +228,10 @@ library ExitQueueLibrary {
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         uint256 shares = vault.shares;
 
+        uint256 depositedUSDToReduce = vault.depositedUSD;
+        vault.depositedUSD = 0;
+        daoState.totalDepositedUSD -= depositedUSDToReduce;
+
         vault.shares -= shares;
         uint256 previousTotalShares = totalSharesSupply;
         newTotalSharesSupply = totalSharesSupply - shares;
@@ -273,6 +277,11 @@ library ExitQueueLibrary {
         uint256 totalSharesSupply
     ) internal returns (uint256 newTotalSharesSupply) {
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
+
+        uint256 vaultSharesBeforeExit = vault.shares;
+        uint256 depositedUSDToReduce = (vault.depositedUSD * shares) / vaultSharesBeforeExit;
+        vault.depositedUSD -= depositedUSDToReduce;
+        daoState.totalDepositedUSD -= depositedUSDToReduce;
 
         vault.shares -= shares;
         uint256 previousTotalShares = totalSharesSupply;
