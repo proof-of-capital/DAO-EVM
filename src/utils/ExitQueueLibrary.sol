@@ -185,29 +185,18 @@ library ExitQueueLibrary {
                 }
             } else {
                 uint256 partialShares = (remainingFunds * shares) / exitValueInTokens;
-                if (partialShares > 0) {
-                    uint256 partialExitValueUSD = calculateExitValue(
-                        participantEntries,
+                if (partialShares > 0 && remainingFunds > 0) {
+                    newTotalSharesSupply = executePartialExit(
+                        vaultStorage,
+                        daoState,
                         fundraisingConfig,
                         request.vaultId,
                         partialShares,
-                        launchToken,
-                        getOraclePrice
+                        remainingFunds,
+                        token,
+                        newTotalSharesSupply
                     );
-                    uint256 partialExitValueInTokens = convertUSDToTokens(partialExitValueUSD, tokenPriceUSD);
-                    if (partialExitValueInTokens > 0 && partialExitValueInTokens <= remainingFunds) {
-                        newTotalSharesSupply = executePartialExit(
-                            vaultStorage,
-                            daoState,
-                            fundraisingConfig,
-                            request.vaultId,
-                            partialShares,
-                            partialExitValueInTokens,
-                            token,
-                            newTotalSharesSupply
-                        );
-                        remainingFunds -= partialExitValueInTokens;
-                    }
+                    remainingFunds = 0;
                 }
             }
         }
