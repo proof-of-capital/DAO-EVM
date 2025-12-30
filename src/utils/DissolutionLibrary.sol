@@ -225,35 +225,8 @@ library DissolutionLibrary {
         delete lpTokenStorage.v2LPTokens;
         delete lpTokenStorage.v3LPPositions;
 
-        executeSyncAllTokenBalances(rewardsStorage, accountedBalance, launchToken);
-
         daoState.currentStage = DataTypes.Stage.Dissolved;
         emit StageChanged(DataTypes.Stage.WaitingForLPDissolution, DataTypes.Stage.Dissolved);
-    }
-
-    /// @notice Sync accountedBalance for all reward tokens and launch token with actual contract balances
-    /// @param rewardsStorage Rewards storage structure
-    /// @param accountedBalance Accounted balance mapping
-    /// @param launchToken Launch token address
-    function executeSyncAllTokenBalances(
-        DataTypes.RewardsStorage storage rewardsStorage,
-        mapping(address => uint256) storage accountedBalance,
-        address launchToken
-    ) public {
-        uint256 launchTokenBalance = IERC20(launchToken).balanceOf(address(this));
-        if (launchTokenBalance > accountedBalance[launchToken]) {
-            accountedBalance[launchToken] = launchTokenBalance;
-        }
-
-        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; ++i) {
-            address token = rewardsStorage.rewardTokens[i];
-            if (rewardsStorage.rewardTokenInfo[token].active) {
-                uint256 actualBalance = IERC20(token).balanceOf(address(this));
-                if (actualBalance > accountedBalance[token]) {
-                    accountedBalance[token] = actualBalance;
-                }
-            }
-        }
     }
 }
 
