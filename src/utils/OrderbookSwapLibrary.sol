@@ -98,10 +98,7 @@ library OrderbookSwapLibrary {
         require(path[0] == tokenIn && path[path.length - 1] == tokenOut, InvalidSwapData());
 
         IERC20 inputToken = IERC20(tokenIn);
-        uint256 currentAllowance = inputToken.allowance(address(this), router);
-        if (currentAllowance < amountIn) {
-            inputToken.safeIncreaseAllowance(router, type(uint256).max);
-        }
+        inputToken.safeIncreaseAllowance(router, amountIn);
         uint256[] memory amounts =
             IUniswapV2Router02(router).swapExactTokensForTokens(amountIn, amountOutMin, path, address(this), deadline);
 
@@ -123,10 +120,7 @@ library OrderbookSwapLibrary {
         require(path[0] == tokenIn && path[path.length - 1] == tokenOut, InvalidSwapData());
 
         IERC20 inputToken = IERC20(tokenIn);
-        uint256 currentAllowance = inputToken.allowance(address(this), router);
-        if (currentAllowance < amountInMax) {
-            inputToken.safeIncreaseAllowance(router, type(uint256).max);
-        }
+        inputToken.safeIncreaseAllowance(router, amountInMax);
 
         IUniswapV2Router02(router).swapTokensForExactTokens(amountOut, amountInMax, path, address(this), deadline);
 
@@ -156,10 +150,7 @@ library OrderbookSwapLibrary {
         });
 
         IERC20 inputToken = IERC20(tokenIn);
-        uint256 currentAllowance = inputToken.allowance(address(this), router);
-        if (currentAllowance < amountIn) {
-            inputToken.safeIncreaseAllowance(router, type(uint256).max);
-        }
+        inputToken.safeIncreaseAllowance(router, amountIn);
         amountOut = ISwapRouter(router).exactInputSingle(routerParams);
 
         return amountOut;
@@ -197,10 +188,7 @@ library OrderbookSwapLibrary {
         });
 
         IERC20 inputToken = IERC20(tokenIn);
-        uint256 currentAllowance = inputToken.allowance(address(this), router);
-        if (currentAllowance < amountIn) {
-            inputToken.safeIncreaseAllowance(router, type(uint256).max);
-        }
+        inputToken.safeIncreaseAllowance(router, amountIn);
         amountOut = ISwapRouter(router).exactInput(routerParams);
 
         return amountOut;
@@ -229,10 +217,7 @@ library OrderbookSwapLibrary {
         });
 
         IERC20 inputToken = IERC20(tokenIn);
-        uint256 currentAllowance = inputToken.allowance(address(this), router);
-        if (currentAllowance < amountInMax) {
-            inputToken.safeIncreaseAllowance(router, type(uint256).max);
-        }
+        inputToken.safeIncreaseAllowance(router, amountInMax);
         ISwapRouter(router).exactOutputSingle(routerParams);
 
         return amountOut;
@@ -270,10 +255,7 @@ library OrderbookSwapLibrary {
         });
 
         IERC20 inputToken = IERC20(tokenIn);
-        uint256 currentAllowance = inputToken.allowance(address(this), router);
-        if (currentAllowance < amountInMax) {
-            inputToken.safeIncreaseAllowance(router, type(uint256).max);
-        }
+        inputToken.safeIncreaseAllowance(router, amountInMax);
         ISwapRouter(router).exactOutput(routerParams);
 
         return amountOut;
