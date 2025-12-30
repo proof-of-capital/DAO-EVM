@@ -207,7 +207,7 @@ contract Multisig is IMultisig {
         VotingType votingType = _determineVotingType(calls);
 
         if (votingType == VotingType.TRANSFER_OWNERSHIP) {
-            DataTypes.DAOState memory daoState = dao.daoState();
+            DataTypes.DAOState memory daoState = dao.getDaoState();
             bool isDissolvedOrCancelled = daoState.currentStage == DataTypes.Stage.Dissolved
                 || daoState.currentStage == DataTypes.Stage.FundraisingCancelled;
 
@@ -304,7 +304,7 @@ contract Multisig is IMultisig {
         Transaction storage txn = transactions[txId];
 
         if (txn.votingType == VotingType.TRANSFER_OWNERSHIP) {
-            DataTypes.DAOState memory daoState = dao.daoState();
+            DataTypes.DAOState memory daoState = dao.getDaoState();
             bool isDissolvedOrCancelled = daoState.currentStage == DataTypes.Stage.Dissolved
                 || daoState.currentStage == DataTypes.Stage.FundraisingCancelled;
 
@@ -730,7 +730,7 @@ contract Multisig is IMultisig {
 
         if (hasVetoContract) {
             require(!dao.isVetoToCreator(), InvalidDAOStage());
-            DataTypes.DAOState memory daoState = dao.daoState();
+            DataTypes.DAOState memory daoState = dao.getDaoState();
             require(
                 daoState.currentStage == DataTypes.Stage.Active || daoState.currentStage == DataTypes.Stage.Dissolved,
                 InvalidDAOStage()
@@ -857,7 +857,7 @@ contract Multisig is IMultisig {
             CannotEnterNonWorkingStage()
         );
 
-        DataTypes.DAOState memory daoState = dao.daoState();
+        DataTypes.DAOState memory daoState = dao.getDaoState();
         require(daoState.currentStage != DataTypes.Stage.Active, CannotEnterNonWorkingStage());
 
         MultisigStage oldStage = multisigStage;

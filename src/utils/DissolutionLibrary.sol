@@ -134,8 +134,6 @@ library DissolutionLibrary {
         uint256 vaultDepositedUSD = vault.depositedUSD;
         require(daoState.totalDepositedUSD > 0 || vaultStorage.totalSharesSupply > 0, NoSharesToClaim());
 
-        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, -int256(shares));
-
         for (uint256 i = 0; i < tokens.length; ++i) {
             address token = tokens[i];
             require(token != address(0), InvalidAddress());

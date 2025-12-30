@@ -323,7 +323,7 @@ interface IDAO {
     function creator() external view returns (address);
     function creatorInfraPercent() external view returns (uint256);
     function isVetoToCreator() external view returns (bool);
-    function daoState() external view returns (DataTypes.DAOState memory);
+    function getDaoState() external view returns (DataTypes.DAOState memory);
     function waitingForLPStartedAt() external view returns (uint256);
 
     // Shares and supply

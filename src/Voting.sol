@@ -211,7 +211,7 @@ contract Voting is IVoting {
         require(block.timestamp < proposal.endTime, VotingEnded());
         require(!proposal.executed, ProposalAlreadyExecuted());
 
-        DataTypes.DAOState memory daoState = dao.daoState();
+        DataTypes.DAOState memory daoState = dao.getDaoState();
         require(daoState.currentStage != DataTypes.Stage.Closing, VotingNotAllowedInClosing());
 
         uint256 vaultId = dao.addressToVaultId(msg.sender);
@@ -348,7 +348,7 @@ contract Voting is IVoting {
         }
 
         uint256 totalShares = dao.totalSharesSupply();
-        uint256 exitQueueShares = dao.daoState().totalExitQueueShares;
+        uint256 exitQueueShares = dao.getDaoState().totalExitQueueShares;
 
         uint256 adjustedForVotes = proposal.forVotes;
         uint256 adjustedAgainstVotes = proposal.againstVotes;
