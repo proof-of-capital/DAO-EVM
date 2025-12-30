@@ -94,8 +94,6 @@ library Orderbook {
         uint256 balanceAfter = IERC20(params.collateral).balanceOf(address(this));
         uint256 receivedCollateral = balanceAfter - balanceBefore;
 
-        accountedBalance[params.collateral] += receivedCollateral;
-
         uint256 receivedCollateralInUsd =
             (receivedCollateral * collateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
