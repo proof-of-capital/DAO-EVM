@@ -314,10 +314,7 @@ library POCLibrary {
         address launchToken,
         uint256 amount
     ) external {
-        require(
-            block.timestamp >= daoState.lastPOCReturn + Constants.POC_RETURN_PERIOD,
-            POCReturnTooSoon()
-        );
+        require(block.timestamp >= daoState.lastPOCReturn + Constants.POC_RETURN_PERIOD, POCReturnTooSoon());
         require(amount > 0, AmountMustBeGreaterThanZero());
 
         uint256 maxReturn = (accountedBalance[launchToken] * Constants.POC_RETURN_MAX_PERCENT) / Constants.BASIS_POINTS;
@@ -345,7 +342,9 @@ library POCLibrary {
             }
 
             uint256 pocAmount;
-            if (i == pocContracts.length - 1 || (i < pocContracts.length - 1 && !_hasMoreActivePOC(pocContracts, i + 1))) {
+            if (
+                i == pocContracts.length - 1 || (i < pocContracts.length - 1 && !_hasMoreActivePOC(pocContracts, i + 1))
+            ) {
                 pocAmount = amount - distributed;
             } else {
                 pocAmount = (amount * poc.sharePercent) / totalActiveSharePercent;

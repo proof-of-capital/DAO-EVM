@@ -453,11 +453,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Return launch tokens to POC contracts proportionally to their share percentages
     /// @dev Can only be done once per POC_RETURN_PERIOD; max POC_RETURN_MAX_PERCENT of DAO balance per period
     /// @param amount Total amount of launch tokens to return
-    function returnLaunchesToPOC(uint256 amount)
-        external
-        onlyViaGovernanceExecution
-        atStage(DataTypes.Stage.Active)
-    {
+    function returnLaunchesToPOC(uint256 amount) external onlyViaGovernanceExecution atStage(DataTypes.Stage.Active) {
         POCLibrary.executeReturnLaunchesToPOC(pocContracts, daoState, accountedBalance, address(launchToken), amount);
     }
 

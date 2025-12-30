@@ -276,8 +276,10 @@ library FundraisingLibrary {
         uint256 depositLimit = vault.depositLimit;
         require(vault.shares + shares <= depositLimit, DepositLimitExceeded());
 
-        uint256 mainCollateralPriceUSD = getOraclePrice(mainCollateral);
-        uint256 usdDeposit = (amount * mainCollateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
+        uint256 sharePriceInLaunches =
+            (fundraisingConfig.sharePrice * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.launchPrice;
+        uint256 usdDeposit = shares * sharePriceInLaunches / Constants.PRICE_DECIMALS_MULTIPLIER
+            * fundraisingConfig.launchPrice / Constants.PRICE_DECIMALS_MULTIPLIER / 2;
 
         DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
         if (entry.entryTimestamp == 0) {
@@ -350,7 +352,8 @@ library FundraisingLibrary {
         uint256 depositLimit = vault.depositLimit;
         require(vault.shares + shares <= depositLimit, DepositLimitExceeded());
 
-        uint256 usdDeposit = (launchAmount * launchPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
+        uint256 usdDeposit = (shares * fundraisingConfig.sharePrice * launchPriceUSD)
+            / (Constants.PRICE_DECIMALS_MULTIPLIER * Constants.PRICE_DECIMALS_MULTIPLIER);
 
         DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
 

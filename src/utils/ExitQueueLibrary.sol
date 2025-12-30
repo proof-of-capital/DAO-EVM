@@ -165,7 +165,7 @@ library ExitQueueLibrary {
             }
 
             uint256 exitValueUSD = calculateExitValue(
-                participantEntries, fundraisingConfig, request.vaultId, shares, launchToken, getOraclePrice
+                vaultStorage, exitQueueStorage, participantEntries, request.vaultId, shares, launchToken, getOraclePrice
             );
             uint256 exitValueInTokens = convertUSDToTokens(exitValueUSD, tokenPriceUSD);
 
@@ -304,42 +304,45 @@ library ExitQueueLibrary {
         emit PartialExitProcessed(vaultId, shares, payoutAmount, token);
     }
 
-    /// @notice Calculate exit value for a participant
+    /// @notice Calculate exit value for a participant based on vault.depositedUSD
+    /// @param vaultStorage Vault storage structure
+    /// @param exitQueueStorage Exit queue storage structure
     /// @param participantEntries Participant entries mapping
-    /// @param fundraisingConfig Fundraising config
     /// @param vaultId Vault ID
     /// @param shares Number of shares to exit
     /// @param launchToken Launch token address
     /// @param getOraclePrice Function to get token price in USD
     /// @return Exit value in USD (18 decimals)
     function calculateExitValue(
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.ExitQueueStorage storage exitQueueStorage,
         mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
-        DataTypes.FundraisingConfig storage fundraisingConfig,
         uint256 vaultId,
         uint256 shares,
         address launchToken,
         function(address) external returns (uint256) getOraclePrice
     ) internal returns (uint256) {
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
+        uint256 vaultTotalShares = vault.shares;
+
+        uint256 exitValueUSD = (vault.depositedUSD * shares) / vaultTotalShares;
+
         DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
-
-        uint256 shareValue = entry.fixedSharePrice;
-        if (shareValue == 0) {
-            shareValue = fundraisingConfig.sharePrice;
-        }
-
         if (block.timestamp < entry.entryTimestamp + Constants.EXIT_DISCOUNT_PERIOD) {
-            shareValue =
-                (shareValue * (Constants.BASIS_POINTS - Constants.EXIT_DISCOUNT_PERCENT)) / Constants.BASIS_POINTS;
+            exitValueUSD =
+                (exitValueUSD * (Constants.BASIS_POINTS - Constants.EXIT_DISCOUNT_PERCENT)) / Constants.BASIS_POINTS;
         }
 
-        uint256 launchPriceNow = getOraclePrice(launchToken);
-        uint256 fixedLaunchPrice = entry.fixedLaunchPrice > 0 ? entry.fixedLaunchPrice : fundraisingConfig.launchPrice;
-
-        if (launchPriceNow < fixedLaunchPrice) {
-            shareValue = (shareValue * launchPriceNow) / fixedLaunchPrice;
+        uint256 exitRequestIndex = exitQueueStorage.vaultExitRequestIndex[vaultId];
+        if (exitRequestIndex > 0) {
+            DataTypes.ExitRequest memory request = exitQueueStorage.exitQueue[exitRequestIndex];
+            uint256 launchPriceNow = getOraclePrice(launchToken);
+            if (launchPriceNow < request.fixedLaunchPriceAtRequest) {
+                exitValueUSD = (exitValueUSD * launchPriceNow) / request.fixedLaunchPriceAtRequest;
+            }
         }
 
-        return (shareValue * shares) / Constants.PRICE_DECIMALS_MULTIPLIER;
+        return exitValueUSD;
     }
 
     /// @notice Convert USD amount to token amount
