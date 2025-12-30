@@ -335,7 +335,7 @@ library FundraisingLibrary {
 
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
 
-        uint256 launchPriceUSD = getOraclePrice(launchToken);
+        uint256 launchPriceUSD = getOraclePrice(launchToken) / 2;
         require(launchPriceUSD > 0, InvalidPrice());
 
         uint256 shares = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
@@ -349,12 +349,12 @@ library FundraisingLibrary {
         DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
 
         if (vault.shares == 0) {
-            entry.weightedAvgLaunchPrice = launchPriceUSD / 2;
+            entry.weightedAvgLaunchPrice = launchPriceUSD;
             entry.weightedAvgSharePrice = fundraisingConfig.sharePrice;
         } else {
             uint256 totalShares = vault.shares + shares;
             entry.weightedAvgLaunchPrice =
-                (entry.weightedAvgLaunchPrice * vault.shares + (launchPriceUSD / 2) * shares) / totalShares;
+                (entry.weightedAvgLaunchPrice * vault.shares + launchPriceUSD * shares) / totalShares;
             entry.weightedAvgSharePrice =
                 (entry.weightedAvgSharePrice * vault.shares + fundraisingConfig.sharePrice * shares) / totalShares;
         }
