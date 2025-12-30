@@ -287,7 +287,9 @@ interface IDAO {
     function provideLPTokens(
         address[] calldata v2LPTokenAddresses,
         uint256[] calldata v2LPAmounts,
-        uint256[] calldata v3TokenIds
+        uint256[] calldata v3TokenIds,
+        DataTypes.PricePathV2Params[] calldata newV2PricePaths,
+        DataTypes.PricePathV3Params[] calldata newV3PricePaths
     ) external;
 
     // ============================================

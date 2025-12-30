@@ -47,7 +47,7 @@ library ExitQueueLibrary {
         DataTypes.DAOState storage daoState,
         address sender,
         address launchToken,
-        function(address) external view returns (uint256) getOraclePrice,
+        function(address) external returns (uint256) getOraclePrice,
         function(uint256, int256) external updateVotesCallback
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[sender];
@@ -121,7 +121,7 @@ library ExitQueueLibrary {
         uint256 availableFunds,
         address token,
         address launchToken,
-        function(address) external view returns (uint256) getOraclePrice,
+        function(address) external returns (uint256) getOraclePrice,
         mapping(address => bool) storage allowedExitTokens,
         mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
     ) external returns (uint256 remainingFunds, uint256 newTotalSharesSupply) {
@@ -313,8 +313,8 @@ library ExitQueueLibrary {
         uint256 vaultId,
         uint256 shares,
         address launchToken,
-        function(address) external view returns (uint256) getOraclePrice
-    ) internal view returns (uint256) {
+        function(address) external returns (uint256) getOraclePrice
+    ) internal returns (uint256) {
         DataTypes.ParticipantEntry storage entry = participantEntries[vaultId];
 
         uint256 shareValue = entry.fixedSharePrice;

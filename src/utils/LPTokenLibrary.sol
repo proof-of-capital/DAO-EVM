@@ -355,24 +355,44 @@ library LPTokenLibrary {
     /// @param lpTokenStorage LP token storage structure
     /// @param rewardsStorage Rewards storage structure
     /// @param daoState DAO state storage
+    /// @param pricePathsStorage Price paths storage structure
     /// @param accountedBalance Accounted balance mapping
     /// @param v2LPTokenAddresses Array of V2 LP token addresses
     /// @param v2LPAmounts Array of V2 LP token amounts to deposit
     /// @param v3TokenIds Array of V3 LP position token IDs
+    /// @param newV2PricePaths Array of new V2 price paths to add
+    /// @param newV3PricePaths Array of new V3 price paths to add
     /// @param primaryLPTokenType Primary LP token type
     function executeProvideLPTokens(
         DataTypes.LPTokenStorage storage lpTokenStorage,
         DataTypes.RewardsStorage storage rewardsStorage,
         DataTypes.DAOState storage daoState,
+        DataTypes.PricePathsStorage storage pricePathsStorage,
         mapping(address => uint256) storage accountedBalance,
         address[] calldata v2LPTokenAddresses,
         uint256[] calldata v2LPAmounts,
         uint256[] calldata v3TokenIds,
+        DataTypes.PricePathV2Params[] calldata newV2PricePaths,
+        DataTypes.PricePathV3Params[] calldata newV3PricePaths,
         DataTypes.LPTokenType primaryLPTokenType
     ) external returns (uint256 activeStageTimestamp) {
         address sender = msg.sender;
         require(v2LPTokenAddresses.length == v2LPAmounts.length, InvalidAddresses());
         require(v2LPTokenAddresses.length > 0 || v3TokenIds.length > 0, InvalidAddress());
+
+        for (uint256 i = 0; i < newV2PricePaths.length; ++i) {
+            if (newV2PricePaths[i].router != address(0) && newV2PricePaths[i].path.length >= 2) {
+                pricePathsStorage.v2Paths
+                    .push(DataTypes.PricePathV2({router: newV2PricePaths[i].router, path: newV2PricePaths[i].path}));
+            }
+        }
+
+        for (uint256 i = 0; i < newV3PricePaths.length; ++i) {
+            if (newV3PricePaths[i].quoter != address(0) && newV3PricePaths[i].path.length >= 43) {
+                pricePathsStorage.v3Paths
+                    .push(DataTypes.PricePathV3({quoter: newV3PricePaths[i].quoter, path: newV3PricePaths[i].path}));
+            }
+        }
 
         if (primaryLPTokenType == DataTypes.LPTokenType.V2) {
             require(v2LPTokenAddresses.length > 0, InvalidAddress());

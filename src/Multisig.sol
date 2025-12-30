@@ -829,7 +829,10 @@ contract Multisig is IMultisig {
         uint256[] memory v3TokenIds = new uint256[](1);
         v3TokenIds[0] = tokenId;
 
-        dao.provideLPTokens(emptyV2Addresses, emptyV2Amounts, v3TokenIds);
+        DataTypes.PricePathV2Params[] memory emptyV2Paths = new DataTypes.PricePathV2Params[](0);
+        DataTypes.PricePathV3Params[] memory emptyV3Paths = new DataTypes.PricePathV3Params[](0);
+
+        dao.provideLPTokens(emptyV2Addresses, emptyV2Amounts, v3TokenIds, emptyV2Paths, emptyV3Paths);
 
         uint256 pocContractsCount = dao.getPOCContractsCount();
         uint256 newLockTimestamp = block.timestamp + Constants.LP_EXTEND_LOCK_PERIOD;

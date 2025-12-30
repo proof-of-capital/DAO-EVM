@@ -17,5 +17,11 @@ interface IUniswapV2Pair {
     /// @return amount0 Amount of token0 returned
     /// @return amount1 Amount of token1 returned
     function burn(address to) external returns (uint256 amount0, uint256 amount1);
+
+    /// @notice Returns the reserves of token0 and token1
+    /// @return reserve0 Reserve of token0
+    /// @return reserve1 Reserve of token1
+    /// @return blockTimestampLast Last block timestamp of reserve update
+    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
 }
 

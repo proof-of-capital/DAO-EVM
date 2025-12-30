@@ -270,7 +270,7 @@ library FundraisingLibrary {
         address mainCollateral,
         uint256 amount,
         uint256 vaultId,
-        function(address) external view returns (uint256) getOraclePrice
+        function(address) external returns (uint256) getOraclePrice
     ) external {
         require(amount > 0, AmountMustBeGreaterThanZero());
         require(amount >= fundraisingConfig.minDeposit, DepositBelowMinimum());
@@ -340,7 +340,7 @@ library FundraisingLibrary {
         address launchToken,
         uint256 launchAmount,
         uint256 vaultId,
-        function(address) external view returns (uint256) getOraclePrice
+        function(address) external returns (uint256) getOraclePrice
     ) external {
         require(launchAmount >= fundraisingConfig.minLaunchDeposit, BelowMinLaunchDeposit());
 

@@ -103,6 +103,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     bool public isVetoToCreator;
 
+    DataTypes.PricePathsStorage private _pricePathsStorage;
+
     modifier onlyAdmin() {
         _onlyAdmin();
         _;
@@ -254,6 +256,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         });
 
         primaryLPTokenType = params.primaryLPTokenType;
+
+        OracleLibrary.initializePricePaths(_pricePathsStorage, params.launchTokenPricePaths);
 
         emit CreatorSet(params.creator, params.creatorProfitPercent, params.creatorInfraPercent);
         emit FundraisingConfigured(
@@ -638,19 +642,26 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param v2LPTokenAddresses Array of V2 LP token addresses
     /// @param v2LPAmounts Array of V2 LP token amounts to deposit
     /// @param v3TokenIds Array of V3 LP position token IDs
+    /// @param newV2PricePaths Array of new V2 price paths to add
+    /// @param newV3PricePaths Array of new V3 price paths to add
     function provideLPTokens(
         address[] calldata v2LPTokenAddresses,
         uint256[] calldata v2LPAmounts,
-        uint256[] calldata v3TokenIds
+        uint256[] calldata v3TokenIds,
+        DataTypes.PricePathV2Params[] calldata newV2PricePaths,
+        DataTypes.PricePathV3Params[] calldata newV3PricePaths
     ) external nonReentrant onlyCreator atStage(DataTypes.Stage.WaitingForLP) {
         activeStageTimestamp = LPTokenLibrary.executeProvideLPTokens(
             _lpTokenStorage,
             _rewardsStorage,
             _daoState,
+            _pricePathsStorage,
             accountedBalance,
             v2LPTokenAddresses,
             v2LPAmounts,
             v3TokenIds,
+            newV2PricePaths,
+            newV3PricePaths,
             primaryLPTokenType
         );
     }
@@ -856,11 +867,12 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     }
 
     /// @notice Get oracle price for any token (external wrapper for library calls)
-    /// @dev For launch token returns weighted average from POC contracts, for collaterals returns Chainlink price
+    /// @dev For launch token returns weighted average from POC contracts with pool validation, for collaterals returns Chainlink price
     /// @param token Token address
     /// @return Price in USD (18 decimals)
-    function getOraclePrice(address token) external view returns (uint256) {
-        return OracleLibrary.getPrice(sellableCollaterals, pocContracts, address(launchToken), token);
+    function getOraclePrice(address token) external returns (uint256) {
+        return
+            OracleLibrary.getPrice(sellableCollaterals, pocContracts, _pricePathsStorage, address(launchToken), token);
     }
 
     /// @notice Get POC collateral price from its oracle (external wrapper for library calls)

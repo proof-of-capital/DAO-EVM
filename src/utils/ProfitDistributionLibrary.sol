@@ -57,7 +57,7 @@ library ProfitDistributionLibrary {
         uint256 totalSharesSupply,
         address token,
         address launchToken,
-        function(address) external view returns (uint256) getOraclePrice,
+        function(address) external returns (uint256) getOraclePrice,
         mapping(address => bool) storage allowedExitTokens,
         mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
     ) external returns (uint256 newTotalSharesSupply) {
@@ -160,7 +160,7 @@ library ProfitDistributionLibrary {
         address token,
         uint256 participantsShare,
         address launchToken,
-        function(address) external view returns (uint256) getOraclePrice,
+        function(address) external returns (uint256) getOraclePrice,
         mapping(address => bool) storage allowedExitTokens,
         mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
     ) internal returns (uint256 remainingForParticipants, uint256 newTotalSharesSupply) {

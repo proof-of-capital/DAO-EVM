@@ -79,7 +79,7 @@ library POCLibrary {
         address router,
         DataTypes.SwapType swapType,
         bytes calldata swapData,
-        function(address) external view returns (uint256) getOraclePrice,
+        function(address) external returns (uint256) getOraclePrice,
         function(uint256) external view returns (uint256) getPOCCollateralPriceFunc
     ) external returns (uint256 launchReceived) {
         require(pocIdx < pocContracts.length, InvalidPOCIndex());

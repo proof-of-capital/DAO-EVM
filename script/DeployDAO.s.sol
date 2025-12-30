@@ -140,7 +140,12 @@ contract DeployDAO is Script {
             orderbookParams: orderbookParams,
             primaryLPTokenType: DataTypes.LPTokenType.V2, // Default to V2, can be changed
             v3LPPositions: new DataTypes.V3LPPositionParams[](0), // Empty array by default
-            allowedExitTokens: new address[](0) // Empty array by default, can be populated
+            allowedExitTokens: new address[](0), // Empty array by default, can be populated
+            launchTokenPricePaths: DataTypes.TokenPricePathsParams({
+                v2Paths: new DataTypes.PricePathV2Params[](0),
+                v3Paths: new DataTypes.PricePathV3Params[](0),
+                minLiquidity: 1000e18
+            })
         });
 
         // Deploy DAO implementation contract (upgradeable pattern)

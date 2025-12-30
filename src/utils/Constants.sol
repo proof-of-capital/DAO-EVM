@@ -63,6 +63,14 @@ library Constants {
     uint256 public constant CLOSING_EXIT_QUEUE_MIN_THRESHOLD = 3000; // 30% in basis points
 
     // ============================================
+    // PRICE VALIDATION CONSTANTS
+    // ============================================
+
+    uint256 public constant MAX_PRICE_DEVIATION_BP = 500; // 5% max deviation allowed
+    uint256 public constant MIN_POOL_LIQUIDITY = 1000e18; // Min 1000 launch tokens in pool
+    uint256 public constant PRICE_QUOTE_AMOUNT = 1e18; // 1 token for price query
+
+    // ============================================
     // VOTING CONSTANTS
     // ============================================
 

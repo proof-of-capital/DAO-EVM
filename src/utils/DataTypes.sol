@@ -255,6 +255,41 @@ library DataTypes {
     }
 
     // ============================================
+    // PRICE VALIDATION STRUCTURES
+    // ============================================
+
+    /// @notice V2 price path for pool price queries
+    struct PricePathV2 {
+        address router; // V2 Router address
+        address[] path; // Token path [tokenA, tokenB, ...]
+    }
+
+    /// @notice V3 price path for pool price queries
+    struct PricePathV3 {
+        address quoter; // QuoterV2 address
+        bytes path; // Encoded path (tokenIn, fee, tokenOut, fee, ...)
+    }
+
+    /// @notice V2 price path parameters for constructor (with fixed array workaround)
+    struct PricePathV2Params {
+        address router; // V2 Router address
+        address[] path; // Token path [tokenA, tokenB, ...]
+    }
+
+    /// @notice V3 price path parameters for constructor
+    struct PricePathV3Params {
+        address quoter; // QuoterV2 address
+        bytes path; // Encoded path (tokenIn, fee, tokenOut, fee, ...)
+    }
+
+    /// @notice Token price paths configuration
+    struct TokenPricePathsParams {
+        PricePathV2Params[] v2Paths; // Array of V2 paths
+        PricePathV3Params[] v3Paths; // Array of V3 paths
+        uint256 minLiquidity; // Minimum liquidity threshold (in launch tokens)
+    }
+
+    // ============================================
     // CONSTRUCTOR PARAMETERS STRUCTURES
     // ============================================
 
@@ -308,6 +343,7 @@ library DataTypes {
         LPTokenType primaryLPTokenType; // Primary LP token type (if specified, must be provided)
         V3LPPositionParams[] v3LPPositions; // V3 LP positions for initialization (optional)
         address[] allowedExitTokens; // Tokens allowed for exit payments (global list)
+        TokenPricePathsParams launchTokenPricePaths; // Paths for launch token price validation
     }
 
     // ============================================
@@ -365,6 +401,13 @@ library DataTypes {
         uint256 lastCreatorAllocation;
         uint256 totalExitQueueShares;
         uint256 totalDepositedUSD;
+    }
+
+    /// @notice Storage structure for Price Paths
+    struct PricePathsStorage {
+        PricePathV2[] v2Paths; // Array of V2 paths
+        PricePathV3[] v3Paths; // Array of V3 paths
+        uint256 minLiquidity; // Minimum liquidity threshold (in launch tokens)
     }
 }
 
