@@ -70,6 +70,7 @@ library Constants {
     uint256 public constant MAX_PRICE_DEVIATION_BP = 500; // 5% max deviation allowed
     uint256 public constant MIN_POOL_LIQUIDITY = 1000e18; // Min 1000 launch tokens in pool
     uint256 public constant PRICE_QUOTE_AMOUNT = 1e18; // 1 token for price query
+    uint256 public constant ORACLE_MAX_AGE = 1 days; // Maximum age of oracle price data (24 hours)
 
     // ============================================
     // VOTING CONSTANTS

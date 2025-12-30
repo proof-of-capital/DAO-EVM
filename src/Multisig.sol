@@ -883,8 +883,9 @@ contract Multisig is IMultisig {
     /// @return Price in USD (18 decimals)
     function _getChainlinkPrice(address priceFeed) internal view returns (uint256) {
         IAggregatorV3 aggregator = IAggregatorV3(priceFeed);
-        (, int256 price,,,) = aggregator.latestRoundData();
+        (, int256 price,, uint256 updatedAt,) = aggregator.latestRoundData();
         require(price > 0, InvalidPrice());
+        require(block.timestamp - updatedAt <= Constants.ORACLE_MAX_AGE, StalePrice());
 
         uint8 decimals = aggregator.decimals();
 

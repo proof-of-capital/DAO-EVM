@@ -46,6 +46,7 @@ library Orderbook {
     error SlippageExceeded();
     error OrderbookNotInitialized();
     error InvalidPrice();
+    error StalePrice();
     error InsufficientCollateralReceived(uint256 expected, uint256 received);
 
     event LaunchTokenSold(
@@ -111,8 +112,9 @@ library Orderbook {
     /// @return Price in USD (18 decimals)
     function getCollateralPrice(DataTypes.CollateralInfo storage collateralInfo) internal view returns (uint256) {
         IAggregatorV3 priceFeed = IAggregatorV3(collateralInfo.priceFeed);
-        (, int256 price,,,) = priceFeed.latestRoundData();
+        (, int256 price,, uint256 updatedAt,) = priceFeed.latestRoundData();
         require(price > 0, InvalidPrice());
+        require(block.timestamp - updatedAt <= Constants.ORACLE_MAX_AGE, StalePrice());
 
         uint8 decimals = priceFeed.decimals();
 

@@ -23,6 +23,7 @@ import "./Constants.sol";
 /// @notice Library for oracle price operations and pool price validation
 library OracleLibrary {
     error InvalidPrice();
+    error StalePrice();
     error CollateralNotActive();
     error NoPOCContracts();
     error PriceDeviationTooHigh();
@@ -35,8 +36,9 @@ library OracleLibrary {
     /// @return Price in USD (18 decimals)
     function _getChainlinkPrice(address priceFeed) internal view returns (uint256) {
         IAggregatorV3 aggregator = IAggregatorV3(priceFeed);
-        (, int256 price,,,) = aggregator.latestRoundData();
+        (, int256 price,, uint256 updatedAt,) = aggregator.latestRoundData();
         require(price > 0, InvalidPrice());
+        require(block.timestamp - updatedAt <= Constants.ORACLE_MAX_AGE, StalePrice());
 
         uint8 decimals = aggregator.decimals();
 
@@ -296,9 +298,9 @@ library OracleLibrary {
         DataTypes.CollateralInfo storage info = sellableCollaterals[token];
         if (info.active && info.priceFeed != address(0)) {
             try IAggregatorV3(info.priceFeed).latestRoundData() returns (
-                uint80, int256 _price, uint256, uint256, uint80
+                uint80, int256 _price, uint256, uint256 updatedAt, uint80
             ) {
-                if (_price > 0) {
+                if (_price > 0 && block.timestamp - updatedAt <= Constants.ORACLE_MAX_AGE) {
                     uint8 decimals = IAggregatorV3(info.priceFeed).decimals();
                     if (decimals < 18) {
                         price = uint256(_price) * (10 ** (18 - decimals));

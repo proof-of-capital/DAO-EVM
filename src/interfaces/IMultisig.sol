@@ -164,6 +164,7 @@ interface IMultisig {
     error TransferOwnershipNotAllowedForVetoContract();
     error PriceDeviationTooHigh();
     error InvalidPrice();
+    error StalePrice();
 
     /// @notice Events
     event TransactionSubmitted(
