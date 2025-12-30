@@ -13,6 +13,7 @@ pragma solidity ^0.8.33;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./DataTypes.sol";
 import "../interfaces/IDAO.sol";
+import "../interfaces/IVoting.sol";
 
 /// @title VaultLibrary
 /// @notice Library for managing vaults, addresses, and delegate voting shares
@@ -180,12 +181,12 @@ library VaultLibrary {
     /// @param vaultStorage Vault storage structure
     /// @param userAddress User address to find vault and set delegate
     /// @param delegate New delegate address (if zero, self-delegation)
-    /// @param updateVotesCallback Function to update votes in voting contract
+    /// @param votingContract Address of voting contract
     function executeSetDelegate(
         DataTypes.VaultStorage storage vaultStorage,
         address userAddress,
         address delegate,
-        function(uint256, int256) external updateVotesCallback
+        address votingContract
     ) external {
         require(userAddress != address(0), InvalidAddress());
 
@@ -209,7 +210,7 @@ library VaultLibrary {
                     oldDelegateVault.votingShares = 0;
                 }
                 vaultStorage.vaults[oldDelegateId] = oldDelegateVault;
-                updateVotesCallback(oldDelegateId, -int256(vaultShares));
+                IVoting(votingContract).updateVotesForVault(oldDelegateId, -int256(vaultShares));
             }
         }
 
@@ -221,7 +222,7 @@ library VaultLibrary {
                 DataTypes.Vault memory newDelegateVault = vaultStorage.vaults[newDelegateId];
                 newDelegateVault.votingShares += vaultShares;
                 vaultStorage.vaults[newDelegateId] = newDelegateVault;
-                updateVotesCallback(newDelegateId, int256(vaultShares));
+                IVoting(votingContract).updateVotesForVault(newDelegateId, int256(vaultShares));
             }
         }
 

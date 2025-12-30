@@ -88,7 +88,6 @@ library RewardsLibrary {
         uint256 vaultId
     ) internal {
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
-        if (vault.shares == 0) return;
 
         for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; ++i) {
             address rewardToken = rewardsStorage.rewardTokens[i];

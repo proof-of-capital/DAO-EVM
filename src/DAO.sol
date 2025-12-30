@@ -356,7 +356,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function setDelegate(address userAddress, address delegate) external {
         require(msg.sender == address(votingContract), OnlyVotingContract());
         require(votingContract != address(0), InvalidAddress());
-        VaultLibrary.executeSetDelegate(vaultStorage, userAddress, delegate, this.updateVotesForVaultWrapper);
+        VaultLibrary.executeSetDelegate(vaultStorage, userAddress, delegate, votingContract);
     }
 
     /// @notice Set deposit limit for a vault (in shares)
@@ -386,23 +386,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Participant exits with all their shares; adds request to exit queue for processing
     function requestExit() external nonReentrant atActiveOrClosingStage {
         ExitQueueLibrary.executeRequestExit(
-            vaultStorage,
-            exitQueueStorage,
-            daoState,
-            address(launchToken),
-            this.getOraclePrice,
-            this.updateVotesForVaultWrapper
+            vaultStorage, exitQueueStorage, daoState, address(launchToken), this.getOraclePrice, votingContract
         );
-    }
-
-    /// @notice Wrapper function for updating votes in voting contract
-    /// @param vaultId Vault ID
-    /// @param votingSharesDelta Change in voting shares
-    function updateVotesForVaultWrapper(uint256 vaultId, int256 votingSharesDelta) external {
-        require(msg.sender == address(this), Unauthorized());
-        if (votingContract != address(0)) {
-            IVoting(votingContract).updateVotesForVault(vaultId, votingSharesDelta);
-        }
     }
 
     /// @notice Cancel exit request from queue

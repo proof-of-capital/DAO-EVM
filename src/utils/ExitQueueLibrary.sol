@@ -15,6 +15,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
 import "./VaultLibrary.sol";
+import "../interfaces/IVoting.sol";
 
 /// @title ExitQueueLibrary
 /// @notice Library for managing exit queue operations
@@ -39,14 +40,14 @@ library ExitQueueLibrary {
     /// @param daoState DAO state storage structure
     /// @param launchToken Launch token address
     /// @param getOraclePrice Function to get token price in USD
-    /// @param updateVotesCallback Function to update votes in voting contract
+    /// @param votingContract Address of voting contract
     function executeRequestExit(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.ExitQueueStorage storage exitQueueStorage,
         DataTypes.DAOState storage daoState,
         address launchToken,
         function(address) external returns (uint256) getOraclePrice,
-        function(uint256, int256) external updateVotesCallback
+        address votingContract
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
@@ -73,7 +74,7 @@ library ExitQueueLibrary {
 
         vault.delegateId = 0;
 
-        updateVotesCallback(vaultId, -int256(vaultShares));
+        IVoting(votingContract).updateVotesForVault(vaultId, -int256(vaultShares));
 
         uint256 launchPriceNow = getOraclePrice(launchToken);
 
