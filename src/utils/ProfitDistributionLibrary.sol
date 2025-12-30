@@ -69,7 +69,6 @@ library ProfitDistributionLibrary {
         newTotalSharesSupply = totalSharesSupply;
         uint256 unaccounted = IERC20(token).balanceOf(address(this)) - accountedBalance[token];
         if (unaccounted == 0) {
-            vaultStorage.totalSharesSupply = newTotalSharesSupply;
             return newTotalSharesSupply;
         }
 
@@ -79,7 +78,6 @@ library ProfitDistributionLibrary {
         }
 
         if (amountToDistribute == 0) {
-            vaultStorage.totalSharesSupply = newTotalSharesSupply;
             return newTotalSharesSupply;
         }
 
