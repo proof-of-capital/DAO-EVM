@@ -469,24 +469,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             vaultStorage.totalSharesSupply,
             fundraisingConfig.sharePrice
         );
-
-        vaultStorage.totalSharesSupply = ProfitDistributionLibrary.executeDistributeProfit(
-            daoState,
-            rewardsStorage,
-            exitQueueStorage,
-            lpTokenStorage,
-            vaultStorage,
-            participantEntries,
-            fundraisingConfig,
-            accountedBalance,
-            vaultStorage.totalSharesSupply,
-            collateral,
-            address(launchToken),
-            this.getOraclePrice,
-            allowedExitTokens,
-            vaultStorage.vaultAllowedExitTokens,
-            0
-        );
     }
 
     /// @notice Get current price based on orderbook state
@@ -813,33 +795,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         atActiveOrClosingStage
     {
         LPTokenLibrary.executeDistributeLPProfit(
-            lpTokenStorage,
-            accountedBalance,
-            vaultStorage.totalSharesSupply,
-            lpTokenOrTokenId,
-            lpType,
-            this.distributeProfitInternal
-        );
-    }
-
-    /// @notice External wrapper for distributeProfit to use as function pointer
-    function distributeProfitInternal(address token) external {
-        vaultStorage.totalSharesSupply = ProfitDistributionLibrary.executeDistributeProfit(
-            daoState,
-            rewardsStorage,
-            exitQueueStorage,
-            lpTokenStorage,
-            vaultStorage,
-            participantEntries,
-            fundraisingConfig,
-            accountedBalance,
-            vaultStorage.totalSharesSupply,
-            token,
-            address(launchToken),
-            this.getOraclePrice,
-            allowedExitTokens,
-            vaultStorage.vaultAllowedExitTokens,
-            0
+            lpTokenStorage, accountedBalance, vaultStorage.totalSharesSupply, lpTokenOrTokenId, lpType
         );
     }
 

@@ -255,23 +255,21 @@ library LPTokenLibrary {
     /// @param totalSharesSupply Total shares supply
     /// @param lpTokenOrTokenId LP token address (V2) or token ID (V3)
     /// @param lpType Type of LP token (V2 or V3)
-    /// @param distributeProfit Function to distribute profit for a token
     function executeDistributeLPProfit(
         DataTypes.LPTokenStorage storage lpTokenStorage,
         mapping(address => uint256) storage accountedBalance,
         uint256 totalSharesSupply,
         address lpTokenOrTokenId,
-        DataTypes.LPTokenType lpType,
-        function(address) external distributeProfit
+        DataTypes.LPTokenType lpType
     ) external {
         require(totalSharesSupply > 0, NoShares());
 
         if (lpType == DataTypes.LPTokenType.V2) {
             address lpToken = lpTokenOrTokenId;
-            distributeV2LPProfit(lpTokenStorage, accountedBalance, lpToken, distributeProfit);
+            distributeV2LPProfit(lpTokenStorage, accountedBalance, lpToken);
         } else if (lpType == DataTypes.LPTokenType.V3) {
             uint256 tokenId = uint256(uint160(lpTokenOrTokenId));
-            distributeV3LPProfit(lpTokenStorage, tokenId, distributeProfit);
+            distributeV3LPProfit(lpTokenStorage, tokenId);
         } else {
             revert InvalidAddress();
         }
@@ -281,13 +279,11 @@ library LPTokenLibrary {
     /// @param lpTokenStorage LP token storage structure
     /// @param accountedBalance Accounted balance mapping
     /// @param lpToken LP token address
-    /// @param distributeProfit Function to distribute profit for a token
     /// @return toDistribute Amount distributed
     function distributeV2LPProfit(
         DataTypes.LPTokenStorage storage lpTokenStorage,
         mapping(address => uint256) storage accountedBalance,
-        address lpToken,
-        function(address) external distributeProfit
+        address lpToken
     ) internal returns (uint256 toDistribute) {
         require(lpTokenStorage.isV2LPToken[lpToken], NotLPToken());
         require(
@@ -301,8 +297,6 @@ library LPTokenLibrary {
         toDistribute = (lpBalance * Constants.LP_DISTRIBUTION_PERCENT) / Constants.BASIS_POINTS;
         require(toDistribute > 0, NoProfitToDistribute());
 
-        distributeProfit(lpToken);
-
         lpTokenStorage.lastLPDistribution[lpToken] = block.timestamp;
 
         emit LPProfitDistributed(lpToken, toDistribute);
@@ -311,14 +305,12 @@ library LPTokenLibrary {
     /// @notice Distribute 1% of V3 LP position as profit (monthly)
     /// @param lpTokenStorage LP token storage structure
     /// @param tokenId NFT token ID
-    /// @param distributeProfit Function to distribute profit for a token
     /// @return collected0 Amount of token0 collected
     /// @return collected1 Amount of token1 collected
-    function distributeV3LPProfit(
-        DataTypes.LPTokenStorage storage lpTokenStorage,
-        uint256 tokenId,
-        function(address) external distributeProfit
-    ) internal returns (uint256 collected0, uint256 collected1) {
+    function distributeV3LPProfit(DataTypes.LPTokenStorage storage lpTokenStorage, uint256 tokenId)
+        internal
+        returns (uint256 collected0, uint256 collected1)
+    {
         require(lpTokenStorage.v3TokenIdToIndex[tokenId] > 0, NotLPToken());
         require(
             block.timestamp >= lpTokenStorage.v3LastLPDistribution[tokenId] + Constants.LP_DISTRIBUTION_PERIOD,
@@ -338,13 +330,6 @@ library LPTokenLibrary {
         decreaseV3Liquidity(lpTokenStorage, tokenId, liquidityToDecrease);
 
         (collected0, collected1) = collectV3Tokens(lpTokenStorage, tokenId);
-
-        if (collected0 > 0) {
-            distributeProfit(positionInfo.token0);
-        }
-        if (collected1 > 0) {
-            distributeProfit(positionInfo.token1);
-        }
 
         lpTokenStorage.v3LastLPDistribution[tokenId] = block.timestamp;
 
