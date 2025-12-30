@@ -158,7 +158,6 @@ library FundraisingLibrary {
     /// @param mainCollateral Main collateral token address
     /// @param launchToken Launch token address
     /// @param totalSharesSupply Total shares supply
-    /// @param sender Sender address
     function executeWithdrawFundraising(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.DAOState storage daoState,
@@ -166,14 +165,13 @@ library FundraisingLibrary {
         mapping(address => uint256) storage accountedBalance,
         address mainCollateral,
         address launchToken,
-        uint256 totalSharesSupply,
-        address sender
+        uint256 totalSharesSupply
     ) external {
-        uint256 vaultId = vaultStorage.addressToVaultId[sender];
+        uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(vault.primary == sender, OnlyPrimaryCanClaim());
+        require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
 
         uint256 shares = vault.shares;
         require(shares > 0, NoSharesToClaim());
@@ -204,14 +202,14 @@ library FundraisingLibrary {
             vault.depositedUSD = 0;
         }
 
-        IERC20(mainCollateral).safeTransfer(sender, mainCollateralAmount);
+        IERC20(mainCollateral).safeTransfer(msg.sender, mainCollateralAmount);
 
         if (launchTokenAmount > 0) {
             accountedBalance[address(launchToken)] -= launchTokenAmount;
-            IERC20(launchToken).safeTransfer(sender, launchTokenAmount);
+            IERC20(launchToken).safeTransfer(msg.sender, launchTokenAmount);
         }
 
-        emit FundraisingWithdrawal(vaultId, sender, mainCollateralAmount);
+        emit FundraisingWithdrawal(vaultId, msg.sender, mainCollateralAmount);
     }
 
     /// @notice Finalize exchange process and calculate share price in launches
@@ -275,9 +273,8 @@ library FundraisingLibrary {
         require(amount > 0, AmountMustBeGreaterThanZero());
         require(amount >= fundraisingConfig.minDeposit, DepositBelowMinimum());
 
-        address sender = msg.sender;
         if (vaultId == 0) {
-            vaultId = vaultStorage.addressToVaultId[sender];
+            vaultId = vaultStorage.addressToVaultId[msg.sender];
         }
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
@@ -312,9 +309,9 @@ library FundraisingLibrary {
 
         vault.mainCollateralDeposit += amount;
 
-        IERC20(mainCollateral).safeTransferFrom(sender, address(this), amount);
+        IERC20(mainCollateral).safeTransferFrom(msg.sender, address(this), amount);
 
-        emit FundraisingDeposit(vaultId, sender, amount, shares);
+        emit FundraisingDeposit(vaultId, msg.sender, amount, shares);
     }
 
     /// @notice Deposit launch tokens during active stage to receive shares
@@ -344,9 +341,8 @@ library FundraisingLibrary {
     ) external {
         require(launchAmount >= fundraisingConfig.minLaunchDeposit, BelowMinLaunchDeposit());
 
-        address sender = msg.sender;
         if (vaultId == 0) {
-            vaultId = vaultStorage.addressToVaultId[sender];
+            vaultId = vaultStorage.addressToVaultId[msg.sender];
         }
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
@@ -395,11 +391,11 @@ library FundraisingLibrary {
 
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares));
 
-        IERC20(launchToken).safeTransferFrom(sender, address(this), launchAmount);
+        IERC20(launchToken).safeTransferFrom(msg.sender, address(this), launchAmount);
         daoState.totalLaunchBalance += launchAmount;
         accountedBalance[launchToken] += launchAmount;
 
-        emit LaunchDeposit(vaultId, sender, launchAmount, shares, launchPriceUSD);
+        emit LaunchDeposit(vaultId, msg.sender, launchAmount, shares, launchPriceUSD);
     }
 
     /// @notice Extend fundraising deadline (only once)

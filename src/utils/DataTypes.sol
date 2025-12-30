@@ -151,7 +151,6 @@ library DataTypes {
         address collateral; // Collateral token address
         uint256 launchTokenAmount; // Amount of launch tokens to sell
         uint256 minCollateralAmount; // Minimum collateral to receive (slippage protection)
-        address seller; // Seller address
         address router; // Router address for swap (if swapType != None)
         SwapType swapType; // Type of swap to execute
         bytes swapData; // Encoded swap parameters

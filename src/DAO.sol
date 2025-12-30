@@ -290,7 +290,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         );
 
         vaultId = VaultLibrary.executeCreateVault(
-            _vaultStorage, _rewardsStorage, _lpTokenStorage, msg.sender, backup, emergency, delegate
+            _vaultStorage, _rewardsStorage, _lpTokenStorage, backup, emergency, delegate
         );
     }
 
@@ -335,7 +335,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param vaultId Vault ID to update
     /// @param newPrimary New primary address
     function updatePrimaryAddress(uint256 vaultId, address newPrimary) external vaultExists(vaultId) {
-        VaultLibrary.executeUpdatePrimaryAddress(_vaultStorage, vaultId, msg.sender, newPrimary);
+        VaultLibrary.executeUpdatePrimaryAddress(_vaultStorage, vaultId, newPrimary);
     }
 
     /// @notice Update backup address
@@ -343,7 +343,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param vaultId Vault ID to update
     /// @param newBackup New backup address
     function updateBackupAddress(uint256 vaultId, address newBackup) external vaultExists(vaultId) {
-        VaultLibrary.executeUpdateBackupAddress(_vaultStorage, vaultId, msg.sender, newBackup);
+        VaultLibrary.executeUpdateBackupAddress(_vaultStorage, vaultId, newBackup);
     }
 
     /// @notice Update emergency address
@@ -351,7 +351,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param vaultId Vault ID to update
     /// @param newEmergency New emergency address
     function updateEmergencyAddress(uint256 vaultId, address newEmergency) external vaultExists(vaultId) {
-        VaultLibrary.executeUpdateEmergencyAddress(_vaultStorage, vaultId, msg.sender, newEmergency);
+        VaultLibrary.executeUpdateEmergencyAddress(_vaultStorage, vaultId, newEmergency);
     }
 
     /// @notice Set delegate address for voting (only callable by voting contract)
@@ -383,9 +383,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Claim accumulated rewards for tokens
     /// @param tokens Array of token addresses to claim
     function claimReward(address[] calldata tokens) external nonReentrant {
-        RewardsLibrary.executeClaimReward(
-            _vaultStorage, _rewardsStorage, _lpTokenStorage, accountedBalance, msg.sender, tokens
-        );
+        RewardsLibrary.executeClaimReward(_vaultStorage, _rewardsStorage, _lpTokenStorage, accountedBalance, tokens);
     }
 
     /// @notice Request to exit DAO by selling all shares
@@ -395,7 +393,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             _vaultStorage,
             _exitQueueStorage,
             _daoState,
-            msg.sender,
             address(launchToken),
             this.getOraclePrice,
             this.updateVotesForVaultWrapper
@@ -415,7 +412,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Cancel exit request from queue
     /// @dev Participant can cancel their exit request before it's processed
     function cancelExit() external nonReentrant atActiveOrClosingStage {
-        ExitQueueLibrary.executeCancelExit(_vaultStorage, _exitQueueStorage, _daoState, msg.sender);
+        ExitQueueLibrary.executeCancelExit(_vaultStorage, _exitQueueStorage, _daoState);
     }
 
     /// @notice Enter closing stage if exit queue shares >= dynamic threshold
@@ -479,7 +476,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
                 collateral: collateral,
                 launchTokenAmount: launchTokenAmount,
                 minCollateralAmount: minCollateralAmount,
-                seller: msg.sender,
                 router: router,
                 swapType: swapType,
                 swapData: swapData
@@ -567,8 +563,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             accountedBalance,
             mainCollateral,
             address(launchToken),
-            _vaultStorage.totalSharesSupply,
-            msg.sender
+            _vaultStorage.totalSharesSupply
         );
     }
 

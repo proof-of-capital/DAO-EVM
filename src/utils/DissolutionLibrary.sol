@@ -121,12 +121,11 @@ library DissolutionLibrary {
         address launchToken,
         address[] calldata tokens
     ) external returns (uint256 shares) {
-        address sender = msg.sender;
-        uint256 vaultId = vaultStorage.addressToVaultId[sender];
+        uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(vault.primary == sender, OnlyPrimaryCanClaim());
+        require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
         require(vault.shares > 0, NoSharesToClaim());
 
         shares = vault.shares;
@@ -156,7 +155,7 @@ library DissolutionLibrary {
             }
 
             if (tokenShare > 0) {
-                IERC20(token).safeTransfer(sender, tokenShare);
+                IERC20(token).safeTransfer(msg.sender, tokenShare);
                 if (token == address(launchToken)) {
                     accountedBalance[address(launchToken)] -= tokenShare;
                 }

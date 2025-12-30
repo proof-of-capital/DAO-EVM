@@ -105,7 +105,7 @@ library Orderbook {
 
         updateCurrentLevel(orderbookParams, receivedCollateralInUsd, params.launchTokenAmount, totalShares, sharePrice);
 
-        emit LaunchTokenSold(params.seller, params.collateral, params.launchTokenAmount, receivedCollateral);
+        emit LaunchTokenSold(msg.sender, params.collateral, params.launchTokenAmount, receivedCollateral);
     }
 
     /// @notice Get collateral price from Chainlink oracle

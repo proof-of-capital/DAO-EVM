@@ -56,7 +56,6 @@ library VaultLibrary {
     /// @param vaultStorage Vault storage structure
     /// @param rewardsStorage Rewards storage structure (for initializing reward indices)
     /// @param lpTokenStorage LP token storage structure (for initializing reward indices)
-    /// @param primary Primary address
     /// @param backup Backup address for recovery
     /// @param emergency Emergency address for recovery
     /// @param delegate Delegate address for voting (if zero, primary is delegate)
@@ -65,20 +64,19 @@ library VaultLibrary {
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.RewardsStorage storage rewardsStorage,
         DataTypes.LPTokenStorage storage lpTokenStorage,
-        address primary,
         address backup,
         address emergency,
         address delegate
     ) external returns (uint256 vaultId) {
         require(backup != address(0) && emergency != address(0), InvalidAddresses());
-        require(vaultStorage.addressToVaultId[primary] == 0, VaultAlreadyExists());
+        require(vaultStorage.addressToVaultId[msg.sender] == 0, VaultAlreadyExists());
 
         vaultId = vaultStorage.nextVaultId++;
 
-        address finalDelegate = delegate == address(0) ? primary : delegate;
+        address finalDelegate = delegate == address(0) ? msg.sender : delegate;
 
         vaultStorage.vaults[vaultId] = DataTypes.Vault({
-            primary: primary,
+            primary: msg.sender,
             backup: backup,
             emergency: emergency,
             shares: 0,
@@ -91,7 +89,7 @@ library VaultLibrary {
             depositLimit: 0
         });
 
-        vaultStorage.addressToVaultId[primary] = vaultId;
+        vaultStorage.addressToVaultId[msg.sender] = vaultId;
 
         for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; ++i) {
             address rewardToken = rewardsStorage.rewardTokens[i];
@@ -105,24 +103,24 @@ library VaultLibrary {
             rewardsStorage.vaultRewardIndex[vaultId][token] = rewardsStorage.rewardPerShareStored[token];
         }
 
-        emit VaultCreated(vaultId, primary, 0);
+        emit VaultCreated(vaultId, msg.sender, 0);
     }
 
     /// @notice Update primary address
     /// @param vaultStorage Vault storage structure
     /// @param vaultId Vault ID to update
-    /// @param sender Sender address (for authorization check)
     /// @param newPrimary New primary address
     function executeUpdatePrimaryAddress(
         DataTypes.VaultStorage storage vaultStorage,
         uint256 vaultId,
-        address sender,
         address newPrimary
     ) external {
         _validateVaultWithShares(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(sender == vault.primary || sender == vault.backup || sender == vault.emergency, Unauthorized());
+        require(
+            msg.sender == vault.primary || msg.sender == vault.backup || msg.sender == vault.emergency, Unauthorized()
+        );
         require(newPrimary != address(0), InvalidAddress());
         require(vaultStorage.addressToVaultId[newPrimary] == 0, AddressAlreadyUsedInAnotherVault());
 
@@ -138,18 +136,14 @@ library VaultLibrary {
     /// @notice Update backup address
     /// @param vaultStorage Vault storage structure
     /// @param vaultId Vault ID to update
-    /// @param sender Sender address (for authorization check)
     /// @param newBackup New backup address
-    function executeUpdateBackupAddress(
-        DataTypes.VaultStorage storage vaultStorage,
-        uint256 vaultId,
-        address sender,
-        address newBackup
-    ) external {
+    function executeUpdateBackupAddress(DataTypes.VaultStorage storage vaultStorage, uint256 vaultId, address newBackup)
+        external
+    {
         _validateVaultWithShares(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(sender == vault.backup || sender == vault.emergency, Unauthorized());
+        require(msg.sender == vault.backup || msg.sender == vault.emergency, Unauthorized());
         require(newBackup != address(0), InvalidAddress());
 
         address oldBackup = vault.backup;
@@ -161,18 +155,16 @@ library VaultLibrary {
     /// @notice Update emergency address
     /// @param vaultStorage Vault storage structure
     /// @param vaultId Vault ID to update
-    /// @param sender Sender address (for authorization check)
     /// @param newEmergency New emergency address
     function executeUpdateEmergencyAddress(
         DataTypes.VaultStorage storage vaultStorage,
         uint256 vaultId,
-        address sender,
         address newEmergency
     ) external {
         _validateVaultWithShares(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(sender == vault.emergency, Unauthorized());
+        require(msg.sender == vault.emergency, Unauthorized());
         require(newEmergency != address(0), InvalidAddress());
 
         address oldEmergency = vault.emergency;

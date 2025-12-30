@@ -37,7 +37,6 @@ library ExitQueueLibrary {
     /// @param vaultStorage Vault storage structure
     /// @param exitQueueStorage Exit queue storage structure
     /// @param daoState DAO state storage structure
-    /// @param sender Sender address
     /// @param launchToken Launch token address
     /// @param getOraclePrice Function to get token price in USD
     /// @param updateVotesCallback Function to update votes in voting contract
@@ -45,16 +44,15 @@ library ExitQueueLibrary {
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.ExitQueueStorage storage exitQueueStorage,
         DataTypes.DAOState storage daoState,
-        address sender,
         address launchToken,
         function(address) external returns (uint256) getOraclePrice,
         function(uint256, int256) external updateVotesCallback
     ) external {
-        uint256 vaultId = vaultStorage.addressToVaultId[sender];
+        uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(vault.primary == sender, OnlyPrimaryCanClaim());
+        require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
         require(vault.shares >= Constants.MIN_EXIT_SHARES, AmountMustBeGreaterThanZero());
         require(exitQueueStorage.vaultExitRequestIndex[vaultId] == 0, AlreadyInExitQueue());
 
@@ -356,18 +354,16 @@ library ExitQueueLibrary {
     /// @param vaultStorage Vault storage structure
     /// @param exitQueueStorage Exit queue storage structure
     /// @param daoState DAO state storage structure
-    /// @param sender Sender address
     function executeCancelExit(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.ExitQueueStorage storage exitQueueStorage,
-        DataTypes.DAOState storage daoState,
-        address sender
+        DataTypes.DAOState storage daoState
     ) external {
-        uint256 vaultId = vaultStorage.addressToVaultId[sender];
+        uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(vault.primary == sender, OnlyPrimaryCanClaim());
+        require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
 
         uint256 exitRequestIndex = exitQueueStorage.vaultExitRequestIndex[vaultId];
         require(exitRequestIndex != 0, NotInExitQueue());

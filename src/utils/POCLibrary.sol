@@ -176,11 +176,10 @@ library POCLibrary {
         uint256 totalSharesSupply,
         uint256 amount
     ) external returns (uint256 profitPercentEquivalent) {
-        address sender = msg.sender;
-        require(isPocContract[sender], OnlyPOCContract());
+        require(isPocContract[msg.sender], OnlyPOCContract());
         require(amount > 0, AmountMustBeGreaterThanZero());
 
-        IERC20(launchToken).safeTransferFrom(sender, address(this), amount);
+        IERC20(launchToken).safeTransferFrom(msg.sender, address(this), amount);
 
         require(sharePriceInLaunches > 0, InvalidSharePrice());
         uint256 sharesEquivalent = (amount * Constants.PRICE_DECIMALS_MULTIPLIER) / sharePriceInLaunches;

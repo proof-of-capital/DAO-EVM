@@ -376,7 +376,6 @@ library LPTokenLibrary {
         DataTypes.PricePathV3Params[] calldata newV3PricePaths,
         DataTypes.LPTokenType primaryLPTokenType
     ) external returns (uint256 activeStageTimestamp) {
-        address sender = msg.sender;
         require(v2LPTokenAddresses.length == v2LPAmounts.length, InvalidAddresses());
         require(v2LPTokenAddresses.length > 0 || v3TokenIds.length > 0, InvalidAddress());
 
@@ -407,7 +406,7 @@ library LPTokenLibrary {
             require(lpToken != address(0), InvalidAddress());
             require(lpAmount > 0, AmountMustBeGreaterThanZero());
 
-            IERC20(lpToken).safeTransferFrom(sender, address(this), lpAmount);
+            IERC20(lpToken).safeTransferFrom(msg.sender, address(this), lpAmount);
 
             if (!lpTokenStorage.isV2LPToken[lpToken]) {
                 lpTokenStorage.v2LPTokens.push(lpToken);

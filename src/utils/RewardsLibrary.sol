@@ -31,21 +31,19 @@ library RewardsLibrary {
     /// @param rewardsStorage Rewards storage structure
     /// @param lpTokenStorage LP token storage structure
     /// @param accountedBalance Accounted balance mapping
-    /// @param sender Sender address
     /// @param tokens Array of token addresses to claim
     function executeClaimReward(
         DataTypes.VaultStorage storage vaultStorage,
         DataTypes.RewardsStorage storage rewardsStorage,
         DataTypes.LPTokenStorage storage lpTokenStorage,
         mapping(address => uint256) storage accountedBalance,
-        address sender,
         address[] calldata tokens
     ) external {
-        uint256 vaultId = vaultStorage.addressToVaultId[sender];
+        uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         VaultLibrary._validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(vault.primary == sender, OnlyPrimaryCanClaim());
+        require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
 
         executeUpdateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
 
@@ -57,7 +55,7 @@ library RewardsLibrary {
                 rewardsStorage.earnedRewards[vaultId][token] = 0;
                 accountedBalance[token] -= rewards;
 
-                IERC20(token).safeTransfer(sender, rewards);
+                IERC20(token).safeTransfer(msg.sender, rewards);
 
                 emit RewardClaimed(vaultId, token, rewards);
             }
@@ -71,7 +69,7 @@ library RewardsLibrary {
                 rewardsStorage.earnedRewards[vaultId][lpToken] = 0;
                 accountedBalance[lpToken] -= rewards;
 
-                IERC20(lpToken).safeTransfer(sender, rewards);
+                IERC20(lpToken).safeTransfer(msg.sender, rewards);
 
                 emit RewardClaimed(vaultId, lpToken, rewards);
             }
