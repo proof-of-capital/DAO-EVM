@@ -521,6 +521,12 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         );
     }
 
+    /// @notice Remove an inactive POC contract from the list
+    /// @param pocContract POC contract address to remove
+    function removePOCContract(address pocContract) external onlyParticipantOrAdmin {
+        POCLibrary.executeRemovePOCContract(pocContracts, pocIndex, isPocContract, pocContract);
+    }
+
     /// @notice Withdraw funds if fundraising was cancelled
     function withdrawFundraising() external nonReentrant atStage(DataTypes.Stage.FundraisingCancelled) {
         FundraisingLibrary.executeWithdrawFundraising(

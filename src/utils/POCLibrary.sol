@@ -39,6 +39,9 @@ library POCLibrary {
     error POCAlreadyExists();
     error TotalShareExceeds100Percent();
     error MaxPOCContractsReached();
+    error POCIsActive();
+    error POCStillHasBalances();
+    error POCNotFound();
 
     event POCExchangeCompleted(
         uint256 indexed pocIdx,
@@ -49,6 +52,7 @@ library POCLibrary {
     );
     event CreatorLaunchesReturned(uint256 amount, uint256 profitPercentEquivalent, uint256 newCreatorProfitPercent);
     event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
+    event POCContractRemoved(address indexed pocContract);
     event SellableCollateralAdded(address indexed token, address indexed priceFeed);
 
     /// @notice Exchange mainCollateral for launch tokens from a specific POC contract
@@ -256,6 +260,41 @@ library POCLibrary {
         isPocContract[pocContract] = true;
 
         emit POCContractAdded(pocContract, collateralToken, sharePercent);
+    }
+
+    /// @notice Remove an inactive POC contract from the list
+    /// @param pocContracts Array of POC contracts
+    /// @param pocIndex Mapping of POC contract address to index
+    /// @param isPocContract Mapping to check if address is POC contract
+    /// @param pocContract POC contract address to remove
+    function executeRemovePOCContract(
+        DataTypes.POCInfo[] storage pocContracts,
+        mapping(address => uint256) storage pocIndex,
+        mapping(address => bool) storage isPocContract,
+        address pocContract
+    ) external {
+        require(pocContract != address(0), InvalidAddress());
+        require(pocIndex[pocContract] != 0, POCNotFound());
+
+        IProofOfCapital poc = IProofOfCapital(pocContract);
+        require(!poc.isActive(), POCIsActive());
+        require(poc.launchBalance() == 0, POCStillHasBalances());
+        require(poc.contractCollateralBalance() == 0, POCStillHasBalances());
+
+        uint256 idx = pocIndex[pocContract] - 1;
+        uint256 lastIdx = pocContracts.length - 1;
+
+        if (idx != lastIdx) {
+            DataTypes.POCInfo storage lastPoc = pocContracts[lastIdx];
+            pocContracts[idx] = lastPoc;
+            pocIndex[lastPoc.pocContract] = idx + 1;
+        }
+
+        pocContracts.pop();
+        pocIndex[pocContract] = 0;
+        isPocContract[pocContract] = false;
+
+        emit POCContractRemoved(pocContract);
     }
 }
 

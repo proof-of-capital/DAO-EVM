@@ -129,6 +129,9 @@ interface IDAO {
     error UpgradeDelayNotPassed();
     error TokenNotAdded();
     error POCLockPeriodNotEnded();
+    error POCIsActive();
+    error POCStillHasBalances();
+    error POCNotFound();
 
     // ============================================
     // EVENTS
@@ -187,6 +190,7 @@ interface IDAO {
     event FundraisingCancelled(uint256 totalCollected);
     event FundraisingCollectionFinalized(uint256 totalCollected, uint256 totalShares);
     event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
+    event POCContractRemoved(address indexed pocContract);
     event POCExchangeCompleted(
         uint256 indexed pocIndex,
         address indexed pocContract,
@@ -258,6 +262,7 @@ interface IDAO {
 
     function addPOCContract(address pocContract, address collateralToken, address priceFeed, uint256 sharePercent)
         external;
+    function removePOCContract(address pocContract) external;
     function withdrawFundraising() external;
     function extendFundraising() external;
     function cancelFundraising() external;
