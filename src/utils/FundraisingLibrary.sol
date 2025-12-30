@@ -206,6 +206,7 @@ library FundraisingLibrary {
     /// @param creator Creator address
     /// @param creatorInfraPercent Creator infrastructure percent
     /// @param totalSharesSupply Total shares supply
+    /// @param getOraclePrice Function pointer to get oracle price for a token
     function executeFinalizeExchange(
         DataTypes.POCInfo[] storage pocContracts,
         DataTypes.DAOState storage daoState,
@@ -214,7 +215,8 @@ library FundraisingLibrary {
         address launchToken,
         address creator,
         uint256 creatorInfraPercent,
-        uint256 totalSharesSupply
+        uint256 totalSharesSupply,
+        function(address) external returns (uint256) getOraclePrice
     ) external {
         for (uint256 i = 0; i < pocContracts.length; ++i) {
             require(pocContracts[i].exchanged, POCNotExchanged());
@@ -223,6 +225,9 @@ library FundraisingLibrary {
         require(totalSharesSupply > 0, NoSharesIssued());
         fundraisingConfig.sharePrice =
             (accountedBalance[launchToken] * Constants.PRICE_DECIMALS_MULTIPLIER) / totalSharesSupply;
+
+        fundraisingConfig.sharePriceStart = fundraisingConfig.sharePrice;
+        fundraisingConfig.launchPriceStart = getOraclePrice(launchToken);
 
         uint256 infraLaunches = (accountedBalance[launchToken] * creatorInfraPercent) / Constants.BASIS_POINTS;
         if (infraLaunches > 0) {
@@ -276,18 +281,16 @@ library FundraisingLibrary {
         uint256 depositLimit = vault.depositLimit;
         require(vault.shares + shares <= depositLimit, DepositLimitExceeded());
 
-        uint256 sharePriceInLaunches =
-            (fundraisingConfig.sharePrice * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.launchPrice;
-        uint256 usdDeposit = shares * sharePriceInLaunches / Constants.PRICE_DECIMALS_MULTIPLIER
-            * fundraisingConfig.launchPrice / Constants.PRICE_DECIMALS_MULTIPLIER / 2;
+        uint256 mainCollateralPriceUSD = getOraclePrice(mainCollateral) / 2;
+        uint256 usdDeposit = (amount * mainCollateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
         DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
         if (entry.entryTimestamp == 0) {
-            entry.fixedSharePrice = fundraisingConfig.sharePrice;
-            entry.fixedLaunchPrice = fundraisingConfig.launchPrice;
+            entry.fixedSharePrice = 0;
+            entry.fixedLaunchPrice = 0;
             entry.entryTimestamp = block.timestamp;
-            entry.weightedAvgSharePrice = entry.fixedSharePrice;
-            entry.weightedAvgLaunchPrice = entry.fixedLaunchPrice;
+            entry.weightedAvgSharePrice = 0;
+            entry.weightedAvgLaunchPrice = 0;
         }
         entry.depositedMainCollateral += amount;
         participantEntries[vaultId] = entry;
@@ -370,8 +373,8 @@ library FundraisingLibrary {
 
         if (entry.entryTimestamp == 0) {
             entry.entryTimestamp = block.timestamp;
-            entry.fixedSharePrice = fundraisingConfig.sharePrice;
-            entry.fixedLaunchPrice = fundraisingConfig.launchPrice;
+            entry.fixedSharePrice = fundraisingConfig.sharePriceStart;
+            entry.fixedLaunchPrice = fundraisingConfig.launchPriceStart;
         }
 
         participantEntries[vaultId] = entry;

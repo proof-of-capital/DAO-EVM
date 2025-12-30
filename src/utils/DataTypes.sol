@@ -204,6 +204,8 @@ library DataTypes {
         uint256 minLaunchDeposit; // Minimum launch token deposit (18 decimals), e.g., 10000e18 = 10k launches
         uint256 sharePrice; // Fixed share price in USD (18 decimals)
         uint256 launchPrice; // Fixed launch token price in USD (18 decimals)
+        uint256 sharePriceStart; // Share price in launches after exchange finalized (18 decimals)
+        uint256 launchPriceStart; // Launch token price (oracle) at exchange finalization (18 decimals)
         uint256 targetAmountMainCollateral; // Target fundraising amount in main collateral (18 decimals)
         uint256 deadline; // Fundraising deadline timestamp
         uint256 extensionPeriod; // Extension period in seconds (if deadline missed)

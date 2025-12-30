@@ -208,6 +208,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             minLaunchDeposit: params.minLaunchDeposit,
             sharePrice: params.sharePrice,
             launchPrice: params.launchPrice,
+            sharePriceStart: 0,
+            launchPriceStart: 0,
             targetAmountMainCollateral: params.targetAmountMainCollateral,
             deadline: block.timestamp + params.fundraisingDuration,
             extensionPeriod: params.extensionPeriod,
@@ -605,7 +607,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             address(launchToken),
             creator,
             creatorInfraPercent,
-            vaultStorage.totalSharesSupply
+            vaultStorage.totalSharesSupply,
+            this.getOraclePrice
         );
 
         if (daoState.currentStage == DataTypes.Stage.WaitingForLP) {
