@@ -219,7 +219,6 @@ contract Voting is IVoting {
         DataTypes.Vault memory vault = dao.vaults(vaultId);
         require(vault.shares > 0, NoVotingPower());
         require(vault.primary == msg.sender, OnlyPrimaryCanVote());
-        require(block.timestamp >= vault.votingPausedUntil, VotingIsPaused());
         require(!hasVotedMapping[proposalId][vaultId], AlreadyVoted());
 
         require(!dao.isVaultInExitQueue(vaultId), VaultInExitQueue());
