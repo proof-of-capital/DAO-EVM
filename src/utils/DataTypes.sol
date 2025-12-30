@@ -343,6 +343,7 @@ library DataTypes {
         V3LPPositionParams[] v3LPPositions; // V3 LP positions for initialization (optional)
         address[] allowedExitTokens; // Tokens allowed for exit payments (global list)
         TokenPricePathsParams launchTokenPricePaths; // Paths for launch token price validation
+        address votingContract; // Voting contract address (optional, can be set later)
     }
 
     // ============================================

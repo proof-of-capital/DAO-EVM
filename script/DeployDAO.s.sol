@@ -145,7 +145,8 @@ contract DeployDAO is Script {
                 v2Paths: new DataTypes.PricePathV2Params[](0),
                 v3Paths: new DataTypes.PricePathV3Params[](0),
                 minLiquidity: 1000e18
-            })
+            }),
+            votingContract: address(0) // Will be set later via setVotingContract
         });
 
         // Deploy DAO implementation contract (upgradeable pattern)

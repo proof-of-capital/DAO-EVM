@@ -256,6 +256,10 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
         OracleLibrary.initializePricePaths(pricePathsStorage, params.launchTokenPricePaths);
 
+        require(params.votingContract != address(0), InvalidAddress());
+        votingContract = params.votingContract;
+        emit VotingContractSet(params.votingContract);
+
         emit CreatorSet(params.creator, params.creatorProfitPercent, params.creatorInfraPercent);
         emit FundraisingConfigured(
             params.minDeposit, params.sharePrice, params.targetAmountMainCollateral, fundraisingConfig.deadline
@@ -683,10 +687,11 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     }
 
     /// @notice Set voting contract address
+    /// @notice Only the current voting contract can replace itself through voting
     /// @param _votingContract Voting contract address
-    function setVotingContract(address _votingContract) external onlyAdmin {
+    function setVotingContract(address _votingContract) external onlyVoting {
         require(_votingContract != address(0), InvalidAddress());
-        require(votingContract == address(0), VotingContractAlreadySet());
+        require(votingContract != address(0), InvalidAddress());
 
         votingContract = _votingContract;
 
