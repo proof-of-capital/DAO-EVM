@@ -267,5 +267,23 @@ library VaultLibrary {
             }
         }
     }
+
+    /// @notice Set allowed exit token for a vault
+    /// @param vaultStorage Vault storage structure
+    /// @param token Token address to set
+    /// @param allowed Whether the token is allowed
+    function executeSetVaultAllowedExitToken(DataTypes.VaultStorage storage vaultStorage, address token, bool allowed)
+        external
+    {
+        require(token != address(0), InvalidAddress());
+
+        uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
+        _validateVaultExists(vaultStorage, vaultId);
+
+        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        require(vault.primary == msg.sender, Unauthorized());
+
+        vaultStorage.vaultAllowedExitTokens[vaultId][token] = allowed;
+    }
 }
 

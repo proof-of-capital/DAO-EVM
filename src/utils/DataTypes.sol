@@ -307,6 +307,7 @@ library DataTypes {
         OrderbookConstructorParams orderbookParams;
         LPTokenType primaryLPTokenType; // Primary LP token type (if specified, must be provided)
         V3LPPositionParams[] v3LPPositions; // V3 LP positions for initialization (optional)
+        address[] allowedExitTokens; // Tokens allowed for exit payments (global list)
     }
 
     // ============================================
@@ -319,6 +320,7 @@ library DataTypes {
         mapping(address => uint256) addressToVaultId;
         uint256 nextVaultId;
         uint256 totalSharesSupply;
+        mapping(uint256 => mapping(address => bool)) vaultAllowedExitTokens; // Vault-specific allowed exit tokens
     }
 
     /// @notice Storage structure for Rewards system

@@ -90,6 +90,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     mapping(address => uint256) public accountedBalance;
 
+    mapping(address => bool) public allowedExitTokens;
+
     DataTypes.LPTokenType public primaryLPTokenType;
 
     uint256 public activeStageTimestamp;
@@ -220,6 +222,12 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             availableRouterByAdmin[router] = true;
 
             emit RouterAvailabilityChanged(router, true);
+        }
+
+        for (uint256 i = 0; i < params.allowedExitTokens.length; ++i) {
+            address token = params.allowedExitTokens[i];
+            require(token != address(0), InvalidAddress());
+            allowedExitTokens[token] = true;
         }
 
         FundraisingLibrary.executeInitializePOCContracts(
@@ -361,6 +369,13 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         emit VaultDepositLimitSet(vaultId, limit);
     }
 
+    /// @notice Set allowed exit token for caller's vault
+    /// @param token Token address to set
+    /// @param allowed Whether the token is allowed for exit payments
+    function setVaultAllowedExitToken(address token, bool allowed) external {
+        VaultLibrary.executeSetVaultAllowedExitToken(_vaultStorage, token, allowed);
+    }
+
     /// @notice Claim accumulated rewards for tokens
     /// @param tokens Array of token addresses to claim
     function claimReward(address[] calldata tokens) external nonReentrant {
@@ -486,7 +501,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             _vaultStorage.totalSharesSupply,
             collateral,
             address(launchToken),
-            this.getOraclePrice
+            this.getOraclePrice,
+            allowedExitTokens,
+            _vaultStorage.vaultAllowedExitTokens
         );
     }
 
@@ -793,7 +810,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             _vaultStorage.totalSharesSupply,
             token,
             address(launchToken),
-            this.getOraclePrice
+            this.getOraclePrice,
+            allowedExitTokens,
+            _vaultStorage.vaultAllowedExitTokens
         );
     }
 
@@ -830,7 +849,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             _vaultStorage.totalSharesSupply,
             token,
             address(launchToken),
-            this.getOraclePrice
+            this.getOraclePrice,
+            allowedExitTokens,
+            _vaultStorage.vaultAllowedExitTokens
         );
     }
 

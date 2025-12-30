@@ -107,6 +107,8 @@ library ExitQueueLibrary {
     /// @param token Token used for buyback
     /// @param launchToken Launch token address
     /// @param getOraclePrice Function to get token price in USD
+    /// @param allowedExitTokens Global mapping of allowed exit tokens
+    /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
     /// @return remainingFunds Remaining funds after processing (in tokens)
     /// @return newTotalSharesSupply Updated total shares supply
     function processExitQueue(
@@ -119,7 +121,9 @@ library ExitQueueLibrary {
         uint256 availableFunds,
         address token,
         address launchToken,
-        function(address) external view returns (uint256) getOraclePrice
+        function(address) external view returns (uint256) getOraclePrice,
+        mapping(address => bool) storage allowedExitTokens,
+        mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
     ) external returns (uint256 remainingFunds, uint256 newTotalSharesSupply) {
         newTotalSharesSupply = totalSharesSupply;
         remainingFunds = availableFunds;
@@ -138,7 +142,9 @@ library ExitQueueLibrary {
             DataTypes.ExitRequest storage request = exitQueueStorage.exitQueue[i];
 
             if (request.processed) {
-                exitQueueStorage.nextExitQueueIndex = i + 1;
+                if (exitQueueStorage.nextExitQueueIndex == i) {
+                    exitQueueStorage.nextExitQueueIndex = i + 1;
+                }
                 continue;
             }
 
@@ -146,7 +152,13 @@ library ExitQueueLibrary {
             uint256 shares = vault.shares;
 
             if (shares == 0) {
-                exitQueueStorage.nextExitQueueIndex = i + 1;
+                if (exitQueueStorage.nextExitQueueIndex == i) {
+                    exitQueueStorage.nextExitQueueIndex = i + 1;
+                }
+                continue;
+            }
+
+            if (!allowedExitTokens[token] && !vaultAllowedExitTokens[request.vaultId][token]) {
                 continue;
             }
 
@@ -167,7 +179,9 @@ library ExitQueueLibrary {
                     newTotalSharesSupply
                 );
                 remainingFunds -= exitValueInTokens;
-                exitQueueStorage.nextExitQueueIndex = i + 1;
+                if (exitQueueStorage.nextExitQueueIndex == i) {
+                    exitQueueStorage.nextExitQueueIndex = i + 1;
+                }
             } else {
                 uint256 partialShares = (remainingFunds * shares) / exitValueInTokens;
                 if (partialShares > 0) {
