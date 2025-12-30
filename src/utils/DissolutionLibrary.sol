@@ -32,6 +32,7 @@ library DissolutionLibrary {
     error InvalidAddress();
     error NoRewardsToClaim();
     error InvalidStage();
+    error TokenNotActive();
 
     event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
     event CreatorDissolutionClaimed(address indexed creator, uint256 launchAmount);
@@ -141,9 +142,7 @@ library DissolutionLibrary {
             uint256 tokenBalance = IERC20(token).balanceOf(address(this));
             if (tokenBalance == 0) continue;
 
-            bool isValidToken = token == address(launchToken) || rewardsStorage.rewardTokenInfo[token].active;
-
-            require(isValidToken, InvalidAddress());
+            require(rewardsStorage.rewardTokenInfo[token].active && token != address(launchToken), TokenNotActive());
 
             uint256 tokenShare;
             if (daoState.totalDepositedUSD > 0 && vaultDepositedUSD > 0) {
@@ -154,9 +153,7 @@ library DissolutionLibrary {
 
             if (tokenShare > 0) {
                 IERC20(token).safeTransfer(msg.sender, tokenShare);
-                if (token == address(launchToken)) {
-                    accountedBalance[address(launchToken)] -= tokenShare;
-                }
+                accountedBalance[token] -= tokenShare;
             }
         }
 
