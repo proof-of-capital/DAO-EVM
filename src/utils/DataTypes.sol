@@ -55,7 +55,8 @@ library DataTypes {
         POC, // Calls to POC contracts (external management)
         Financial, // Calls to token contracts (financial operations) - forbidden
         Other, // All other external calls
-        Veto, // Veto proposal for multisig (set/remove veto mode)
+        VetoFor, // Veto proposal for multisig (set veto mode - setIsVetoToCreator(true))
+        VetoAgainst, // Veto proposal for multisig (remove veto mode - setIsVetoToCreator(false))
         Arbitrary, // Arbitrary call proposal (general questions)
         Unanimous // Unanimous vote required (for changing POC contracts, contract upgrades)
     }
@@ -185,7 +186,7 @@ library DataTypes {
         uint256 id; // Proposal ID
         address proposer; // Address that created the proposal
         ProposalType proposalType; // Type of proposal (auto-determined)
-        bytes callData; // Call data for execution
+        bytes32 callDataHash; // Hash of call data for execution
         address targetContract; // Target contract for execution
         uint256 forVotes; // Votes in favor
         uint256 againstVotes; // Votes against
