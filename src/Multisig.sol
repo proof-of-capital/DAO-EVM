@@ -130,11 +130,15 @@ contract Multisig is IMultisig {
             require(_backupAddrs[i] != address(0), InvalidBackupAddress());
             require(_emergencyAddrs[i] != address(0), InvalidEmergencyAddress());
 
-            require(
-                _primaryAddrs[i] != _backupAddrs[i] && _primaryAddrs[i] != _emergencyAddrs[i]
-                    && _backupAddrs[i] != _emergencyAddrs[i],
-                AddressesMustBeUnique()
-            );
+            bool isContractOwner = _primaryAddrs[i] == _backupAddrs[i] && _backupAddrs[i] == _emergencyAddrs[i];
+
+            if (!isContractOwner) {
+                require(
+                    _primaryAddrs[i] != _backupAddrs[i] && _primaryAddrs[i] != _emergencyAddrs[i]
+                        && _backupAddrs[i] != _emergencyAddrs[i],
+                    AddressesMustBeUnique()
+                );
+            }
 
             owners.push(
                 Owner({
@@ -462,10 +466,25 @@ contract Multisig is IMultisig {
         _changeEmergencyAddress(idx, newEmergencyAddr);
     }
 
+    /// @notice Change all three addresses (primary, backup, emergency) in one transaction
+    /// @param newPrimaryAddr New primary address
+    /// @param newBackupAddr New backup address
+    /// @param newEmergencyAddr New emergency address
+    function changeAllAddresses(address newPrimaryAddr, address newBackupAddr, address newEmergencyAddr)
+        external
+        onlyPrimaryOwner
+    {
+        uint256 idx = ownerIndex[msg.sender];
+        _changePrimaryAddress(idx, newPrimaryAddr);
+        _changeBackupAddress(idx, newBackupAddr);
+        _changeEmergencyAddress(idx, newEmergencyAddr);
+    }
+
     /// @inheritdoc IMultisig
     function changeOwnerEmergencyAddress(uint256 ownerIdx, address newEmergencyAddr) external {
         require(msg.sender == address(this), CanOnlyBeCalledThroughMultisig());
         require(ownerIdx < owners.length, OwnerIndexOutOfBounds());
+        require(!_isContractOwner(ownerIdx), CannotReplaceContractOwner());
         _changeEmergencyAddress(ownerIdx, newEmergencyAddr);
     }
 
@@ -632,6 +651,11 @@ contract Multisig is IMultisig {
     /// @inheritdoc IMultisig
     function isAnyOwner(address addr) public view returns (bool) {
         return isPrimaryOwner[addr] || isBackupOwner[addr] || isEmergencyOwner[addr];
+    }
+
+    function _isContractOwner(uint256 idx) internal view returns (bool) {
+        Owner storage owner = owners[idx];
+        return owner.primaryAddr == owner.backupAddr && owner.backupAddr == owner.emergencyAddr;
     }
 
     function _changePrimaryAddress(uint256 idx, address newPrimaryAddr) internal {

@@ -165,6 +165,7 @@ interface IMultisig {
     error PriceDeviationTooHigh();
     error InvalidPrice();
     error StalePrice();
+    error CannotReplaceContractOwner();
 
     /// @notice Events
     event TransactionSubmitted(
@@ -248,6 +249,12 @@ interface IMultisig {
     /// @notice Change emergency address by emergency owner
     /// @param newEmergencyAddr New emergency address
     function changeEmergencyAddressByEmergency(address newEmergencyAddr) external;
+
+    /// @notice Change all three addresses (primary, backup, emergency) in one transaction
+    /// @param newPrimaryAddr New primary address
+    /// @param newBackupAddr New backup address
+    /// @param newEmergencyAddr New emergency address
+    function changeAllAddresses(address newPrimaryAddr, address newBackupAddr, address newEmergencyAddr) external;
 
     /// @notice Change owner emergency address (only through multisig)
     /// @param ownerIdx Owner index
