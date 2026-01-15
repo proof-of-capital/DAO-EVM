@@ -360,7 +360,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Set delegate address for voting (only callable by voting contract)
     /// @param userAddress User address to find vault and set delegate
     /// @param delegate New delegate address (if zero, primary is set as delegate)
-    function setDelegate(address userAddress, address delegate) external {
+    function setDelegate(address userAddress, address delegate) external atStage(DataTypes.Stage.Active) {
         require(msg.sender == address(votingContract), OnlyVotingContract());
         require(votingContract != address(0), InvalidAddress());
         VaultLibrary.executeSetDelegate(vaultStorage, exitQueueStorage, userAddress, delegate, votingContract);

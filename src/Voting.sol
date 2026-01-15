@@ -239,6 +239,57 @@ contract Voting is IVoting {
         emit VoteCast(proposalId, vaultId, support, votingPower);
     }
 
+    /// @notice Update votes for a vault in a specific proposal
+    /// @param proposalId Proposal ID
+    /// @param vaultId Vault ID
+    /// @param voteChange Change in votes (positive for increase, negative for decrease)
+    /// @param support Vote direction (true for for, false for against)
+    function _updateVotesInProposal(uint256 proposalId, uint256 vaultId, int256 voteChange, bool support) internal {
+        if (voteChange == 0) {
+            return;
+        }
+
+        DataTypes.ProposalCore storage proposal = proposals[proposalId];
+        uint256 currentVotes = proposalVotesByVault[proposalId][vaultId];
+        if (currentVotes == 0 && voteChange < 0) {
+            return;
+        }
+
+        uint256 voteChangeAbs;
+        if (voteChange > 0) {
+            voteChangeAbs = uint256(voteChange);
+            proposalVotesByVault[proposalId][vaultId] = currentVotes + voteChangeAbs;
+        } else {
+            voteChangeAbs = uint256(-voteChange);
+            if (voteChangeAbs > currentVotes) {
+                voteChangeAbs = currentVotes;
+            }
+            proposalVotesByVault[proposalId][vaultId] = currentVotes - voteChangeAbs;
+        }
+
+        if (support) {
+            if (voteChange > 0) {
+                proposal.forVotes += voteChangeAbs;
+            } else {
+                if (proposal.forVotes >= voteChangeAbs) {
+                    proposal.forVotes -= voteChangeAbs;
+                } else {
+                    proposal.forVotes = 0;
+                }
+            }
+        } else {
+            if (voteChange > 0) {
+                proposal.againstVotes += voteChangeAbs;
+            } else {
+                if (proposal.againstVotes >= voteChangeAbs) {
+                    proposal.againstVotes -= voteChangeAbs;
+                } else {
+                    proposal.againstVotes = 0;
+                }
+            }
+        }
+    }
+
     /// @notice Update votes for a vault when its voting shares change
     /// @dev Only callable by DAO contract
     /// @param vaultId Vault ID whose voting shares changed
@@ -262,37 +313,98 @@ contract Voting is IVoting {
             }
 
             bool support = proposalVoteDirection[proposalId][vaultId];
-            uint256 voteChange;
+            _updateVotesInProposal(proposalId, vaultId, votingSharesDelta, support);
+        }
+    }
 
-            if (votingSharesDelta > 0) {
-                voteChange = uint256(votingSharesDelta);
-                proposalVotesByVault[proposalId][vaultId] = currentVotes + voteChange;
-            } else {
-                voteChange = uint256(-votingSharesDelta);
-                if (voteChange > currentVotes) {
-                    voteChange = currentVotes;
-                }
-                proposalVotesByVault[proposalId][vaultId] = currentVotes - voteChange;
+    /// @notice Set delegate address for voting
+    /// @dev Only callable by vault primary owner
+    /// @dev Transfers votes from old delegate to new delegate in active proposals
+    /// @param delegate New delegate address (if zero, self-delegation)
+    function setDelegate(address delegate) external {
+        DataTypes.DAOState memory daoState = dao.getDaoState();
+        require(daoState.currentStage == DataTypes.Stage.Active, DAONotInActiveStage());
+
+        uint256 vaultId = dao.addressToVaultId(msg.sender);
+        require(vaultId > 0, NoVaultFound());
+
+        DataTypes.Vault memory vault = dao.vaults(vaultId);
+        require(vault.primary == msg.sender, OnlyPrimaryCanVote());
+        require(vault.shares > 0, NoVotingPower());
+        require(!dao.isVaultInExitQueue(vaultId), VaultInExitQueue());
+
+        uint256 oldDelegateId = vault.delegateId;
+        uint256 newDelegateId = delegate == address(0) ? 0 : dao.addressToVaultId(delegate);
+        uint256 vaultShares = vault.shares;
+
+        if (oldDelegateId != newDelegateId && oldDelegateId != 0 && oldDelegateId != vaultId) {
+            _transferVotesFromDelegate(oldDelegateId, newDelegateId, vaultShares, vaultId);
+        }
+
+        dao.setDelegate(msg.sender, delegate);
+    }
+
+    /// @notice Transfer votes from old delegate to new delegate in active proposals
+    /// @param oldDelegateId Old delegate vault ID
+    /// @param newDelegateId New delegate vault ID
+    /// @param vaultShares Shares amount to transfer
+    /// @param delegatorVaultId Vault ID that is delegating
+    function _transferVotesFromDelegate(
+        uint256 oldDelegateId,
+        uint256 newDelegateId,
+        uint256 vaultShares,
+        uint256 delegatorVaultId
+    ) internal {
+        for (uint256 proposalId = lastProcessedProposalId; proposalId < nextProposalId; proposalId++) {
+            DataTypes.ProposalCore storage proposal = proposals[proposalId];
+
+            if (block.timestamp >= proposal.endTime || proposal.executed) {
+                lastProcessedProposalId = proposalId + 1;
+                continue;
             }
 
-            if (support) {
-                if (votingSharesDelta > 0) {
-                    proposal.forVotes += voteChange;
-                } else {
-                    if (proposal.forVotes >= voteChange) {
-                        proposal.forVotes -= voteChange;
+            if (!hasVotedMapping[proposalId][oldDelegateId]) {
+                continue;
+            }
+
+            uint256 oldDelegateVotes = proposalVotesByVault[proposalId][oldDelegateId];
+            if (oldDelegateVotes == 0) {
+                continue;
+            }
+
+            bool support = proposalVoteDirection[proposalId][oldDelegateId];
+            uint256 votesToTransfer = vaultShares;
+            if (votesToTransfer > oldDelegateVotes) {
+                votesToTransfer = oldDelegateVotes;
+            }
+
+            _updateVotesInProposal(proposalId, oldDelegateId, -int256(votesToTransfer), support);
+
+            if (newDelegateId != 0 && newDelegateId != delegatorVaultId) {
+                if (hasVotedMapping[proposalId][newDelegateId]) {
+                    bool newDelegateSupport = proposalVoteDirection[proposalId][newDelegateId];
+                    if (newDelegateSupport == support) {
+                        _updateVotesInProposal(proposalId, newDelegateId, int256(votesToTransfer), support);
                     } else {
-                        proposal.forVotes = 0;
-                    }
-                }
-            } else {
-                if (votingSharesDelta > 0) {
-                    proposal.againstVotes += voteChange;
-                } else {
-                    if (proposal.againstVotes >= voteChange) {
-                        proposal.againstVotes -= voteChange;
-                    } else {
-                        proposal.againstVotes = 0;
+                        uint256 newDelegateVotes = proposalVotesByVault[proposalId][newDelegateId];
+                        uint256 votesToRemove = votesToTransfer;
+                        if (votesToRemove > newDelegateVotes) {
+                            votesToRemove = newDelegateVotes;
+                        }
+
+                        if (votesToRemove > 0) {
+                            _updateVotesInProposal(
+                                proposalId, newDelegateId, -int256(votesToRemove), newDelegateSupport
+                            );
+                        }
+
+                        proposalVotesByVault[proposalId][newDelegateId] += votesToTransfer;
+                        proposalVoteDirection[proposalId][newDelegateId] = support;
+                        if (support) {
+                            proposal.forVotes += votesToTransfer;
+                        } else {
+                            proposal.againstVotes += votesToTransfer;
+                        }
                     }
                 }
             }
