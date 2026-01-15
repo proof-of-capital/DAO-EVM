@@ -791,7 +791,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Only launch tokens can be claimed, other tokens are not available in this function
     function claimCreatorDissolution() external onlyCreator nonReentrant atStage(DataTypes.Stage.Dissolved) {
         DissolutionLibrary.executeClaimCreatorDissolution(
-            accountedBalance, address(launchToken), creatorInfraPercent, creator
+            accountedBalance, address(launchToken), creator
         );
     }
 

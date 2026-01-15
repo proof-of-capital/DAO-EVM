@@ -169,21 +169,18 @@ library DissolutionLibrary {
     /// @notice Claim creator's share of launch tokens during dissolution
     /// @param accountedBalance Mapping of accounted balances
     /// @param launchToken Launch token address
-    /// @param creatorInfraPercent Creator infrastructure percent
     /// @param creator Creator address
-    /// @return creatorLaunchShare Creator's launch share amount
+    /// @return launchBalance Amount of launch tokens claimed
     function executeClaimCreatorDissolution(
         mapping(address => uint256) storage accountedBalance,
         address launchToken,
-        uint256 creatorInfraPercent,
         address creator
-    ) external returns (uint256 creatorLaunchShare) {
-        uint256 launchBalance = IERC20(launchToken).balanceOf(address(this));
-        creatorLaunchShare = (launchBalance * creatorInfraPercent) / Constants.BASIS_POINTS;
-        require(creatorLaunchShare > 0, NoRewardsToClaim());
-        IERC20(launchToken).safeTransfer(creator, creatorLaunchShare);
-        accountedBalance[address(launchToken)] -= creatorLaunchShare;
-        emit CreatorDissolutionClaimed(creator, creatorLaunchShare);
+    ) external returns (uint256 launchBalance) {
+        launchBalance = IERC20(launchToken).balanceOf(address(this));
+        require(launchBalance > 0, NoRewardsToClaim());
+        IERC20(launchToken).safeTransfer(creator, launchBalance);
+        accountedBalance[address(launchToken)] = 0;
+        emit CreatorDissolutionClaimed(creator, launchBalance);
     }
 
     /// @notice Dissolve all LP tokens (V2 and V3) and transition to Dissolved stage
