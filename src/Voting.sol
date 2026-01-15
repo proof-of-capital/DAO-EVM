@@ -671,23 +671,26 @@ contract Voting is IVoting {
         return value ? DataTypes.ProposalType.VetoFor : DataTypes.ProposalType.VetoAgainst;
     }
 
-    /// @notice Check if proposal is an unanimous proposal (calls setPendingUpgradeFromVoting)
+    /// @notice Check if proposal is an unanimous proposal (calls setPendingUpgradeFromVoting, addPOCContract, or removePOCContract)
     /// @param targetContract Target contract address
     /// @param callData Encoded call data
-    /// @return True if proposal calls setPendingUpgradeFromVoting on DAO contract
+    /// @return True if proposal calls setPendingUpgradeFromVoting, addPOCContract, or removePOCContract on DAO contract
     function _isUnanimousProposal(address targetContract, bytes calldata callData) internal view returns (bool) {
         if (targetContract != address(dao)) {
             return false;
         }
 
         bytes4 setPendingUpgradeFromVotingSelector = IDAO.setPendingUpgradeFromVoting.selector;
+        bytes4 addPOCContractSelector = IDAO.addPOCContract.selector;
+        bytes4 removePOCContractSelector = IDAO.removePOCContract.selector;
 
         if (callData.length < 4) {
             return false;
         }
 
         bytes4 selector = bytes4(callData);
-        return selector == setPendingUpgradeFromVotingSelector;
+        return selector == setPendingUpgradeFromVotingSelector || selector == addPOCContractSelector
+            || selector == removePOCContractSelector;
     }
 
     /// @notice Check if proposal is a financial proposal (calls allocateLaunchesToCreator or returnLaunchesToPOC)
