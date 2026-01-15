@@ -342,7 +342,7 @@ library ExitQueueLibrary {
             entry.fixedLaunchPrice = fundraisingConfig.launchPriceStart;
         }
 
-        if (block.timestamp < entry.entryTimestamp + Constants.EXIT_DISCOUNT_PERIOD) {
+        if (entry.depositedMainCollateral > 0 && block.timestamp < entry.entryTimestamp + Constants.EXIT_DISCOUNT_PERIOD) {
             exitValueUSD =
                 (exitValueUSD * (Constants.BASIS_POINTS - Constants.EXIT_DISCOUNT_PERCENT)) / Constants.BASIS_POINTS;
         }

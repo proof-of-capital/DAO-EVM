@@ -289,10 +289,10 @@ library FundraisingLibrary {
         uint256 usdDeposit = (amount * mainCollateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
         DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
-        if (entry.entryTimestamp == 0) {
+        if (entry.depositedMainCollateral == 0) {
             entry.fixedSharePrice = 0;
             entry.fixedLaunchPrice = 0;
-            entry.entryTimestamp = block.timestamp;
+            entry.entryTimestamp = 0;
             entry.weightedAvgSharePrice = 0;
             entry.weightedAvgLaunchPrice = 0;
         }
@@ -364,6 +364,12 @@ library FundraisingLibrary {
 
         DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
 
+        if (entry.depositedMainCollateral == 0) {
+            entry.entryTimestamp = 0;
+            entry.fixedSharePrice = fundraisingConfig.sharePriceStart;
+            entry.fixedLaunchPrice = fundraisingConfig.launchPriceStart;
+        }
+
         if (vault.shares == 0) {
             entry.weightedAvgLaunchPrice = launchPriceUSD;
             entry.weightedAvgSharePrice = fundraisingConfig.sharePrice;
@@ -373,12 +379,6 @@ library FundraisingLibrary {
                 (entry.weightedAvgLaunchPrice * vault.shares + launchPriceUSD * shares) / totalShares;
             entry.weightedAvgSharePrice =
                 (entry.weightedAvgSharePrice * vault.shares + fundraisingConfig.sharePrice * shares) / totalShares;
-        }
-
-        if (entry.entryTimestamp == 0) {
-            entry.entryTimestamp = block.timestamp;
-            entry.fixedSharePrice = fundraisingConfig.sharePriceStart;
-            entry.fixedLaunchPrice = fundraisingConfig.launchPriceStart;
         }
 
         participantEntries[vaultId] = entry;
