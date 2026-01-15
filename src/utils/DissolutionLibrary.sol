@@ -159,7 +159,11 @@ library DissolutionLibrary {
 
         vaultStorage.totalSharesSupply -= shares;
         if (vaultDepositedUSD > 0) {
-            daoState.totalDepositedUSD -= vaultDepositedUSD;
+            if (daoState.totalDepositedUSD >= vaultDepositedUSD) {
+                daoState.totalDepositedUSD -= vaultDepositedUSD;
+            } else {
+                daoState.totalDepositedUSD = 0;
+            }
             vault.depositedUSD = 0;
         }
 
