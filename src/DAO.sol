@@ -385,7 +385,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Claim accumulated rewards for tokens
     /// @param tokens Array of token addresses to claim
-    function claimReward(address[] calldata tokens) external nonReentrant {
+    function claimReward(address[] calldata tokens) external nonReentrant atActiveOrClosingStage {
         RewardsLibrary.executeClaimReward(vaultStorage, rewardsStorage, lpTokenStorage, accountedBalance, tokens);
     }
 
