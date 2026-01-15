@@ -1024,7 +1024,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         bool isParticipant =
             vaultId > 0 && vaultId < vaultStorage.nextVaultId && vaultStorage.vaults[vaultId].shares > 0;
-        bool isAdminUser = msg.sender == admin || msg.sender == votingContract;
+        bool isAdminUser = msg.sender == admin || msg.sender == address(this);
         require(isParticipant || isAdminUser, Unauthorized());
     }
 
@@ -1040,7 +1040,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
         bool isMemberOfBoard = vaultId > 0 && vaultId < vaultStorage.nextVaultId
             && vaultStorage.vaults[vaultId].votingShares >= Constants.BOARD_MEMBER_MIN_SHARES;
-        require(isMemberOfBoard || msg.sender == admin || msg.sender == votingContract, NotBoardMemberOrAdmin());
+        require(isMemberOfBoard || msg.sender == admin || msg.sender == address(this), NotBoardMemberOrAdmin());
     }
 
     function _fundraisingActive() internal view {

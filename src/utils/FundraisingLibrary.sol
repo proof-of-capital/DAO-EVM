@@ -281,7 +281,7 @@ library FundraisingLibrary {
         uint256 depositLimit = vault.depositLimit;
         require(vault.shares + shares <= depositLimit, DepositLimitExceeded());
 
-        uint256 mainCollateralPriceUSD = getOraclePrice(mainCollateral) / 2;
+        uint256 mainCollateralPriceUSD = getOraclePrice(mainCollateral);
         uint256 usdDeposit = (amount * mainCollateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
         DataTypes.ParticipantEntry memory entry = participantEntries[vaultId];
