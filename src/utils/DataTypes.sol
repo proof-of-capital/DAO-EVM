@@ -51,13 +51,10 @@ library DataTypes {
     /// @notice Proposal types for voting
     /// @dev Type is auto-determined based on target contract and call data
     enum ProposalType {
-        Governance, // Calls to DAO contract itself (settings changes)
-        POC, // Calls to POC contracts (external management)
-        Financial, // Calls to token contracts (financial operations) - forbidden
+        Financial, // Financial decisions (loans to creator, returns to POC)
         Other, // All other external calls
         VetoFor, // Veto proposal for multisig (set veto mode - setIsVetoToCreator(true))
         VetoAgainst, // Veto proposal for multisig (remove veto mode - setIsVetoToCreator(false))
-        Arbitrary, // Arbitrary call proposal (general questions)
         Unanimous // Unanimous vote required (for changing POC contracts, contract upgrades)
     }
 

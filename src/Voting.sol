@@ -80,6 +80,7 @@ contract Voting is IVoting {
     mapping(DataTypes.ProposalType => DataTypes.VotingThresholds) public categoryThresholds;
 
     uint256 public nextProposalId;
+    uint256 public lastProcessedProposalId;
 
     mapping(uint256 => DataTypes.ProposalCore) public proposals;
     mapping(uint256 => mapping(uint256 => bool)) public hasVotedMapping;
@@ -112,22 +113,14 @@ contract Voting is IVoting {
         quorumPercentage = Constants.DEFAULT_QUORUM_PERCENTAGE;
         approvalThreshold = Constants.DEFAULT_APPROVAL_THRESHOLD;
 
-        categoryThresholds[DataTypes.ProposalType.Governance] = DataTypes.VotingThresholds({
-            quorumPercentage: Constants.DEFAULT_GOVERNANCE_QUORUM,
-            approvalThreshold: Constants.DEFAULT_GOVERNANCE_APPROVAL
-        });
-
-        categoryThresholds[DataTypes.ProposalType.POC] = DataTypes.VotingThresholds({
-            quorumPercentage: Constants.DEFAULT_POC_QUORUM, approvalThreshold: Constants.DEFAULT_POC_APPROVAL
-        });
-
         categoryThresholds[DataTypes.ProposalType.Financial] = DataTypes.VotingThresholds({
             quorumPercentage: Constants.DEFAULT_FINANCIAL_QUORUM,
             approvalThreshold: Constants.DEFAULT_FINANCIAL_APPROVAL
         });
 
         categoryThresholds[DataTypes.ProposalType.Other] = DataTypes.VotingThresholds({
-            quorumPercentage: Constants.DEFAULT_OTHER_QUORUM, approvalThreshold: Constants.DEFAULT_OTHER_APPROVAL
+            quorumPercentage: Constants.DEFAULT_FINANCIAL_QUORUM,
+            approvalThreshold: Constants.DEFAULT_FINANCIAL_APPROVAL
         });
     }
 
@@ -255,10 +248,11 @@ contract Voting is IVoting {
             return;
         }
 
-        for (uint256 proposalId = 0; proposalId < nextProposalId; proposalId++) {
+        for (uint256 proposalId = lastProcessedProposalId; proposalId < nextProposalId; proposalId++) {
             DataTypes.ProposalCore storage proposal = proposals[proposalId];
 
             if (block.timestamp >= proposal.endTime || proposal.executed) {
+                lastProcessedProposalId = proposalId + 1;
                 continue;
             }
 
@@ -397,53 +391,6 @@ contract Voting is IVoting {
             return DataTypes.ProposalStatus.Active;
         }
 
-        if (proposal.proposalType == DataTypes.ProposalType.Arbitrary) {
-            if (block.timestamp < proposal.endTime) {
-                uint256 earlyTotalVotes = adjustedForVotes + adjustedAgainstVotes;
-                uint256 earlyRejectThreshold =
-                    (totalShares * Constants.ARBITRARY_EARLY_REJECT_THRESHOLD) / Constants.PERCENTAGE_MULTIPLIER;
-
-                if (adjustedAgainstVotes > earlyRejectThreshold) {
-                    return DataTypes.ProposalStatus.Defeated;
-                }
-
-                uint256 earlyQuorumRequired =
-                    (totalShares * Constants.ARBITRARY_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
-                if (earlyTotalVotes >= earlyQuorumRequired && earlyTotalVotes > 0) {
-                    uint256 earlyApprovalRequired =
-                        (earlyTotalVotes * Constants.ARBITRARY_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
-                    if (adjustedForVotes >= earlyApprovalRequired) {
-                        return DataTypes.ProposalStatus.Active;
-                    }
-                }
-                return DataTypes.ProposalStatus.Active;
-            }
-
-            uint256 arbitraryTotalVotes = adjustedForVotes + adjustedAgainstVotes;
-            uint256 arbitraryQuorumRequired =
-                (totalShares * Constants.ARBITRARY_QUORUM) / Constants.PERCENTAGE_MULTIPLIER;
-
-            if (arbitraryTotalVotes < arbitraryQuorumRequired) {
-                return DataTypes.ProposalStatus.Defeated;
-            }
-
-            if (arbitraryTotalVotes == 0) {
-                return DataTypes.ProposalStatus.Defeated;
-            }
-
-            uint256 arbitraryApprovalRequired =
-                (arbitraryTotalVotes * Constants.ARBITRARY_APPROVAL) / Constants.PERCENTAGE_MULTIPLIER;
-            if (adjustedForVotes < arbitraryApprovalRequired) {
-                return DataTypes.ProposalStatus.Defeated;
-            }
-
-            if (block.timestamp > proposal.endTime + Constants.PROPOSAL_EXPIRY_PERIOD) {
-                return DataTypes.ProposalStatus.Expired;
-            }
-
-            return DataTypes.ProposalStatus.Active;
-        }
-
         if (proposal.proposalType == DataTypes.ProposalType.Unanimous) {
             if (block.timestamp < proposal.endTime) {
                 uint256 earlyRejectThreshold =
@@ -526,7 +473,7 @@ contract Voting is IVoting {
     }
 
     /// @notice Determine proposal type based on target contract and call data
-    /// @dev Types: Governance (DAO itself), POC (POC contracts), Financial (tokens - forbidden), Other, VetoFor/VetoAgainst, Arbitrary, Unanimous (upgrades)
+    /// @dev Types: Financial (loans to creator, returns to POC), Other, VetoFor/VetoAgainst, Unanimous (upgrades, POC changes)
     /// @param targetContract Target contract address
     /// @param callData Encoded call data
     /// @return Proposal type
@@ -545,11 +492,13 @@ contract Voting is IVoting {
         }
 
         if (targetContract == address(dao)) {
-            return DataTypes.ProposalType.Governance;
+            if (_isFinancialProposal(callData)) {
+                return DataTypes.ProposalType.Financial;
+            }
         }
 
         if (_isPOCContract(targetContract)) {
-            return DataTypes.ProposalType.POC;
+            return DataTypes.ProposalType.Unanimous;
         }
 
         require(!_isTokenContract(targetContract), TargetAddressNotAllowedForInteraction());
@@ -627,6 +576,21 @@ contract Voting is IVoting {
 
         bytes4 selector = bytes4(callData);
         return selector == setPendingUpgradeFromVotingSelector;
+    }
+
+    /// @notice Check if proposal is a financial proposal (calls allocateLaunchesToCreator or returnLaunchesToPOC)
+    /// @param callData Encoded call data
+    /// @return True if proposal calls financial functions on DAO contract
+    function _isFinancialProposal(bytes calldata callData) internal pure returns (bool) {
+        if (callData.length < 4) {
+            return false;
+        }
+
+        bytes4 selector = bytes4(callData);
+        bytes4 allocateLaunchesToCreatorSelector = IDAO.allocateLaunchesToCreator.selector;
+        bytes4 returnLaunchesToPOCSelector = IDAO.returnLaunchesToPOC.selector;
+
+        return selector == allocateLaunchesToCreatorSelector || selector == returnLaunchesToPOCSelector;
     }
 
     function _onlyAdmin() internal view {
