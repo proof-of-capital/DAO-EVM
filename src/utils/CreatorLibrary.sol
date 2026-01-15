@@ -14,6 +14,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
+import "./ExitQueueLibrary.sol";
 
 /// @title CreatorLibrary
 /// @notice Library for managing creator allocations
@@ -33,6 +34,7 @@ library CreatorLibrary {
 
     /// @notice Allocate launch tokens to creator, reducing their profit share proportionally
     /// @param daoState DAO state storage
+    /// @param exitQueueStorage Exit queue storage structure
     /// @param fundraisingConfig Fundraising configuration
     /// @param accountedBalance Accounted balance mapping
     /// @param launchToken Launch token address
@@ -41,6 +43,7 @@ library CreatorLibrary {
     /// @param launchAmount Amount of launch tokens to allocate
     function executeAllocateLaunchesToCreator(
         DataTypes.DAOState storage daoState,
+        DataTypes.ExitQueueStorage storage exitQueueStorage,
         DataTypes.FundraisingConfig storage fundraisingConfig,
         mapping(address => uint256) storage accountedBalance,
         address launchToken,
@@ -84,8 +87,15 @@ library CreatorLibrary {
         require(daoState.creatorProfitPercent >= newCreatorProfitPercent, CreatorShareTooLow());
         daoState.creatorProfitPercent = newCreatorProfitPercent;
 
-        IERC20(launchToken).safeTransfer(creator, launchAmount);
-        accountedBalance[launchToken] -= launchAmount;
+        bool isQueueEmpty = ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage);
+
+        if (isQueueEmpty) {
+            IERC20(launchToken).safeTransfer(creator, launchAmount);
+            accountedBalance[launchToken] -= launchAmount;
+        } else {
+            daoState.pendingExitQueuePayment += launchAmount;
+        }
+
         daoState.lastCreatorAllocation = block.timestamp;
 
         emit CreatorLaunchesAllocated(launchAmount, profitPercentEquivalent, daoState.creatorProfitPercent);

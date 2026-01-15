@@ -400,6 +400,7 @@ library DataTypes {
         uint256 totalExitQueueShares;
         uint256 totalDepositedUSD;
         uint256 lastPOCReturn;
+        uint256 pendingExitQueuePayment;
     }
 
     /// @notice Storage structure for Price Paths

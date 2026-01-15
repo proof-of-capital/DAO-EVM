@@ -188,6 +188,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         daoState.totalCollectedMainCollateral = 0;
         daoState.lastCreatorAllocation = 0;
         daoState.totalDepositedUSD = 0;
+        daoState.pendingExitQueuePayment = 0;
 
         vaultStorage.nextVaultId = 1;
         vaultStorage.totalSharesSupply = 0;
@@ -443,6 +444,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     {
         CreatorLibrary.executeAllocateLaunchesToCreator(
             daoState,
+            exitQueueStorage,
             fundraisingConfig,
             accountedBalance,
             address(launchToken),
@@ -450,6 +452,57 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             vaultStorage.totalSharesSupply,
             launchAmount
         );
+    }
+
+    /// @notice Process pending exit queue payment in parts
+    /// @dev Can be called by admin, creator, or participant to process exit queue using reserved funds
+    /// @param amount Amount of launch tokens to use for processing exit queue
+    function processPendingExitQueue(uint256 amount)
+        external
+        nonReentrant
+        onlyParticipantOrAdmin
+        atActiveOrClosingStage
+    {
+        require(amount > 0, AmountMustBeGreaterThanZero());
+        require(daoState.pendingExitQueuePayment > 0, AmountMustBeGreaterThanZero());
+
+        uint256 amountToUse = amount;
+        if (amountToUse > daoState.pendingExitQueuePayment) {
+            amountToUse = daoState.pendingExitQueuePayment;
+        }
+
+        uint256 remainingFunds;
+        uint256 newTotalSharesSupply;
+        (remainingFunds, newTotalSharesSupply) = ExitQueueLibrary.processExitQueue(
+            vaultStorage,
+            exitQueueStorage,
+            daoState,
+            participantEntries,
+            fundraisingConfig,
+            vaultStorage.totalSharesSupply,
+            amountToUse,
+            address(launchToken),
+            address(launchToken),
+            this.getOraclePrice,
+            allowedExitTokens,
+            vaultStorage.vaultAllowedExitTokens
+        );
+
+        vaultStorage.totalSharesSupply = newTotalSharesSupply;
+
+        uint256 usedForExits = amountToUse - remainingFunds;
+        if (usedForExits > daoState.pendingExitQueuePayment) {
+            usedForExits = daoState.pendingExitQueuePayment;
+        }
+        daoState.pendingExitQueuePayment -= usedForExits;
+
+        bool isQueueEmpty = ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage);
+
+        if (isQueueEmpty && daoState.pendingExitQueuePayment > 0) {
+            uint256 remainingForCreator = daoState.pendingExitQueuePayment;
+            daoState.pendingExitQueuePayment = 0;
+            launchToken.safeTransfer(creator, remainingForCreator);
+        }
     }
 
     /// @notice Return launch tokens to POC contracts proportionally to their share percentages
