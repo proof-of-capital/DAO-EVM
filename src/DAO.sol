@@ -686,9 +686,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         onlyParticipantOrAdmin
         atStage(DataTypes.Stage.WaitingForLPDissolution)
     {
-        DissolutionLibrary.executeDissolveLPTokens(
-            daoState, lpTokenStorage, rewardsStorage, accountedBalance, address(launchToken)
-        );
+        DissolutionLibrary.executeDissolveLPTokens(daoState, lpTokenStorage, accountedBalance);
     }
 
     /// @notice Claim share of assets after dissolution
@@ -790,9 +788,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @dev Calculates and transfers creator's infrastructure share based on creatorInfraPercent
     /// @dev Only launch tokens can be claimed, other tokens are not available in this function
     function claimCreatorDissolution() external onlyCreator nonReentrant atStage(DataTypes.Stage.Dissolved) {
-        DissolutionLibrary.executeClaimCreatorDissolution(
-            accountedBalance, address(launchToken), creator
-        );
+        DissolutionLibrary.executeClaimCreatorDissolution(accountedBalance, address(launchToken), creator);
     }
 
     /// @notice Distribute unaccounted balance of a token as profit

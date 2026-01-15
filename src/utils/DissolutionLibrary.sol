@@ -186,15 +186,11 @@ library DissolutionLibrary {
     /// @notice Dissolve all LP tokens (V2 and V3) and transition to Dissolved stage
     /// @param daoState DAO state storage
     /// @param lpTokenStorage LP token storage structure
-    /// @param rewardsStorage Rewards storage structure
     /// @param accountedBalance Accounted balance mapping
-    /// @param launchToken Launch token address
     function executeDissolveLPTokens(
         DataTypes.DAOState storage daoState,
         DataTypes.LPTokenStorage storage lpTokenStorage,
-        DataTypes.RewardsStorage storage rewardsStorage,
-        mapping(address => uint256) storage accountedBalance,
-        address launchToken
+        mapping(address => uint256) storage accountedBalance
     ) external {
         uint256 v2Length = lpTokenStorage.v2LPTokens.length;
         for (uint256 i = 0; i < v2Length; ++i) {
