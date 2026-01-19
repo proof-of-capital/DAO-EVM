@@ -173,6 +173,7 @@ interface IDAO {
     event RouterAvailabilityChanged(address indexed router, bool isAvailable);
     event TokenAvailabilityChanged(address indexed token, bool isAvailable);
     event MultisigExecutionPushed(uint256 indexed proposalId, address indexed pusher);
+    event MarketMakerSet(address indexed marketMaker);
     event OrderbookParamsUpdated(
         uint256 initialPrice,
         uint256 initialVolume,
@@ -342,7 +343,6 @@ interface IDAO {
     // Shares and supply
     function totalSharesSupply() external view returns (uint256);
     function nextVaultId() external view returns (uint256);
-    function totalLaunchTokensSold() external view returns (uint256);
 
     // Fundraising
     // Note: fundraisingConfig, participantEntries, pocContracts, orderbookParams, vaults, sellableCollaterals

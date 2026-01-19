@@ -353,6 +353,7 @@ library DataTypes {
         address[] allowedExitTokens; // Tokens allowed for exit payments (global list)
         TokenPricePathsParams launchTokenPricePaths; // Paths for launch token price validation
         address votingContract; // Voting contract address (optional, can be set later)
+        address marketMaker; // Initial market maker address
     }
 
     // ============================================
@@ -410,6 +411,7 @@ library DataTypes {
         uint256 totalDepositedUSD;
         uint256 lastPOCReturn;
         uint256 pendingExitQueuePayment;
+        address marketMaker;
     }
 
     /// @notice Storage structure for Price Paths

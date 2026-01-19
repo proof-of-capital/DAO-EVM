@@ -27,7 +27,9 @@ interface ILaunchExchange {
     error InvalidSwapType();
 
     event LaunchesReturned(uint256 amount, uint256 pocCount);
-    event CollateralExchangedForLaunch(uint256 indexed pocIndex, address indexed collateral, uint256 collateralAmount, uint256 launchAmount);
+    event CollateralExchangedForLaunch(
+        uint256 indexed pocIndex, address indexed collateral, uint256 collateralAmount, uint256 launchAmount
+    );
     event TokenExchangedForLaunch(address indexed tokenIn, uint256 amountIn, uint256 launchOut, address indexed router);
     event AdminSet(address indexed oldAdmin, address indexed newAdmin);
     event RouterAdded(address indexed router);

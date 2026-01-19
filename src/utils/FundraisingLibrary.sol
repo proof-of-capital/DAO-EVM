@@ -16,6 +16,7 @@ import "./DataTypes.sol";
 import "./Constants.sol";
 import "./VaultLibrary.sol";
 import "./RewardsLibrary.sol";
+import "../interfaces/IProofOfCapital.sol";
 
 /// @title FundraisingLibrary
 /// @notice Library for fundraising operations
@@ -221,7 +222,7 @@ library FundraisingLibrary {
         uint256 creatorInfraPercent,
         uint256 totalSharesSupply,
         function(address) external returns (uint256) getOraclePrice
-    ) external {
+    ) external returns (uint256 waitingForLPStartedAt) {
         for (uint256 i = 0; i < pocContracts.length; ++i) {
             require(pocContracts[i].exchanged, POCNotExchanged());
         }
@@ -241,6 +242,10 @@ library FundraisingLibrary {
 
         DataTypes.Stage oldStage = daoState.currentStage;
         daoState.currentStage = DataTypes.Stage.WaitingForLP;
+
+        if (daoState.currentStage == DataTypes.Stage.WaitingForLP) {
+            waitingForLPStartedAt = block.timestamp;
+        }
 
         emit ExchangeFinalized(accountedBalance[launchToken], fundraisingConfig.sharePrice, infraLaunches);
         emit StageChanged(oldStage, daoState.currentStage);
@@ -430,16 +435,27 @@ library FundraisingLibrary {
     /// @param daoState DAO state storage
     /// @param fundraisingConfig Fundraising configuration
     /// @param totalSharesSupply Total shares supply
+    /// @param pocContracts Array of POC contracts
+    /// @param daoAddress Address of the DAO contract
     function executeFinalizeFundraisingCollection(
         DataTypes.DAOState storage daoState,
         DataTypes.FundraisingConfig storage fundraisingConfig,
-        uint256 totalSharesSupply
+        uint256 totalSharesSupply,
+        DataTypes.POCInfo[] storage pocContracts,
+        address daoAddress
     ) external {
         require(
             daoState.totalCollectedMainCollateral >= fundraisingConfig.targetAmountMainCollateral, TargetNotReached()
         );
 
         daoState.currentStage = DataTypes.Stage.FundraisingExchange;
+
+        uint256 pocContractsCount = pocContracts.length;
+        for (uint256 i = 0; i < pocContractsCount; ++i) {
+            if (pocContracts[i].active) {
+                IProofOfCapital(pocContracts[i].pocContract).setMarketMaker(daoAddress, true);
+            }
+        }
 
         emit FundraisingCollectionFinalized(daoState.totalCollectedMainCollateral, totalSharesSupply);
         emit StageChanged(DataTypes.Stage.Fundraising, DataTypes.Stage.FundraisingExchange);

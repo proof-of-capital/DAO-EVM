@@ -94,7 +94,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     DataTypes.LPTokenType public primaryLPTokenType;
 
-    uint256 public activeStageTimestamp;
     uint256 public waitingForLPStartedAt;
 
     address public pendingUpgradeFromVoting;
@@ -189,6 +188,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         daoState.lastCreatorAllocation = 0;
         daoState.totalDepositedUSD = 0;
         daoState.pendingExitQueuePayment = 0;
+        daoState.marketMaker = params.marketMaker;
 
         vaultStorage.nextVaultId = 1;
         vaultStorage.totalSharesSupply = 0;
@@ -371,10 +371,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param vaultId Vault ID to set limit for
     /// @param limit Deposit limit in shares (0 = deposits forbidden)
     function setVaultDepositLimit(uint256 vaultId, uint256 limit) external onlyBoardMemberOrAdmin vaultExists(vaultId) {
-        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
-        require(limit >= vault.shares, DepositLimitBelowCurrentShares());
-        vault.depositLimit = limit;
-        emit VaultDepositLimitSet(vaultId, limit);
+        VaultLibrary.executeSetVaultDepositLimit(vaultStorage, vaultId, limit);
     }
 
     /// @notice Set allowed exit token for caller's vault
@@ -428,13 +425,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(daoState.currentStage == DataTypes.Stage.Active, InvalidStage());
         require(vaultStorage.totalSharesSupply > 0, NoShares());
 
-        uint256 exitQueuePercentage =
-            (daoState.totalExitQueueShares * Constants.BASIS_POINTS) / vaultStorage.totalSharesSupply;
-        uint256 closingThreshold = _getClosingThreshold();
-        require(exitQueuePercentage >= closingThreshold, InvalidStage());
-
-        daoState.currentStage = DataTypes.Stage.Closing;
-        emit StageChanged(DataTypes.Stage.Active, DataTypes.Stage.Closing);
+        ExitQueueLibrary.executeEnterClosingStage(vaultStorage, daoState);
     }
 
     /// @notice Return to active stage if exit queue shares < dynamic threshold
@@ -443,13 +434,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(daoState.currentStage == DataTypes.Stage.Closing, InvalidStage());
         require(vaultStorage.totalSharesSupply > 0, NoShares());
 
-        uint256 exitQueuePercentage =
-            (daoState.totalExitQueueShares * Constants.BASIS_POINTS) / vaultStorage.totalSharesSupply;
-        uint256 closingThreshold = _getClosingThreshold();
-        require(exitQueuePercentage < closingThreshold, InvalidStage());
-
-        daoState.currentStage = DataTypes.Stage.Active;
-        emit StageChanged(DataTypes.Stage.Closing, DataTypes.Stage.Active);
+        ExitQueueLibrary.executeReturnToActiveStage(vaultStorage, daoState);
     }
 
     /// @notice Allocate launch tokens to creator, reducing their profit share proportionally
@@ -484,43 +469,19 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(amount > 0, AmountMustBeGreaterThanZero());
         require(daoState.pendingExitQueuePayment > 0, AmountMustBeGreaterThanZero());
 
-        uint256 amountToUse = amount;
-        if (amountToUse > daoState.pendingExitQueuePayment) {
-            amountToUse = daoState.pendingExitQueuePayment;
-        }
-
-        uint256 remainingFunds;
-        uint256 newTotalSharesSupply;
-        (remainingFunds, newTotalSharesSupply) = ExitQueueLibrary.processExitQueue(
+        vaultStorage.totalSharesSupply = ExitQueueLibrary.processPendingExitQueuePayment(
             vaultStorage,
             exitQueueStorage,
             daoState,
             participantEntries,
             fundraisingConfig,
-            vaultStorage.totalSharesSupply,
-            amountToUse,
-            address(launchToken),
-            address(launchToken),
-            this.getOraclePrice,
             allowedExitTokens,
-            vaultStorage.vaultAllowedExitTokens
+            vaultStorage.vaultAllowedExitTokens,
+            amount,
+            address(launchToken),
+            creator,
+            this.getOraclePrice
         );
-
-        vaultStorage.totalSharesSupply = newTotalSharesSupply;
-
-        uint256 usedForExits = amountToUse - remainingFunds;
-        if (usedForExits > daoState.pendingExitQueuePayment) {
-            usedForExits = daoState.pendingExitQueuePayment;
-        }
-        daoState.pendingExitQueuePayment -= usedForExits;
-
-        bool isQueueEmpty = ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage);
-
-        if (isQueueEmpty && daoState.pendingExitQueuePayment > 0) {
-            uint256 remainingForCreator = daoState.pendingExitQueuePayment;
-            daoState.pendingExitQueuePayment = 0;
-            launchToken.safeTransfer(creator, remainingForCreator);
-        }
     }
 
     /// @notice Return launch tokens to POC contracts proportionally to their share percentages
@@ -545,8 +506,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         DataTypes.SwapType swapType,
         bytes calldata swapData
     ) external nonReentrant atActiveOrClosingStage onlyParticipantOrAdmin {
-        require(launchTokenAmount > 0, AmountMustBeGreaterThanZero());
-
         Orderbook.executeSell(
             DataTypes.SellParams({
                 collateral: collateral,
@@ -564,12 +523,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             vaultStorage.totalSharesSupply,
             fundraisingConfig.sharePrice
         );
-    }
-
-    /// @notice Get total launch tokens sold
-    /// @return Total amount of launch tokens sold
-    function totalLaunchTokensSold() external view returns (uint256) {
-        return orderbookParams.totalSold;
     }
 
     /// @notice Get total collected main collateral
@@ -638,7 +591,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Finalize fundraising collection and move to exchange stage
     function finalizeFundraisingCollection() external onlyAdmin atStage(DataTypes.Stage.Fundraising) {
         FundraisingLibrary.executeFinalizeFundraisingCollection(
-            daoState, fundraisingConfig, vaultStorage.totalSharesSupply
+            daoState, fundraisingConfig, vaultStorage.totalSharesSupply, pocContracts, address(this)
         );
     }
 
@@ -674,7 +627,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     /// @notice Finalize exchange process and calculate share price in launches
     function finalizeExchange() external onlyAdmin atStage(DataTypes.Stage.FundraisingExchange) {
-        FundraisingLibrary.executeFinalizeExchange(
+        waitingForLPStartedAt = FundraisingLibrary.executeFinalizeExchange(
             pocContracts,
             daoState,
             fundraisingConfig,
@@ -685,10 +638,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             vaultStorage.totalSharesSupply,
             this.getOraclePrice
         );
-
-        if (daoState.currentStage == DataTypes.Stage.WaitingForLP) {
-            waitingForLPStartedAt = block.timestamp;
-        }
     }
 
     /// @notice Creator provides LP tokens and moves DAO to active stage
@@ -704,7 +653,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         DataTypes.PricePathV2Params[] calldata newV2PricePaths,
         DataTypes.PricePathV3Params[] calldata newV3PricePaths
     ) external nonReentrant onlyCreator atStage(DataTypes.Stage.WaitingForLP) {
-        activeStageTimestamp = LPTokenLibrary.executeProvideLPTokens(
+        LPTokenLibrary.executeProvideLPTokens(
             lpTokenStorage,
             rewardsStorage,
             daoState,
@@ -715,7 +664,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             v3TokenIds,
             newV2PricePaths,
             newV3PricePaths,
-            primaryLPTokenType
+            primaryLPTokenType,
+            pocContracts,
+            address(this)
         );
     }
 
@@ -933,7 +884,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Get dynamic veto threshold based on DAO profit share
     /// @return Veto threshold in basis points (10000 = 100%)
     function getVetoThreshold() external view returns (uint256) {
-        uint256 daoShare = this.getDAOProfitShare();
+        uint256 daoShare = _getDAOProfitShare();
         return Constants.BASIS_POINTS - daoShare;
     }
 

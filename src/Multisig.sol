@@ -866,8 +866,6 @@ contract Multisig is IMultisig {
             if (pocInfo.active) {
                 IProofOfCapital pocContract = IProofOfCapital(pocInfo.pocContract);
                 pocContract.extendLock(newLockTimestamp);
-                pocContract.setMarketMaker(address(dao), false);
-                pocContract.setMarketMaker(newMarketMaker, true);
             }
         }
     }

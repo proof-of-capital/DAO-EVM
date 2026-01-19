@@ -200,7 +200,6 @@ contract LaunchExchange is ILaunchExchange {
         emit RouterRemoved(router);
     }
 
-
     function _executeSwap(
         address router,
         DataTypes.SwapType swapType,
@@ -417,7 +416,8 @@ contract LaunchExchange is ILaunchExchange {
                 continue;
             }
 
-            uint256 launchPriceUSD = (launchPriceInCollateral * collateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
+            uint256 launchPriceUSD =
+                (launchPriceInCollateral * collateralPriceUSD) / Constants.PRICE_DECIMALS_MULTIPLIER;
 
             if (launchPriceUSD == 0) {
                 continue;
@@ -456,9 +456,10 @@ contract LaunchExchange is ILaunchExchange {
         uint256 launchPrice = _getLaunchPriceFromDAO();
 
         uint256 expectedLaunchOut = (amountIn * tokenInPrice) / launchPrice;
-        
+
         uint256 balanceBefore = launchToken.balanceOf(address(this));
-        uint256 launchOut = _executeSwap(router, swapType, swapData, tokenIn, address(launchToken), amountIn, minLaunchOut);
+        uint256 launchOut =
+            _executeSwap(router, swapType, swapData, tokenIn, address(launchToken), amountIn, minLaunchOut);
         uint256 balanceAfter = launchToken.balanceOf(address(this));
         uint256 actualLaunchOut = balanceAfter - balanceBefore;
 

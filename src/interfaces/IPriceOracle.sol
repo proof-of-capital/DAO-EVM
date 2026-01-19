@@ -15,7 +15,9 @@ pragma solidity ^0.8.33;
 interface IPriceOracle {
     error TokenAlreadyAdded(address asset);
 
-    event SourceUpdateProposed(bytes32 indexed updateId, address indexed asset, address source, uint8 decimals, address proposer);
+    event SourceUpdateProposed(
+        bytes32 indexed updateId, address indexed asset, address source, uint8 decimals, address proposer
+    );
     event SourceUpdateApproved(bytes32 indexed updateId, address indexed approver);
     event SourceUpdateCancelled(bytes32 indexed updateId, address indexed cancelledBy);
     event SourceAdded(address indexed asset, address indexed source, uint8 decimals);

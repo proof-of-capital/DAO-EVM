@@ -146,7 +146,8 @@ contract DeployDAO is Script {
                 v3Paths: new DataTypes.PricePathV3Params[](0),
                 minLiquidity: 1000e18
             }),
-            votingContract: address(0) // Will be set later via setVotingContract
+            votingContract: address(0), // Will be set later via setVotingContract
+            marketMaker: vm.envOr("MARKET_MAKER", address(0)) // Market maker address
         });
 
         // Deploy DAO implementation contract (upgradeable pattern)

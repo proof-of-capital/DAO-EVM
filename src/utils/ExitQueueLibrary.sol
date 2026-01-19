@@ -27,12 +27,14 @@ library ExitQueueLibrary {
     error AmountMustBeGreaterThanZero();
     error AlreadyInExitQueue();
     error NotInExitQueue();
+    error InvalidStage();
 
     event ExitRequested(uint256 indexed vaultId, uint256 shares, uint256 launchPriceAtRequest);
     event ExitRequestCancelled(uint256 indexed vaultId);
     event ExitProcessed(uint256 indexed vaultId, uint256 shares, uint256 payoutAmount, address token);
     event PartialExitProcessed(uint256 indexed vaultId, uint256 shares, uint256 payoutAmount, address token);
     event SharePriceIncreased(uint256 oldPrice, uint256 newPrice, uint256 exitedShares);
+    event StageChanged(DataTypes.Stage from, DataTypes.Stage to);
 
     /// @notice Request to exit DAO by selling all shares
     /// @param vaultStorage Vault storage structure
@@ -126,7 +128,7 @@ library ExitQueueLibrary {
         function(address) external returns (uint256) getOraclePrice,
         mapping(address => bool) storage allowedExitTokens,
         mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
-    ) external returns (uint256 remainingFunds, uint256 newTotalSharesSupply) {
+    ) public returns (uint256 remainingFunds, uint256 newTotalSharesSupply) {
         newTotalSharesSupply = totalSharesSupply;
         remainingFunds = availableFunds;
 
@@ -407,6 +409,114 @@ library ExitQueueLibrary {
         daoState.totalExitQueueShares -= vaultShares;
 
         emit ExitRequestCancelled(vaultId);
+    }
+
+    /// @notice Process pending exit queue payment in parts
+    /// @param vaultStorage Vault storage structure
+    /// @param exitQueueStorage Exit queue storage structure
+    /// @param daoState DAO state storage structure
+    /// @param participantEntries Participant entries mapping
+    /// @param fundraisingConfig Fundraising config
+    /// @param allowedExitTokens Global mapping of allowed exit tokens
+    /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
+    /// @param amount Amount of launch tokens to use for processing exit queue
+    /// @param launchTokenAddress Address of launch token
+    /// @param creator Address of creator to receive remaining funds
+    /// @param getOraclePrice Function to get token price in USD
+    /// @return newTotalSharesSupply Updated total shares supply
+    function processPendingExitQueuePayment(
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.ExitQueueStorage storage exitQueueStorage,
+        DataTypes.DAOState storage daoState,
+        mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
+        DataTypes.FundraisingConfig storage fundraisingConfig,
+        mapping(address => bool) storage allowedExitTokens,
+        mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens,
+        uint256 amount,
+        address launchTokenAddress,
+        address creator,
+        function(address) external returns (uint256) getOraclePrice
+    ) external returns (uint256 newTotalSharesSupply) {
+        uint256 amountToUse = amount;
+        if (amountToUse > daoState.pendingExitQueuePayment) {
+            amountToUse = daoState.pendingExitQueuePayment;
+        }
+
+        uint256 remainingFunds;
+        (remainingFunds, newTotalSharesSupply) = processExitQueue(
+            vaultStorage,
+            exitQueueStorage,
+            daoState,
+            participantEntries,
+            fundraisingConfig,
+            vaultStorage.totalSharesSupply,
+            amountToUse,
+            launchTokenAddress,
+            launchTokenAddress,
+            getOraclePrice,
+            allowedExitTokens,
+            vaultAllowedExitTokens
+        );
+
+        uint256 usedForExits = amountToUse - remainingFunds;
+        if (usedForExits > daoState.pendingExitQueuePayment) {
+            usedForExits = daoState.pendingExitQueuePayment;
+        }
+        daoState.pendingExitQueuePayment -= usedForExits;
+
+        bool queueEmpty = isExitQueueEmpty(exitQueueStorage);
+
+        if (queueEmpty && daoState.pendingExitQueuePayment > 0) {
+            uint256 remainingForCreator = daoState.pendingExitQueuePayment;
+            daoState.pendingExitQueuePayment = 0;
+            IERC20(launchTokenAddress).safeTransfer(creator, remainingForCreator);
+        }
+    }
+
+    /// @notice Calculate closing threshold based on DAO profit share
+    /// @param daoState DAO state storage structure
+    /// @return Closing threshold in basis points
+    function getClosingThreshold(DataTypes.DAOState storage daoState) internal view returns (uint256) {
+        uint256 daoShare = Constants.BASIS_POINTS - daoState.creatorProfitPercent - daoState.royaltyPercent;
+        if (daoShare < Constants.MIN_DAO_PROFIT_SHARE) {
+            daoShare = Constants.MIN_DAO_PROFIT_SHARE;
+        }
+        uint256 vetoThreshold = Constants.BASIS_POINTS - daoShare;
+        if (vetoThreshold < Constants.CLOSING_EXIT_QUEUE_MIN_THRESHOLD) {
+            return Constants.CLOSING_EXIT_QUEUE_MIN_THRESHOLD;
+        }
+        return vetoThreshold;
+    }
+
+    /// @notice Execute transition to Closing stage
+    /// @param vaultStorage Vault storage structure
+    /// @param daoState DAO state storage structure
+    function executeEnterClosingStage(DataTypes.VaultStorage storage vaultStorage, DataTypes.DAOState storage daoState)
+        external
+    {
+        uint256 exitQueuePercentage =
+            (daoState.totalExitQueueShares * Constants.BASIS_POINTS) / vaultStorage.totalSharesSupply;
+        uint256 closingThreshold = getClosingThreshold(daoState);
+        require(exitQueuePercentage >= closingThreshold, InvalidStage());
+
+        daoState.currentStage = DataTypes.Stage.Closing;
+        emit StageChanged(DataTypes.Stage.Active, DataTypes.Stage.Closing);
+    }
+
+    /// @notice Execute transition to Active stage
+    /// @param vaultStorage Vault storage structure
+    /// @param daoState DAO state storage structure
+    function executeReturnToActiveStage(
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.DAOState storage daoState
+    ) external {
+        uint256 exitQueuePercentage =
+            (daoState.totalExitQueueShares * Constants.BASIS_POINTS) / vaultStorage.totalSharesSupply;
+        uint256 closingThreshold = getClosingThreshold(daoState);
+        require(exitQueuePercentage < closingThreshold, InvalidStage());
+
+        daoState.currentStage = DataTypes.Stage.Active;
+        emit StageChanged(DataTypes.Stage.Closing, DataTypes.Stage.Active);
     }
 }
 

@@ -28,6 +28,8 @@ library VaultLibrary {
     error OnlyVotingContract();
     error Unauthorized();
     error CannotChangeDelegateInExitQueue();
+    error DepositLimitBelowCurrentShares();
+    error InvalidStage();
 
     event VaultCreated(uint256 indexed vaultId, address indexed primary, uint256 shares);
     event PrimaryAddressUpdated(uint256 indexed vaultId, address indexed oldPrimary, address indexed newPrimary);
@@ -36,6 +38,7 @@ library VaultLibrary {
     event DelegateUpdated(
         uint256 indexed vaultId, uint256 indexed oldDelegateId, uint256 indexed newDelegateId, uint256 timestamp
     );
+    event VaultDepositLimitSet(uint256 indexed vaultId, uint256 limit);
 
     /// @notice Validate that vault exists (vaultId > 0 && vaultId < nextVaultId)
     /// @param vaultStorage Vault storage structure
@@ -291,6 +294,19 @@ library VaultLibrary {
         require(vault.primary == msg.sender, Unauthorized());
 
         vaultStorage.vaultAllowedExitTokens[vaultId][token] = allowed;
+    }
+
+    /// @notice Set vault deposit limit
+    /// @param vaultStorage Vault storage structure
+    /// @param vaultId Vault ID
+    /// @param limit New deposit limit
+    function executeSetVaultDepositLimit(DataTypes.VaultStorage storage vaultStorage, uint256 vaultId, uint256 limit)
+        external
+    {
+        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        require(limit >= vault.shares, DepositLimitBelowCurrentShares());
+        vault.depositLimit = limit;
+        emit VaultDepositLimitSet(vaultId, limit);
     }
 }
 

@@ -16,6 +16,7 @@ import "./DataTypes.sol";
 import "./Constants.sol";
 import "../interfaces/INonfungiblePositionManager.sol";
 import "../interfaces/IUniswapV2Pair.sol";
+import "../interfaces/IProofOfCapital.sol";
 
 /// @title LPTokenLibrary
 /// @notice Library for managing LP tokens (V2 and V3)
@@ -40,6 +41,7 @@ library LPTokenLibrary {
     event LPProfitDistributed(address indexed lpToken, uint256 amount);
     event V3LiquidityDecreased(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
     event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
+    event MarketMakerSet(address indexed marketMaker);
 
     /// @notice Provide V2 LP tokens
     /// @param lpTokenStorage LP token storage structure
@@ -348,6 +350,8 @@ library LPTokenLibrary {
     /// @param newV2PricePaths Array of new V2 price paths to add
     /// @param newV3PricePaths Array of new V3 price paths to add
     /// @param primaryLPTokenType Primary LP token type
+    /// @param pocContracts Array of POC contracts
+    /// @param daoAddress Address of the DAO contract
     function executeProvideLPTokens(
         DataTypes.LPTokenStorage storage lpTokenStorage,
         DataTypes.RewardsStorage storage rewardsStorage,
@@ -359,8 +363,10 @@ library LPTokenLibrary {
         uint256[] calldata v3TokenIds,
         DataTypes.PricePathV2Params[] calldata newV2PricePaths,
         DataTypes.PricePathV3Params[] calldata newV3PricePaths,
-        DataTypes.LPTokenType primaryLPTokenType
-    ) external returns (uint256 activeStageTimestamp) {
+        DataTypes.LPTokenType primaryLPTokenType,
+        DataTypes.POCInfo[] storage pocContracts,
+        address daoAddress
+    ) external {
         require(v2LPTokenAddresses.length == v2LPAmounts.length, InvalidAddresses());
         require(v2LPTokenAddresses.length > 0 || v3TokenIds.length > 0, InvalidAddress());
 
@@ -441,7 +447,20 @@ library LPTokenLibrary {
 
         DataTypes.Stage oldStage = daoState.currentStage;
         daoState.currentStage = DataTypes.Stage.Active;
-        activeStageTimestamp = block.timestamp;
+
+        uint256 pocContractsCount = pocContracts.length;
+        for (uint256 i = 0; i < pocContractsCount; ++i) {
+            if (pocContracts[i].active) {
+                IProofOfCapital(pocContracts[i].pocContract).setMarketMaker(daoAddress, false);
+                if (daoState.marketMaker != address(0)) {
+                    IProofOfCapital(pocContracts[i].pocContract).setMarketMaker(daoState.marketMaker, true);
+                }
+            }
+        }
+
+        if (daoState.marketMaker != address(0)) {
+            emit MarketMakerSet(daoState.marketMaker);
+        }
 
         emit StageChanged(oldStage, DataTypes.Stage.Active);
     }
