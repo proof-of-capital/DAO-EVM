@@ -390,6 +390,24 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         RewardsLibrary.executeClaimReward(vaultStorage, rewardsStorage, lpTokenStorage, accountedBalance, tokens);
     }
 
+    /// @notice Claim accumulated rewards and swap to main collateral
+    /// @param swapParams Array of claim and swap parameters
+    function claimRewardAndSwap(DataTypes.ClaimSwapParams[] calldata swapParams)
+        external
+        nonReentrant
+        atActiveOrClosingStage
+    {
+        RewardsLibrary.executeClaimRewardAndSwap(
+            vaultStorage,
+            rewardsStorage,
+            lpTokenStorage,
+            accountedBalance,
+            availableRouterByAdmin,
+            mainCollateral,
+            swapParams
+        );
+    }
+
     /// @notice Request to exit DAO by selling all shares
     /// @dev Participant exits with all their shares; adds request to exit queue for processing
     function requestExit() external nonReentrant atActiveOrClosingStage {

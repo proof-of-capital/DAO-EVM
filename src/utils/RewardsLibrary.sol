@@ -15,6 +15,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
 import "./VaultLibrary.sol";
+import "./OrderbookSwapLibrary.sol";
 
 /// @title RewardsLibrary
 /// @notice Library for managing rewards system
@@ -23,8 +24,12 @@ library RewardsLibrary {
 
     error NoVaultFound();
     error OnlyPrimaryCanClaim();
+    error RouterNotAvailable();
 
     event RewardClaimed(uint256 indexed vaultId, address indexed token, uint256 amount);
+    event RewardClaimedAndSwapped(
+        uint256 indexed vaultId, address indexed token, uint256 rewardAmount, uint256 collateralReceived
+    );
 
     /// @notice Claim accumulated rewards for tokens
     /// @param vaultStorage Vault storage structure
@@ -73,6 +78,69 @@ library RewardsLibrary {
 
                 emit RewardClaimed(vaultId, lpToken, rewards);
             }
+        }
+    }
+
+    /// @notice Claim accumulated rewards and swap to main collateral
+    /// @param vaultStorage Vault storage structure
+    /// @param rewardsStorage Rewards storage structure
+    /// @param lpTokenStorage LP token storage structure
+    /// @param accountedBalance Accounted balance mapping
+    /// @param availableRouterByAdmin Router whitelist mapping
+    /// @param mainCollateral Main collateral token address
+    /// @param swapParams Array of claim and swap parameters
+    function executeClaimRewardAndSwap(
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.RewardsStorage storage rewardsStorage,
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        mapping(address => uint256) storage accountedBalance,
+        mapping(address => bool) storage availableRouterByAdmin,
+        address mainCollateral,
+        DataTypes.ClaimSwapParams[] calldata swapParams
+    ) external {
+        uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
+        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+
+        DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
+        require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
+
+        executeUpdateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
+
+        uint256 totalCollateralReceived = 0;
+
+        for (uint256 i = 0; i < swapParams.length; ++i) {
+            DataTypes.ClaimSwapParams calldata params = swapParams[i];
+            uint256 rewards = rewardsStorage.earnedRewards[vaultId][params.token];
+
+            if (rewards > 0) {
+                require(availableRouterByAdmin[params.router], RouterNotAvailable());
+
+                rewardsStorage.earnedRewards[vaultId][params.token] = 0;
+                accountedBalance[params.token] -= rewards;
+
+                uint256 balanceBefore = IERC20(mainCollateral).balanceOf(address(this));
+
+                OrderbookSwapLibrary.executeSwap(
+                    params.router,
+                    params.swapType,
+                    params.swapData,
+                    params.token,
+                    mainCollateral,
+                    rewards,
+                    params.minCollateralAmount
+                );
+
+                uint256 balanceAfter = IERC20(mainCollateral).balanceOf(address(this));
+                uint256 collateralReceived = balanceAfter - balanceBefore;
+
+                totalCollateralReceived += collateralReceived;
+
+                emit RewardClaimedAndSwapped(vaultId, params.token, rewards, collateralReceived);
+            }
+        }
+
+        if (totalCollateralReceived > 0) {
+            IERC20(mainCollateral).safeTransfer(msg.sender, totalCollateralReceived);
         }
     }
 

@@ -160,6 +160,15 @@ library DataTypes {
         uint256 currentPrice; // Current price at time of sale
     }
 
+    /// @notice Parameters for claim and swap operation
+    struct ClaimSwapParams {
+        address token; // Token to claim and swap
+        address router; // Router address for swap
+        SwapType swapType; // Type of swap to execute
+        bytes swapData; // Encoded swap parameters
+        uint256 minCollateralAmount; // Minimum main collateral to receive (slippage protection)
+    }
+
     /// @notice Internal calculation state for orderbook operations (used to avoid stack too deep)
     struct OrderbookCalcState {
         uint256 currentLevel;
