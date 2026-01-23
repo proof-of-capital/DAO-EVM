@@ -31,8 +31,8 @@ pragma solidity ^0.8.33;
 
 import "./interfaces/IVoting.sol";
 import "./interfaces/IDAO.sol";
-import "./utils/DataTypes.sol";
-import "./utils/Constants.sol";
+import "./libraries/DataTypes.sol";
+import "./libraries/Constants.sol";
 
 /// @title Voting Contract
 /// @notice Manages proposals and voting for DAO governance

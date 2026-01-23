@@ -30,7 +30,7 @@
 pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../utils/DataTypes.sol";
+import "../libraries/DataTypes.sol";
 import "./IMultisig.sol";
 
 /// @title IDAO Interface

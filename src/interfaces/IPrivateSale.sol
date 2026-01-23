@@ -3,7 +3,7 @@
 
 pragma solidity ^0.8.33;
 
-import "../utils/DataTypes.sol";
+import "../libraries/DataTypes.sol";
 
 interface IPrivateSale {
     error InvalidAddress();

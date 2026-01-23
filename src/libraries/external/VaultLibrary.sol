@@ -11,9 +11,9 @@
 pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./DataTypes.sol";
-import "../interfaces/IDAO.sol";
-import "../interfaces/IVoting.sol";
+import "../DataTypes.sol";
+import "../../interfaces/IDAO.sol";
+import "../../interfaces/IVoting.sol";
 
 /// @title VaultLibrary
 /// @notice Library for managing vaults, addresses, and delegate voting shares

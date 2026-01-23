@@ -32,7 +32,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Script.sol";
 import "../src/DAO.sol";
 import "../src/Voting.sol";
-import "../src/utils/DataTypes.sol";
+import "../src/libraries/DataTypes.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /// @title Deploy script for DAO system

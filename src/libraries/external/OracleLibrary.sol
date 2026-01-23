@@ -10,14 +10,14 @@
 
 pragma solidity ^0.8.33;
 
-import "../interfaces/IAggregatorV3.sol";
-import "../interfaces/IProofOfCapital.sol";
-import "../interfaces/IQuoterV2.sol";
-import "../interfaces/IUniswapV2Router01.sol";
-import "../interfaces/IUniswapV2Pair.sol";
-import "../interfaces/IUniswapV2Factory.sol";
-import "./DataTypes.sol";
-import "./Constants.sol";
+import "../../interfaces/IAggregatorV3.sol";
+import "../../interfaces/IProofOfCapital.sol";
+import "../../interfaces/IQuoterV2.sol";
+import "../../interfaces/IUniswapV2Router01.sol";
+import "../../interfaces/IUniswapV2Pair.sol";
+import "../../interfaces/IUniswapV2Factory.sol";
+import "../DataTypes.sol";
+import "../Constants.sol";
 
 /// @title OracleLibrary
 /// @notice Library for oracle price operations and pool price validation

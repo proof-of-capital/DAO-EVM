@@ -18,9 +18,9 @@ import "./interfaces/IDAO.sol";
 import "./interfaces/IProofOfCapital.sol";
 import "./interfaces/IUniswapV2Router02.sol";
 import "./interfaces/ISwapRouter.sol";
-import "./utils/DataTypes.sol";
-import "./utils/Constants.sol";
-import "./utils/SwapLibrary.sol";
+import "./libraries/DataTypes.sol";
+import "./libraries/Constants.sol";
+import "./libraries/internal/SwapLibrary.sol";
 
 /// @title LaunchExchange
 /// @notice Unified contract for returning launch tokens, exchanging collateral for launch, and exchanging tokens for launch

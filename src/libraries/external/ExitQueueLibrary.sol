@@ -12,11 +12,11 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./DataTypes.sol";
-import "./Constants.sol";
+import "../DataTypes.sol";
+import "../Constants.sol";
 import "./VaultLibrary.sol";
-import "./VaultValidationLibrary.sol";
-import "../interfaces/IVoting.sol";
+import "../internal/VaultValidationLibrary.sol";
+import "../../interfaces/IVoting.sol";
 
 /// @title ExitQueueLibrary
 /// @notice Library for managing exit queue operations

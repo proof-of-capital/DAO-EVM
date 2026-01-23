@@ -31,9 +31,9 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "../interfaces/IUniswapV2Router02.sol";
-import "../interfaces/ISwapRouter.sol";
-import "./DataTypes.sol";
+import "../../interfaces/IUniswapV2Router02.sol";
+import "../../interfaces/ISwapRouter.sol";
+import "../DataTypes.sol";
 
 /// @title SwapLibrary
 /// @dev Library for swap operations

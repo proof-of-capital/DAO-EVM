@@ -12,10 +12,10 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./DataTypes.sol";
-import "./Constants.sol";
-import "./ExitQueueValidationLibrary.sol";
-import "./ExitQueueProcessingLibrary.sol";
+import "../DataTypes.sol";
+import "../Constants.sol";
+import "../internal/ExitQueueValidationLibrary.sol";
+import "../internal/ExitQueueProcessingLibrary.sol";
 
 /// @title ProfitDistributionLibrary
 /// @notice Library for distributing profits (royalty, creator, participants)

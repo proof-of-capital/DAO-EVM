@@ -10,7 +10,7 @@
 
 pragma solidity ^0.8.33;
 
-import "./DataTypes.sol";
+import "../DataTypes.sol";
 
 /// @title VaultValidationLibrary
 /// @notice Internal library for vault validation functions

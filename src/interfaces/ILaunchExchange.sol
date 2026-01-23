@@ -10,7 +10,7 @@
 
 pragma solidity ^0.8.33;
 
-import "../utils/DataTypes.sol";
+import "../libraries/DataTypes.sol";
 
 /// @title ILaunchExchange
 /// @notice Interface for LaunchExchange contract

@@ -12,9 +12,9 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./DataTypes.sol";
-import "./Constants.sol";
-import "./ExitQueueValidationLibrary.sol";
+import "../DataTypes.sol";
+import "../Constants.sol";
+import "../internal/ExitQueueValidationLibrary.sol";
 
 /// @title CreatorLibrary
 /// @notice Library for managing creator allocations

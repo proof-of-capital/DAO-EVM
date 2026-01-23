@@ -31,10 +31,10 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "../interfaces/IAggregatorV3.sol";
-import "./DataTypes.sol";
-import "./SwapLibrary.sol";
-import "./Constants.sol";
+import "../../interfaces/IAggregatorV3.sol";
+import "../DataTypes.sol";
+import "../internal/SwapLibrary.sol";
+import "../Constants.sol";
 
 /// @title Orderbook Library
 /// @notice Library for handling orderbook sell operations with storage parameters

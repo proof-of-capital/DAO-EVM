@@ -10,8 +10,8 @@
 
 pragma solidity ^0.8.33;
 
-import "./DataTypes.sol";
-import "./Constants.sol";
+import "../DataTypes.sol";
+import "../Constants.sol";
 
 /// @title RewardsCalculationLibrary
 /// @notice Internal library for rewards calculation functions

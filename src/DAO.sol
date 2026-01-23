@@ -42,19 +42,19 @@ import "./interfaces/IProofOfCapital.sol";
 import "./interfaces/INonfungiblePositionManager.sol";
 import "./interfaces/IUniswapV2Pair.sol";
 import "./interfaces/IMultisig.sol";
-import "./utils/Orderbook.sol";
-import "./utils/DataTypes.sol";
-import "./utils/Constants.sol";
-import "./utils/VaultLibrary.sol";
-import "./utils/RewardsLibrary.sol";
-import "./utils/ExitQueueLibrary.sol";
-import "./utils/LPTokenLibrary.sol";
-import "./utils/ProfitDistributionLibrary.sol";
-import "./utils/OracleLibrary.sol";
-import "./utils/POCLibrary.sol";
-import "./utils/FundraisingLibrary.sol";
-import "./utils/DissolutionLibrary.sol";
-import "./utils/CreatorLibrary.sol";
+import "./libraries/external/Orderbook.sol";
+import "./libraries/DataTypes.sol";
+import "./libraries/Constants.sol";
+import "./libraries/external/VaultLibrary.sol";
+import "./libraries/external/RewardsLibrary.sol";
+import "./libraries/external/ExitQueueLibrary.sol";
+import "./libraries/external/LPTokenLibrary.sol";
+import "./libraries/external/ProfitDistributionLibrary.sol";
+import "./libraries/external/OracleLibrary.sol";
+import "./libraries/external/POCLibrary.sol";
+import "./libraries/external/FundraisingLibrary.sol";
+import "./libraries/external/DissolutionLibrary.sol";
+import "./libraries/external/CreatorLibrary.sol";
 
 /// @title DAO Contract
 /// @notice Main DAO contract managing vaults, shares, orderbook and collateral trading

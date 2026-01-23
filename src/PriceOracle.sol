@@ -13,7 +13,7 @@ pragma solidity ^0.8.33;
 import "./interfaces/IPriceOracle.sol";
 import "./interfaces/IAggregatorV3.sol";
 import "./interfaces/IDAO.sol";
-import "./utils/Constants.sol";
+import "./libraries/Constants.sol";
 
 /// @title PriceOracle
 /// @notice Contract to get asset prices, manage price sources

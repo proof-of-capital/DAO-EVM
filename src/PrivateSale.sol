@@ -12,9 +12,9 @@ import "./interfaces/IProofOfCapital.sol";
 import "./interfaces/IAggregatorV3.sol";
 import "./interfaces/IUniswapV2Router02.sol";
 import "./interfaces/ISwapRouter.sol";
-import "./utils/DataTypes.sol";
-import "./utils/Constants.sol";
-import "./utils/SwapLibrary.sol";
+import "./libraries/DataTypes.sol";
+import "./libraries/Constants.sol";
+import "./libraries/internal/SwapLibrary.sol";
 
 contract PrivateSale is IPrivateSale, ReentrancyGuard {
     using SafeERC20 for IERC20;

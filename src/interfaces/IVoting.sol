@@ -29,7 +29,7 @@
 
 pragma solidity ^0.8.33;
 
-import "../utils/DataTypes.sol";
+import "../libraries/DataTypes.sol";
 
 /// @title IVoting Interface
 /// @notice Interface for the voting contract managing proposals and votes
