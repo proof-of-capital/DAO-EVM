@@ -15,7 +15,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
 import "./VaultLibrary.sol";
-import "./OrderbookSwapLibrary.sol";
+import "./SwapLibrary.sol";
 
 /// @title RewardsLibrary
 /// @notice Library for managing rewards system
@@ -120,7 +120,7 @@ library RewardsLibrary {
 
                 uint256 balanceBefore = IERC20(mainCollateral).balanceOf(address(this));
 
-                OrderbookSwapLibrary.executeSwap(
+                SwapLibrary.executeSwap(
                     params.router,
                     params.swapType,
                     params.swapData,

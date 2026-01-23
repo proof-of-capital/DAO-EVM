@@ -169,6 +169,14 @@ library DataTypes {
         uint256 minCollateralAmount; // Minimum main collateral to receive (slippage protection)
     }
 
+    /// @notice Parameters for POC exchange operation
+    struct POCExchangeParams {
+        uint256 pocIdx; // Index of POC contract in pocContracts array
+        uint256 amount; // Amount of mainCollateral to exchange (0 = exchange remaining amount)
+        address router; // Router address for swap (if collateral != mainCollateral)
+        SwapType swapType; // Type of swap to execute
+    }
+
     /// @notice Internal calculation state for orderbook operations (used to avoid stack too deep)
     struct OrderbookCalcState {
         uint256 currentLevel;
@@ -238,6 +246,13 @@ library DataTypes {
         uint256 entryTimestamp; // Timestamp of first entry
         uint256 weightedAvgSharePrice; // Weighted average share price across all deposits (USD, 18 decimals)
         uint256 weightedAvgLaunchPrice; // Weighted average launch price across all deposits (USD, 18 decimals)
+    }
+
+    /// @notice Private sale participant information
+    struct PrivateSaleParticipant {
+        uint256 depositedCollateral; // Amount of collateral deposited
+        uint256 claimedTokens; // Amount of tokens already claimed
+        bool dissolutionClaimed; // Whether participant claimed after dissolution
     }
 
     /// @notice Exit request for participant wanting to leave DAO
@@ -412,6 +427,7 @@ library DataTypes {
         uint256 lastPOCReturn;
         uint256 pendingExitQueuePayment;
         address marketMaker;
+        address privateSaleContract;
     }
 
     /// @notice Storage structure for Price Paths

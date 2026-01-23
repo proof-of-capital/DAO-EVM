@@ -20,6 +20,7 @@ import "./interfaces/IUniswapV2Router02.sol";
 import "./interfaces/ISwapRouter.sol";
 import "./utils/DataTypes.sol";
 import "./utils/Constants.sol";
+import "./utils/SwapLibrary.sol";
 
 /// @title LaunchExchange
 /// @notice Unified contract for returning launch tokens, exchanging collateral for launch, and exchanging tokens for launch
@@ -154,10 +155,9 @@ contract LaunchExchange is ILaunchExchange {
         require(router != address(0), InvalidAddress());
         require(trustedRouters[router], RouterNotTrusted());
 
-        (address token, address priceFeed, bool active) = dao.sellableCollaterals(tokenIn);
+        (,, bool active) = dao.sellableCollaterals(tokenIn);
         require(!active, TokenIsCollateral());
 
-        IERC20(tokenIn).safeIncreaseAllowance(router, amountIn);
         uint256 launchOut = _executeSwapWithPriceCheck(tokenIn, amountIn, minLaunchOut, router, swapType, swapData);
 
         emit TokenExchangedForLaunch(tokenIn, amountIn, launchOut, router);
@@ -209,180 +209,7 @@ contract LaunchExchange is ILaunchExchange {
         uint256 amountIn,
         uint256 amountOutMin
     ) internal returns (uint256 amountOut) {
-        if (swapType == DataTypes.SwapType.UniswapV2ExactTokensForTokens) {
-            return _executeUniswapV2ExactTokensForTokens(router, swapData, tokenIn, tokenOut, amountIn, amountOutMin);
-        } else if (swapType == DataTypes.SwapType.UniswapV2TokensForExactTokens) {
-            return _executeUniswapV2TokensForExactTokens(router, swapData, tokenIn, tokenOut, amountOutMin, amountIn);
-        } else if (swapType == DataTypes.SwapType.UniswapV3ExactInputSingle) {
-            return _executeUniswapV3ExactInputSingle(router, swapData, tokenIn, tokenOut, amountIn, amountOutMin);
-        } else if (swapType == DataTypes.SwapType.UniswapV3ExactInput) {
-            return _executeUniswapV3ExactInput(router, swapData, tokenIn, tokenOut, amountIn, amountOutMin);
-        } else if (swapType == DataTypes.SwapType.UniswapV3ExactOutputSingle) {
-            return _executeUniswapV3ExactOutputSingle(router, swapData, tokenIn, tokenOut, amountOutMin, amountIn);
-        } else if (swapType == DataTypes.SwapType.UniswapV3ExactOutput) {
-            return _executeUniswapV3ExactOutput(router, swapData, tokenIn, tokenOut, amountOutMin, amountIn);
-        } else {
-            revert InvalidSwapType();
-        }
-    }
-
-    function _executeUniswapV2ExactTokensForTokens(
-        address router,
-        bytes calldata swapData,
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        uint256 amountOutMin
-    ) internal returns (uint256 amountOut) {
-        (address[] memory path, uint256 deadline) = abi.decode(swapData, (address[], uint256));
-
-        require(path.length >= 2, InvalidPath());
-        require(path[0] == tokenIn && path[path.length - 1] == tokenOut, InvalidPath());
-
-        uint256[] memory amounts =
-            IUniswapV2Router02(router).swapExactTokensForTokens(amountIn, amountOutMin, path, address(this), deadline);
-
-        return amounts[amounts.length - 1];
-    }
-
-    function _executeUniswapV2TokensForExactTokens(
-        address router,
-        bytes calldata swapData,
-        address tokenIn,
-        address tokenOut,
-        uint256 amountOut,
-        uint256 amountInMax
-    ) internal returns (uint256 amountOutReceived) {
-        (address[] memory path, uint256 deadline) = abi.decode(swapData, (address[], uint256));
-
-        require(path.length >= 2, InvalidPath());
-        require(path[0] == tokenIn && path[path.length - 1] == tokenOut, InvalidPath());
-
-        IUniswapV2Router02(router).swapTokensForExactTokens(amountOut, amountInMax, path, address(this), deadline);
-
-        return amountOut;
-    }
-
-    function _executeUniswapV3ExactInputSingle(
-        address router,
-        bytes calldata swapData,
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        uint256 amountOutMin
-    ) internal returns (uint256 amountOut) {
-        (uint24 fee, uint256 deadline, uint160 sqrtPriceLimitX96) = abi.decode(swapData, (uint24, uint256, uint160));
-
-        ISwapRouter.ExactInputSingleParams memory routerParams = ISwapRouter.ExactInputSingleParams({
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
-            fee: fee,
-            recipient: address(this),
-            deadline: deadline,
-            amountIn: amountIn,
-            amountOutMinimum: amountOutMin,
-            sqrtPriceLimitX96: sqrtPriceLimitX96
-        });
-
-        amountOut = ISwapRouter(router).exactInputSingle(routerParams);
-
-        return amountOut;
-    }
-
-    function _executeUniswapV3ExactInput(
-        address router,
-        bytes calldata swapData,
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        uint256 amountOutMin
-    ) internal returns (uint256 amountOut) {
-        (bytes memory path, uint256 deadline) = abi.decode(swapData, (bytes, uint256));
-
-        address firstToken;
-        address lastToken;
-
-        assembly {
-            firstToken := mload(add(path, 32))
-            firstToken := shr(96, firstToken)
-        }
-
-        uint256 lastTokenPos = path.length - 20;
-        assembly {
-            lastToken := mload(add(add(path, 32), lastTokenPos))
-            lastToken := shr(96, lastToken)
-        }
-
-        require(firstToken == tokenIn && lastToken == tokenOut, InvalidPath());
-
-        ISwapRouter.ExactInputParams memory routerParams = ISwapRouter.ExactInputParams({
-            path: path, recipient: address(this), deadline: deadline, amountIn: amountIn, amountOutMinimum: amountOutMin
-        });
-
-        amountOut = ISwapRouter(router).exactInput(routerParams);
-
-        return amountOut;
-    }
-
-    function _executeUniswapV3ExactOutputSingle(
-        address router,
-        bytes calldata swapData,
-        address tokenIn,
-        address tokenOut,
-        uint256 amountOut,
-        uint256 amountInMax
-    ) internal returns (uint256 amountOutReceived) {
-        (uint24 fee, uint256 deadline, uint160 sqrtPriceLimitX96) = abi.decode(swapData, (uint24, uint256, uint160));
-
-        ISwapRouter.ExactOutputSingleParams memory routerParams = ISwapRouter.ExactOutputSingleParams({
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
-            fee: fee,
-            recipient: address(this),
-            deadline: deadline,
-            amountOut: amountOut,
-            amountInMaximum: amountInMax,
-            sqrtPriceLimitX96: sqrtPriceLimitX96
-        });
-
-        ISwapRouter(router).exactOutputSingle(routerParams);
-
-        return amountOut;
-    }
-
-    function _executeUniswapV3ExactOutput(
-        address router,
-        bytes calldata swapData,
-        address tokenIn,
-        address tokenOut,
-        uint256 amountOut,
-        uint256 amountInMax
-    ) internal returns (uint256 amountOutReceived) {
-        (bytes memory path, uint256 deadline) = abi.decode(swapData, (bytes, uint256));
-
-        address firstToken;
-        address lastToken;
-
-        assembly {
-            firstToken := mload(add(path, 32))
-            firstToken := shr(96, firstToken)
-        }
-
-        uint256 lastTokenPos = path.length - 20;
-        assembly {
-            lastToken := mload(add(add(path, 32), lastTokenPos))
-            lastToken := shr(96, lastToken)
-        }
-
-        require(firstToken == tokenOut && lastToken == tokenIn, InvalidPath());
-
-        ISwapRouter.ExactOutputParams memory routerParams = ISwapRouter.ExactOutputParams({
-            path: path, recipient: address(this), deadline: deadline, amountOut: amountOut, amountInMaximum: amountInMax
-        });
-
-        ISwapRouter(router).exactOutput(routerParams);
-
-        return amountOut;
+        return SwapLibrary.executeSwap(router, swapType, swapData, tokenIn, tokenOut, amountIn, amountOutMin);
     }
 
     function _getLaunchPriceFromDAO() internal view returns (uint256) {
@@ -458,8 +285,7 @@ contract LaunchExchange is ILaunchExchange {
         uint256 expectedLaunchOut = (amountIn * tokenInPrice) / launchPrice;
 
         uint256 balanceBefore = launchToken.balanceOf(address(this));
-        uint256 launchOut =
-            _executeSwap(router, swapType, swapData, tokenIn, address(launchToken), amountIn, minLaunchOut);
+        SwapLibrary.executeSwap(router, swapType, swapData, tokenIn, address(launchToken), amountIn, minLaunchOut);
         uint256 balanceAfter = launchToken.balanceOf(address(this));
         uint256 actualLaunchOut = balanceAfter - balanceBefore;
 

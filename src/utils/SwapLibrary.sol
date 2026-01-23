@@ -35,9 +35,9 @@ import "../interfaces/IUniswapV2Router02.sol";
 import "../interfaces/ISwapRouter.sol";
 import "./DataTypes.sol";
 
-/// @title OrderbookSwapLibrary
-/// @dev Library for swap operations in Orderbook
-library OrderbookSwapLibrary {
+/// @title SwapLibrary
+/// @dev Library for swap operations
+library SwapLibrary {
     using SafeERC20 for IERC20;
 
     error RouterNotAvailable();
@@ -63,7 +63,7 @@ library OrderbookSwapLibrary {
         address tokenOut,
         uint256 amountIn,
         uint256 amountOutMin
-    ) external returns (uint256 amountOut) {
+    ) internal returns (uint256 amountOut) {
         require(amountIn > 0, ZeroAmountNotAllowed());
 
         if (swapType == DataTypes.SwapType.UniswapV2ExactTokensForTokens) {
@@ -261,4 +261,3 @@ library OrderbookSwapLibrary {
         return amountOut;
     }
 }
-

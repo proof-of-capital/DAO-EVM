@@ -608,6 +608,10 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         DataTypes.SwapType swapType,
         bytes calldata swapData
     ) external nonReentrant onlyAdmin atStage(DataTypes.Stage.FundraisingExchange) {
+        DataTypes.POCExchangeParams memory params = DataTypes.POCExchangeParams({
+            pocIdx: pocIdx, amount: amount, router: router, swapType: swapType
+        });
+
         POCLibrary.executeExchangeForPOC(
             daoState,
             pocContracts,
@@ -617,10 +621,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             mainCollateral,
             address(launchToken),
             daoState.totalCollectedMainCollateral,
-            pocIdx,
-            amount,
-            router,
-            swapType,
+            params,
             swapData
         );
     }
@@ -690,7 +691,9 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
                 || daoState.currentStage == DataTypes.Stage.WaitingForLP,
             InvalidStage()
         );
-        DissolutionLibrary.executeDissolveFromFundraisingStages(daoState, pocContracts);
+        DissolutionLibrary.executeDissolveFromFundraisingStages(
+            daoState, pocContracts, mainCollateral, accountedBalance
+        );
     }
 
     /// @notice Execute proposal call through DAO (only callable by voting)
@@ -808,6 +811,17 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         IMultisig(creator).executeTransaction(proposalId, calls);
 
         emit MultisigExecutionPushed(proposalId, msg.sender);
+    }
+
+    /// @notice Register a PrivateSale contract
+    /// @param _privateSaleContract Address of the PrivateSale contract
+    function registerPrivateSale(address _privateSaleContract) external onlyAdmin {
+        require(_privateSaleContract != address(0), InvalidAddress());
+        require(daoState.privateSaleContract == address(0), TokenAlreadyAdded());
+
+        daoState.privateSaleContract = _privateSaleContract;
+
+        emit PrivateSaleRegistered(_privateSaleContract);
     }
 
     /// @notice Claim creator's share of launch tokens during dissolution

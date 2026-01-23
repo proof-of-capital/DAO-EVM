@@ -33,7 +33,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "../interfaces/IAggregatorV3.sol";
 import "./DataTypes.sol";
-import "./OrderbookSwapLibrary.sol";
+import "./SwapLibrary.sol";
 import "./Constants.sol";
 
 /// @title Orderbook Library
@@ -72,7 +72,7 @@ library Orderbook {
         mapping(address => bool) storage availableRouterByAdmin,
         uint256 totalShares,
         uint256 sharePrice
-    ) internal {
+    ) external {
         DataTypes.CollateralInfo storage collateralInfo = sellableCollaterals[params.collateral];
 
         require(collateralInfo.active, CollateralNotSellable());
@@ -80,9 +80,9 @@ library Orderbook {
         uint256 collateralPriceUSD = getCollateralPrice(collateralInfo);
         require(collateralPriceUSD > 0, InvalidCollateralPrice());
 
-        require(availableRouterByAdmin[params.router], OrderbookSwapLibrary.RouterNotAvailable());
+        require(availableRouterByAdmin[params.router], SwapLibrary.RouterNotAvailable());
         uint256 balanceBefore = IERC20(params.collateral).balanceOf(address(this));
-        OrderbookSwapLibrary.executeSwap(
+        SwapLibrary.executeSwap(
             params.router,
             params.swapType,
             params.swapData,

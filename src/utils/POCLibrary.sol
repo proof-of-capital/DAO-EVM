@@ -15,7 +15,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "../interfaces/IProofOfCapital.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
-import "./OrderbookSwapLibrary.sol";
+import "./SwapLibrary.sol";
 import "./OracleLibrary.sol";
 
 /// @title POCLibrary
@@ -68,10 +68,7 @@ library POCLibrary {
     /// @param mainCollateral Main collateral token address
     /// @param launchToken Launch token address
     /// @param totalCollectedMainCollateral Total collected main collateral
-    /// @param pocIdx Index of POC contract in pocContracts array
-    /// @param amount Amount of mainCollateral to exchange (0 = exchange remaining amount)
-    /// @param router Router address for swap (if collateral != mainCollateral)
-    /// @param swapType Type of swap to execute
+    /// @param params POC exchange parameters (pocIdx, amount, router, swapType)
     /// @param swapData Encoded swap parameters
     /// @return launchReceived Amount of launch tokens received
     function executeExchangeForPOC(
@@ -83,15 +80,12 @@ library POCLibrary {
         address mainCollateral,
         address launchToken,
         uint256 totalCollectedMainCollateral,
-        uint256 pocIdx,
-        uint256 amount,
-        address router,
-        DataTypes.SwapType swapType,
+        DataTypes.POCExchangeParams memory params,
         bytes calldata swapData
     ) external returns (uint256 launchReceived) {
-        require(pocIdx < pocContracts.length, InvalidPOCIndex());
+        require(params.pocIdx < pocContracts.length, InvalidPOCIndex());
 
-        DataTypes.POCInfo memory poc = pocContracts[pocIdx];
+        DataTypes.POCInfo memory poc = pocContracts[params.pocIdx];
         require(poc.active, POCNotActive());
         require(!poc.exchanged, POCAlreadyExchanged());
 
@@ -101,7 +95,7 @@ library POCLibrary {
         uint256 remainingAmount = totalAllocationForPOC - poc.exchangedAmount;
         require(remainingAmount > 0, POCAlreadyExchanged());
 
-        uint256 collateralAmountForPOC = amount == 0 ? remainingAmount : amount;
+        uint256 collateralAmountForPOC = params.amount == 0 ? remainingAmount : params.amount;
         require(collateralAmountForPOC > 0, AmountMustBeGreaterThanZero());
         require(collateralAmountForPOC <= remainingAmount, AmountExceedsRemaining());
 
@@ -110,20 +104,20 @@ library POCLibrary {
         if (poc.collateralToken == mainCollateral) {
             collateralAmount = collateralAmountForPOC;
         } else {
-            require(router != address(0), InvalidAddress());
-            require(availableRouterByAdmin[router], RouterNotAvailable());
+            require(params.router != address(0), InvalidAddress());
+            require(availableRouterByAdmin[params.router], RouterNotAvailable());
 
             uint256 mainCollateralPrice = OracleLibrary.getOraclePrice(sellableCollaterals, mainCollateral);
             uint256 collateralPrice = OracleLibrary.getChainlinkPrice(poc.priceFeed);
 
             uint256 expectedCollateral = (collateralAmountForPOC * mainCollateralPrice) / collateralPrice;
 
-            IERC20(mainCollateral).safeIncreaseAllowance(router, collateralAmountForPOC);
+            IERC20(mainCollateral).safeIncreaseAllowance(params.router, collateralAmountForPOC);
 
             uint256 balanceBefore = IERC20(poc.collateralToken).balanceOf(address(this));
 
-            collateralAmount = OrderbookSwapLibrary.executeSwap(
-                router, swapType, swapData, mainCollateral, poc.collateralToken, collateralAmountForPOC, 0
+            SwapLibrary.executeSwap(
+                params.router, params.swapType, swapData, mainCollateral, poc.collateralToken, collateralAmountForPOC, 0
             );
 
             uint256 balanceAfter = IERC20(poc.collateralToken).balanceOf(address(this));
@@ -148,11 +142,13 @@ library POCLibrary {
             poc.exchanged = true;
         }
 
-        pocContracts[pocIdx] = poc;
+        pocContracts[params.pocIdx] = poc;
 
         accountedBalance[launchToken] += launchReceived;
 
-        emit POCExchangeCompleted(pocIdx, poc.pocContract, collateralAmountForPOC, collateralAmount, launchReceived);
+        emit POCExchangeCompleted(
+            params.pocIdx, poc.pocContract, collateralAmountForPOC, collateralAmount, launchReceived
+        );
     }
 
     /// @notice Get POC collateral price from its oracle

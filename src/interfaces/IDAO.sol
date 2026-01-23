@@ -197,6 +197,7 @@ interface IDAO {
     event FundraisingCollectionFinalized(uint256 totalCollected, uint256 totalShares);
     event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
     event POCContractRemoved(address indexed pocContract);
+    event PrivateSaleRegistered(address indexed privateSaleContract);
     event POCExchangeCompleted(
         uint256 indexed pocIndex,
         address indexed pocContract,
