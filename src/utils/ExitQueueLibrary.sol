@@ -15,6 +15,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
 import "./VaultLibrary.sol";
+import "./VaultValidationLibrary.sol";
 import "../interfaces/IVoting.sol";
 
 /// @title ExitQueueLibrary
@@ -52,7 +53,7 @@ library ExitQueueLibrary {
         address votingContract
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
-        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+        VaultValidationLibrary.validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
@@ -98,118 +99,6 @@ library ExitQueueLibrary {
         vaultStorage.vaults[vaultId] = vault;
 
         emit ExitRequested(vaultId, vault.shares, launchPriceNow);
-    }
-
-    /// @notice Process exit queue with available funds
-    /// @param vaultStorage Vault storage structure
-    /// @param exitQueueStorage Exit queue storage structure
-    /// @param daoState DAO state storage structure
-    /// @param participantEntries Participant entries mapping
-    /// @param fundraisingConfig Fundraising config (for share price)
-    /// @param totalSharesSupply Total shares supply (will be updated)
-    /// @param availableFunds Amount of funds available for buyback (in tokens)
-    /// @param token Token used for buyback
-    /// @param launchToken Launch token address
-    /// @param getOraclePrice Function to get token price in USD
-    /// @param allowedExitTokens Global mapping of allowed exit tokens
-    /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
-    /// @return remainingFunds Remaining funds after processing (in tokens)
-    /// @return newTotalSharesSupply Updated total shares supply
-    function processExitQueue(
-        DataTypes.VaultStorage storage vaultStorage,
-        DataTypes.ExitQueueStorage storage exitQueueStorage,
-        DataTypes.DAOState storage daoState,
-        mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
-        DataTypes.FundraisingConfig storage fundraisingConfig,
-        uint256 totalSharesSupply,
-        uint256 availableFunds,
-        address token,
-        address launchToken,
-        function(address) external returns (uint256) getOraclePrice,
-        mapping(address => bool) storage allowedExitTokens,
-        mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
-    ) public returns (uint256 remainingFunds, uint256 newTotalSharesSupply) {
-        newTotalSharesSupply = totalSharesSupply;
-        remainingFunds = availableFunds;
-
-        if (availableFunds == 0 || isExitQueueEmpty(exitQueueStorage)) {
-            return (remainingFunds, newTotalSharesSupply);
-        }
-
-        uint256 tokenPriceUSD = getOraclePrice(token);
-
-        for (
-            uint256 i = exitQueueStorage.nextExitQueueIndex;
-            i < exitQueueStorage.exitQueue.length && remainingFunds > 0;
-            ++i
-        ) {
-            DataTypes.ExitRequest memory request = exitQueueStorage.exitQueue[i];
-
-            if (request.processed) {
-                if (exitQueueStorage.nextExitQueueIndex == i) {
-                    exitQueueStorage.nextExitQueueIndex = i + 1;
-                }
-                continue;
-            }
-
-            DataTypes.Vault storage vault = vaultStorage.vaults[request.vaultId];
-            uint256 shares = vault.shares;
-
-            if (shares == 0) {
-                if (exitQueueStorage.nextExitQueueIndex == i) {
-                    exitQueueStorage.nextExitQueueIndex = i + 1;
-                }
-                continue;
-            }
-
-            if (!allowedExitTokens[token] && !vaultAllowedExitTokens[request.vaultId][token]) {
-                continue;
-            }
-
-            uint256 exitValueUSD = calculateExitValue(
-                vaultStorage,
-                exitQueueStorage,
-                participantEntries,
-                fundraisingConfig,
-                request.vaultId,
-                shares,
-                launchToken,
-                getOraclePrice
-            );
-            uint256 exitValueInTokens = convertUSDToTokens(exitValueUSD, tokenPriceUSD);
-
-            if (remainingFunds >= exitValueInTokens) {
-                newTotalSharesSupply = executeExit(
-                    vaultStorage,
-                    exitQueueStorage,
-                    daoState,
-                    fundraisingConfig,
-                    i,
-                    exitValueInTokens,
-                    token,
-                    newTotalSharesSupply
-                );
-                remainingFunds -= exitValueInTokens;
-                if (exitQueueStorage.nextExitQueueIndex == i) {
-                    exitQueueStorage.nextExitQueueIndex = i + 1;
-                }
-            } else {
-                uint256 partialShares = (remainingFunds * shares) / exitValueInTokens;
-                if (partialShares > 0 && remainingFunds > 0) {
-                    newTotalSharesSupply = executePartialExit(
-                        vaultStorage,
-                        daoState,
-                        fundraisingConfig,
-                        request.vaultId,
-                        partialShares,
-                        remainingFunds,
-                        token,
-                        newTotalSharesSupply
-                    );
-                    remainingFunds = 0;
-                }
-            }
-        }
     }
 
     /// @notice Execute a single exit request
@@ -371,11 +260,18 @@ library ExitQueueLibrary {
         return (usdAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / tokenPriceUSD;
     }
 
-    /// @notice Check if exit queue is empty (all processed)
+    /// @notice Check if exit queue is empty (all processed) - internal version
     /// @param exitQueueStorage Exit queue storage structure
     /// @return True if no pending exits
-    function isExitQueueEmpty(DataTypes.ExitQueueStorage storage exitQueueStorage) internal view returns (bool) {
+    function _isExitQueueEmpty(DataTypes.ExitQueueStorage storage exitQueueStorage) internal view returns (bool) {
         return exitQueueStorage.nextExitQueueIndex >= exitQueueStorage.exitQueue.length;
+    }
+
+    /// @notice Check if exit queue is empty (all processed) - public version for external libraries
+    /// @param exitQueueStorage Exit queue storage structure
+    /// @return True if no pending exits
+    function isExitQueueEmpty(DataTypes.ExitQueueStorage storage exitQueueStorage) external view returns (bool) {
+        return _isExitQueueEmpty(exitQueueStorage);
     }
 
     /// @notice Cancel exit request from queue
@@ -388,7 +284,7 @@ library ExitQueueLibrary {
         DataTypes.DAOState storage daoState
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
-        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+        VaultValidationLibrary.validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
@@ -409,6 +305,163 @@ library ExitQueueLibrary {
         daoState.totalExitQueueShares -= vaultShares;
 
         emit ExitRequestCancelled(vaultId);
+    }
+
+    /// @notice Process exit queue - internal version for use by other libraries
+    /// @param vaultStorage Vault storage structure
+    /// @param exitQueueStorage Exit queue storage structure
+    /// @param daoState DAO state storage structure
+    /// @param participantEntries Participant entries mapping
+    /// @param fundraisingConfig Fundraising config
+    /// @param totalSharesSupply Total shares supply (will be updated)
+    /// @param availableFunds Amount of funds available for buyback (in tokens)
+    /// @param token Token used for buyback
+    /// @param launchToken Launch token address
+    /// @param getOraclePrice Function to get token price in USD
+    /// @param allowedExitTokens Global mapping of allowed exit tokens
+    /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
+    /// @return remainingFunds Remaining funds after processing (in tokens)
+    /// @return newTotalSharesSupply Updated total shares supply
+    function _processExitQueue(
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.ExitQueueStorage storage exitQueueStorage,
+        DataTypes.DAOState storage daoState,
+        mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
+        DataTypes.FundraisingConfig storage fundraisingConfig,
+        uint256 totalSharesSupply,
+        uint256 availableFunds,
+        address token,
+        address launchToken,
+        function(address) external returns (uint256) getOraclePrice,
+        mapping(address => bool) storage allowedExitTokens,
+        mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
+    ) internal returns (uint256 remainingFunds, uint256 newTotalSharesSupply) {
+        newTotalSharesSupply = totalSharesSupply;
+        remainingFunds = availableFunds;
+
+        if (availableFunds == 0 || _isExitQueueEmpty(exitQueueStorage)) {
+            return (remainingFunds, newTotalSharesSupply);
+        }
+
+        uint256 tokenPriceUSD = getOraclePrice(token);
+
+        for (
+            uint256 i = exitQueueStorage.nextExitQueueIndex;
+            i < exitQueueStorage.exitQueue.length && remainingFunds > 0;
+            ++i
+        ) {
+            DataTypes.ExitRequest memory request = exitQueueStorage.exitQueue[i];
+
+            if (request.processed) {
+                if (exitQueueStorage.nextExitQueueIndex == i) {
+                    exitQueueStorage.nextExitQueueIndex = i + 1;
+                }
+                continue;
+            }
+
+            DataTypes.Vault storage vault = vaultStorage.vaults[request.vaultId];
+            uint256 shares = vault.shares;
+
+            if (shares == 0) {
+                if (exitQueueStorage.nextExitQueueIndex == i) {
+                    exitQueueStorage.nextExitQueueIndex = i + 1;
+                }
+                continue;
+            }
+
+            if (!allowedExitTokens[token] && !vaultAllowedExitTokens[request.vaultId][token]) {
+                continue;
+            }
+
+            uint256 exitValueUSD = calculateExitValue(
+                vaultStorage,
+                exitQueueStorage,
+                participantEntries,
+                fundraisingConfig,
+                request.vaultId,
+                shares,
+                launchToken,
+                getOraclePrice
+            );
+            uint256 exitValueInTokens = convertUSDToTokens(exitValueUSD, tokenPriceUSD);
+
+            if (remainingFunds >= exitValueInTokens) {
+                newTotalSharesSupply = executeExit(
+                    vaultStorage,
+                    exitQueueStorage,
+                    daoState,
+                    fundraisingConfig,
+                    i,
+                    exitValueInTokens,
+                    token,
+                    newTotalSharesSupply
+                );
+                remainingFunds -= exitValueInTokens;
+                if (exitQueueStorage.nextExitQueueIndex == i) {
+                    exitQueueStorage.nextExitQueueIndex = i + 1;
+                }
+            } else {
+                uint256 partialShares = (remainingFunds * shares) / exitValueInTokens;
+                if (partialShares > 0 && remainingFunds > 0) {
+                    newTotalSharesSupply = executePartialExit(
+                        vaultStorage,
+                        daoState,
+                        fundraisingConfig,
+                        request.vaultId,
+                        partialShares,
+                        remainingFunds,
+                        token,
+                        newTotalSharesSupply
+                    );
+                    remainingFunds = 0;
+                }
+            }
+        }
+    }
+
+    /// @notice Process exit queue - public version for DAO
+    /// @param vaultStorage Vault storage structure
+    /// @param exitQueueStorage Exit queue storage structure
+    /// @param daoState DAO state storage structure
+    /// @param participantEntries Participant entries mapping
+    /// @param fundraisingConfig Fundraising config
+    /// @param totalSharesSupply Total shares supply (will be updated)
+    /// @param availableFunds Amount of funds available for buyback (in tokens)
+    /// @param token Token used for buyback
+    /// @param launchToken Launch token address
+    /// @param getOraclePrice Function to get token price in USD
+    /// @param allowedExitTokens Global mapping of allowed exit tokens
+    /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
+    /// @return remainingFunds Remaining funds after processing (in tokens)
+    /// @return newTotalSharesSupply Updated total shares supply
+    function processExitQueue(
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.ExitQueueStorage storage exitQueueStorage,
+        DataTypes.DAOState storage daoState,
+        mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
+        DataTypes.FundraisingConfig storage fundraisingConfig,
+        uint256 totalSharesSupply,
+        uint256 availableFunds,
+        address token,
+        address launchToken,
+        function(address) external returns (uint256) getOraclePrice,
+        mapping(address => bool) storage allowedExitTokens,
+        mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
+    ) public returns (uint256 remainingFunds, uint256 newTotalSharesSupply) {
+        return _processExitQueue(
+            vaultStorage,
+            exitQueueStorage,
+            daoState,
+            participantEntries,
+            fundraisingConfig,
+            totalSharesSupply,
+            availableFunds,
+            token,
+            launchToken,
+            getOraclePrice,
+            allowedExitTokens,
+            vaultAllowedExitTokens
+        );
     }
 
     /// @notice Process pending exit queue payment in parts
@@ -443,7 +496,7 @@ library ExitQueueLibrary {
         }
 
         uint256 remainingFunds;
-        (remainingFunds, newTotalSharesSupply) = processExitQueue(
+        (remainingFunds, newTotalSharesSupply) = _processExitQueue(
             vaultStorage,
             exitQueueStorage,
             daoState,
@@ -464,7 +517,7 @@ library ExitQueueLibrary {
         }
         daoState.pendingExitQueuePayment -= usedForExits;
 
-        bool queueEmpty = isExitQueueEmpty(exitQueueStorage);
+        bool queueEmpty = _isExitQueueEmpty(exitQueueStorage);
 
         if (queueEmpty && daoState.pendingExitQueuePayment > 0) {
             uint256 remainingForCreator = daoState.pendingExitQueuePayment;

@@ -14,7 +14,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
-import "./ExitQueueLibrary.sol";
+import "./ExitQueueValidationLibrary.sol";
 
 /// @title CreatorLibrary
 /// @notice Library for managing creator allocations
@@ -87,7 +87,7 @@ library CreatorLibrary {
         require(daoState.creatorProfitPercent >= newCreatorProfitPercent, CreatorShareTooLow());
         daoState.creatorProfitPercent = newCreatorProfitPercent;
 
-        bool isQueueEmpty = ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage);
+        bool isQueueEmpty = ExitQueueValidationLibrary.isExitQueueEmpty(exitQueueStorage);
 
         if (isQueueEmpty) {
             IERC20(launchToken).safeTransfer(creator, launchAmount);

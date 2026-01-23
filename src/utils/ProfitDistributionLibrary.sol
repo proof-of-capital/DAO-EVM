@@ -14,7 +14,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
-import "./ExitQueueLibrary.sol";
+import "./ExitQueueValidationLibrary.sol";
+import "./ExitQueueProcessingLibrary.sol";
 
 /// @title ProfitDistributionLibrary
 /// @notice Library for distributing profits (royalty, creator, participants)
@@ -178,14 +179,14 @@ library ProfitDistributionLibrary {
         uint256 usedForExits = 0;
 
         if (
-            !ExitQueueLibrary.isExitQueueEmpty(exitQueueStorage) && participantsShare > 0
+            !ExitQueueValidationLibrary.isExitQueueEmpty(exitQueueStorage) && participantsShare > 0
                 && !lpTokenStorage.isV2LPToken[token] && daoState.currentStage != DataTypes.Stage.Closing
         ) {
             uint256 balanceBefore = IERC20(token).balanceOf(address(this));
 
             uint256 availableFunds = participantsShare;
             uint256 remainingFunds;
-            (remainingFunds, newTotalSharesSupply) = ExitQueueLibrary.processExitQueue(
+            (remainingFunds, newTotalSharesSupply) = ExitQueueProcessingLibrary.processExitQueue(
                 vaultStorage,
                 exitQueueStorage,
                 daoState,

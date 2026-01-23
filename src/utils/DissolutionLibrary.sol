@@ -18,6 +18,7 @@ import "../interfaces/IPrivateSale.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
 import "./VaultLibrary.sol";
+import "./VaultValidationLibrary.sol";
 import "./LPTokenLibrary.sol";
 
 /// @title DissolutionLibrary
@@ -129,7 +130,7 @@ library DissolutionLibrary {
         address[] calldata tokens
     ) external returns (uint256 shares) {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
-        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+        VaultValidationLibrary.validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());

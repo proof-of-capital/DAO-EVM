@@ -15,6 +15,8 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
 import "./VaultLibrary.sol";
+import "./VaultValidationLibrary.sol";
+import "./RewardsCalculationLibrary.sol";
 import "./SwapLibrary.sol";
 
 /// @title RewardsLibrary
@@ -45,12 +47,12 @@ library RewardsLibrary {
         address[] calldata tokens
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
-        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+        VaultValidationLibrary.validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
 
-        executeUpdateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
+        RewardsCalculationLibrary.updateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
 
         for (uint256 i = 0; i < tokens.length; ++i) {
             address token = tokens[i];
@@ -99,12 +101,12 @@ library RewardsLibrary {
         DataTypes.ClaimSwapParams[] calldata swapParams
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
-        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+        VaultValidationLibrary.validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault storage vault = vaultStorage.vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
 
-        executeUpdateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
+        RewardsCalculationLibrary.updateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
 
         uint256 totalCollateralReceived = 0;
 
@@ -142,68 +144,6 @@ library RewardsLibrary {
         if (totalCollateralReceived > 0) {
             IERC20(mainCollateral).safeTransfer(msg.sender, totalCollateralReceived);
         }
-    }
-
-    /// @notice Update vault rewards snapshot for all tokens
-    /// @param vaultStorage Vault storage structure
-    /// @param rewardsStorage Rewards storage structure
-    /// @param lpTokenStorage LP token storage structure
-    /// @param vaultId Vault ID to update
-    function executeUpdateVaultRewards(
-        DataTypes.VaultStorage storage vaultStorage,
-        DataTypes.RewardsStorage storage rewardsStorage,
-        DataTypes.LPTokenStorage storage lpTokenStorage,
-        uint256 vaultId
-    ) internal {
-        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
-
-        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; ++i) {
-            address rewardToken = rewardsStorage.rewardTokens[i];
-            if (rewardsStorage.rewardTokenInfo[rewardToken].active) {
-                uint256 pending = calculatePendingRewards(vaultStorage, rewardsStorage, vaultId, rewardToken);
-
-                if (pending > 0) {
-                    rewardsStorage.earnedRewards[vaultId][rewardToken] += pending;
-                }
-
-                rewardsStorage.vaultRewardIndex[vaultId][rewardToken] = rewardsStorage.rewardPerShareStored[rewardToken];
-            }
-        }
-
-        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; ++i) {
-            address lpToken = lpTokenStorage.v2LPTokens[i];
-            uint256 pending = calculatePendingRewards(vaultStorage, rewardsStorage, vaultId, lpToken);
-
-            if (pending > 0) {
-                rewardsStorage.earnedRewards[vaultId][lpToken] += pending;
-            }
-
-            rewardsStorage.vaultRewardIndex[vaultId][lpToken] = rewardsStorage.rewardPerShareStored[lpToken];
-        }
-    }
-
-    /// @notice Calculate pending rewards for a vault and token
-    /// @param vaultStorage Vault storage structure
-    /// @param rewardsStorage Rewards storage structure
-    /// @param vaultId Vault ID
-    /// @param token Token address
-    /// @return Pending rewards amount
-    function calculatePendingRewards(
-        DataTypes.VaultStorage storage vaultStorage,
-        DataTypes.RewardsStorage storage rewardsStorage,
-        uint256 vaultId,
-        address token
-    ) internal view returns (uint256) {
-        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
-        if (vault.shares == 0) return 0;
-
-        uint256 currentIndex = rewardsStorage.rewardPerShareStored[token];
-        uint256 userIndex = rewardsStorage.vaultRewardIndex[vaultId][token];
-
-        if (currentIndex <= userIndex) return 0;
-
-        uint256 indexDelta = currentIndex - userIndex;
-        return (vault.shares * indexDelta) / Constants.PRICE_DECIMALS_MULTIPLIER;
     }
 }
 

@@ -15,7 +15,8 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./DataTypes.sol";
 import "./Constants.sol";
 import "./VaultLibrary.sol";
-import "./RewardsLibrary.sol";
+import "./VaultValidationLibrary.sol";
+import "./RewardsCalculationLibrary.sol";
 import "../interfaces/IProofOfCapital.sol";
 
 /// @title FundraisingLibrary
@@ -165,7 +166,7 @@ library FundraisingLibrary {
         uint256 totalSharesSupply
     ) external {
         uint256 vaultId = vaultStorage.addressToVaultId[msg.sender];
-        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+        VaultValidationLibrary.validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         require(vault.primary == msg.sender, OnlyPrimaryCanClaim());
@@ -280,7 +281,7 @@ library FundraisingLibrary {
         if (vaultId == 0) {
             vaultId = vaultStorage.addressToVaultId[msg.sender];
         }
-        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+        VaultValidationLibrary.validateVaultExists(vaultStorage, vaultId);
 
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
 
@@ -350,7 +351,7 @@ library FundraisingLibrary {
         if (vaultId == 0) {
             vaultId = vaultStorage.addressToVaultId[msg.sender];
         }
-        VaultLibrary._validateVaultExists(vaultStorage, vaultId);
+        VaultValidationLibrary.validateVaultExists(vaultStorage, vaultId);
         IERC20(launchToken).safeTransferFrom(msg.sender, address(this), launchAmount);
 
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
@@ -388,7 +389,7 @@ library FundraisingLibrary {
 
         participantEntries[vaultId] = entry;
 
-        RewardsLibrary.executeUpdateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
+        RewardsCalculationLibrary.updateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
 
         vault.shares += shares;
         vaultStorage.totalSharesSupply += shares;
