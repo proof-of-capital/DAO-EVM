@@ -12,9 +12,9 @@ pragma solidity ^0.8.33;
 
 import "../libraries/DataTypes.sol";
 
-/// @title ILaunchExchange
-/// @notice Interface for LaunchExchange contract
-interface ILaunchExchange {
+/// @title IReturnWallet
+/// @notice Interface for ReturnWallet contract
+interface IReturnWallet {
     error Unauthorized();
     error InvalidAddress();
     error InvalidPOCIndex();

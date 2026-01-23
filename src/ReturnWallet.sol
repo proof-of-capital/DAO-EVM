@@ -12,7 +12,7 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./interfaces/ILaunchExchange.sol";
+import "./interfaces/IReturnWallet.sol";
 import "./interfaces/IPriceOracle.sol";
 import "./interfaces/IDAO.sol";
 import "./interfaces/IProofOfCapital.sol";
@@ -22,9 +22,9 @@ import "./libraries/DataTypes.sol";
 import "./libraries/Constants.sol";
 import "./libraries/internal/SwapLibrary.sol";
 
-/// @title LaunchExchange
+/// @title ReturnWallet
 /// @notice Unified contract for returning launch tokens, exchanging collateral for launch, and exchanging tokens for launch
-contract LaunchExchange is ILaunchExchange {
+contract ReturnWallet is IReturnWallet {
     using SafeERC20 for IERC20;
 
     IDAO public immutable dao;
@@ -54,7 +54,7 @@ contract LaunchExchange is ILaunchExchange {
         priceOracle = _priceOracle;
     }
 
-    /// @inheritdoc ILaunchExchange
+    /// @inheritdoc IReturnWallet
     function returnLaunches(uint256 amount) external {
         require(amount > 0, InvalidAddress());
 
@@ -112,7 +112,7 @@ contract LaunchExchange is ILaunchExchange {
         emit LaunchesReturned(distributed, activePocCount);
     }
 
-    /// @inheritdoc ILaunchExchange
+    /// @inheritdoc IReturnWallet
     function exchangeCollateralForLaunch(
         uint256 pocIndex,
         address collateral,
@@ -141,7 +141,7 @@ contract LaunchExchange is ILaunchExchange {
         emit CollateralExchangedForLaunch(pocIndex, collateral, collateralAmount, launchReceived);
     }
 
-    /// @inheritdoc ILaunchExchange
+    /// @inheritdoc IReturnWallet
     function exchange(
         address tokenIn,
         uint256 amountIn,
@@ -163,7 +163,7 @@ contract LaunchExchange is ILaunchExchange {
         emit TokenExchangedForLaunch(tokenIn, amountIn, launchOut, router);
     }
 
-    /// @inheritdoc ILaunchExchange
+    /// @inheritdoc IReturnWallet
     function getExpectedLaunchAmount(
         address tokenIn,
         uint256 amountIn,
