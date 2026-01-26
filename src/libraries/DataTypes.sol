@@ -312,6 +312,13 @@ library DataTypes {
         uint256 minLiquidity; // Minimum liquidity threshold (in launch tokens)
     }
 
+    /// @notice Price oracle source configuration
+    struct SourceConfig {
+        address asset; // Asset token address
+        address source; // Chainlink aggregator address
+        uint8 decimals; // Decimals for price normalization
+    }
+
     // ============================================
     // CONSTRUCTOR PARAMETERS STRUCTURES
     // ============================================

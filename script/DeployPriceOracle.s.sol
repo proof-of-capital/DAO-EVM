@@ -11,34 +11,44 @@
 pragma solidity ^0.8.33;
 
 import {Script, console} from "forge-std/Script.sol";
-import "../src/ReturnWallet.sol";
+import "../src/PriceOracle.sol";
+import "../src/libraries/NetworkConfig.sol";
+import "../src/libraries/DataTypes.sol";
 
-/// @title DeployReturnWalletScript
-/// @notice Script for deploying ReturnWallet contract
-contract DeployReturnWalletScript is Script {
+/// @title DeployPriceOracleScript
+/// @notice Script for deploying PriceOracle contract
+contract DeployPriceOracleScript is Script {
     string constant DEPLOYMENT_ADDRESSES_FILE = "./.deployment_addresses";
     string constant ENV_FILE = "./.deployment_addresses.env";
 
     function run() external {
         address dao = vm.envAddress("DAO");
-        address launchToken = vm.envAddress("LAUNCH_TOKEN");
-        address admin = vm.envAddress("ADMIN");
-        address priceOracle = vm.envAddress("PRICE_ORACLE");
+        address creator = vm.envAddress("MULTISIG");
+
+        uint256 chainId = block.chainid;
+        DataTypes.SourceConfig[] memory configs = NetworkConfig.getNetworkConfig(chainId);
+
+        require(configs.length > 0, "No assets configured for this chain");
 
         vm.startBroadcast();
 
-        ReturnWallet returnWallet = new ReturnWallet(dao, launchToken, admin, priceOracle);
+        PriceOracle priceOracle = new PriceOracle(
+            dao,
+            creator,
+            configs
+        );
 
-        console.log("ReturnWallet deployed at:", address(returnWallet));
+        console.log("PriceOracle deployed at:", address(priceOracle));
+        console.log("Initialized sources count:", configs.length);
 
         vm.sleep(5000);
         vm.stopBroadcast();
 
-        writeDeploymentAddresses(address(returnWallet));
+        writeDeploymentAddresses(address(priceOracle));
         console.log("Deployment addresses successfully saved");
     }
 
-    function writeDeploymentAddresses(address returnWallet) internal {
+    function writeDeploymentAddresses(address priceOracle) internal {
         string memory existingContent = "";
         try vm.readFile(ENV_FILE) returns (string memory content) {
             existingContent = string(abi.encodePacked(content));
@@ -57,13 +67,13 @@ contract DeployReturnWalletScript is Script {
         }
 
         addressesJson = string(
-            abi.encodePacked(addressesJson, '"returnWallet":"', vm.toString(returnWallet), '"}')
+            abi.encodePacked(addressesJson, '"priceOracle":"', vm.toString(priceOracle), '"}')
         );
         vm.writeFile(DEPLOYMENT_ADDRESSES_FILE, addressesJson);
         console.log("Deployment addresses saved to", DEPLOYMENT_ADDRESSES_FILE);
 
         string memory envContent = string(
-            abi.encodePacked(existingContent, "RETURN_WALLET=", vm.toString(returnWallet), "\n")
+            abi.encodePacked(existingContent, "PRICE_ORACLE=", vm.toString(priceOracle), "\n")
         );
 
         vm.writeFile(ENV_FILE, envContent);

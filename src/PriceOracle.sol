@@ -14,6 +14,7 @@ import "./interfaces/IPriceOracle.sol";
 import "./interfaces/IAggregatorV3.sol";
 import "./interfaces/IDAO.sol";
 import "./libraries/Constants.sol";
+import "./libraries/DataTypes.sol";
 
 /// @title PriceOracle
 /// @notice Contract to get asset prices, manage price sources
@@ -58,11 +59,18 @@ contract PriceOracle is IPriceOracle {
         _;
     }
 
-    constructor(address _dao, address _creator) {
+    constructor(
+        address _dao,
+        address _creator,
+        DataTypes.SourceConfig[] memory sourceConfigs
+    ) {
         require(_dao != address(0), InvalidAddress());
         require(_creator != address(0), InvalidAddress());
+        
         dao = _dao;
         creator = _creator;
+        
+        _initializeSources(sourceConfigs);
     }
 
     /// @inheritdoc IPriceOracle
@@ -89,7 +97,7 @@ contract PriceOracle is IPriceOracle {
     function proposeSourceUpdate(address asset, address source, uint8 decimals) external onlyDAOOrCreator {
         require(asset != address(0), InvalidAddress());
         require(source != address(0), InvalidAddress());
-        require(assetSources[asset] == IAggregatorV3(address(0)), TokenAlreadyAdded(asset));
+        require(address(assetSources[asset]) == address(0), TokenAlreadyAdded(asset));
 
         bytes32 updateId = keccak256(abi.encodePacked(asset, source, decimals, block.timestamp));
 
@@ -157,10 +165,23 @@ contract PriceOracle is IPriceOracle {
         return address(assetSources[asset]);
     }
 
+    function _initializeSources(DataTypes.SourceConfig[] memory sourceConfigs) internal {
+        for (uint256 i = 0; i < sourceConfigs.length; i++) {
+            require(sourceConfigs[i].asset != address(0), InvalidAddress());
+            require(sourceConfigs[i].source != address(0), InvalidAddress());
+            require(address(assetSources[sourceConfigs[i].asset]) == address(0), TokenAlreadyAdded(sourceConfigs[i].asset));
+
+            assetSources[sourceConfigs[i].asset] = IAggregatorV3(sourceConfigs[i].source);
+            assetDecimals[sourceConfigs[i].asset] = sourceConfigs[i].decimals;
+
+            emit SourceAdded(sourceConfigs[i].asset, sourceConfigs[i].source, sourceConfigs[i].decimals);
+        }
+    }
+
     function _executeSourceUpdate(bytes32 updateId) internal {
         PendingSourceUpdate memory update = pendingUpdates[updateId];
         require(update.daoApproved && update.creatorApproved, UpdateNotReady());
-        require(assetSources[update.asset] == IAggregatorV3(address(0)), TokenAlreadyAdded(update.asset));
+        require(address(assetSources[update.asset]) == address(0), TokenAlreadyAdded(update.asset));
 
         assetSources[update.asset] = IAggregatorV3(update.source);
         assetDecimals[update.asset] = update.decimals;
