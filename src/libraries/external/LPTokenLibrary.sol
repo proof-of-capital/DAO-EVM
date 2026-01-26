@@ -17,6 +17,7 @@ import "../Constants.sol";
 import "../../interfaces/INonfungiblePositionManager.sol";
 import "../../interfaces/IUniswapV2Pair.sol";
 import "../../interfaces/IProofOfCapital.sol";
+import "../internal/LPProcessingLibrary.sol";
 
 /// @title LPTokenLibrary
 /// @notice Library for managing LP tokens (V2 and V3)
@@ -118,25 +119,7 @@ library LPTokenLibrary {
         mapping(address => uint256) storage accountedBalance,
         address lpToken
     ) external returns (uint256 amount0, uint256 amount1) {
-        uint256 lpBalance = accountedBalance[lpToken];
-        require(lpBalance > 0, AmountMustBeGreaterThanZero());
-
-        address token0 = IUniswapV2Pair(lpToken).token0();
-        address token1 = IUniswapV2Pair(lpToken).token1();
-
-        IERC20(lpToken).safeTransfer(lpToken, lpBalance);
-
-        (amount0, amount1) = IUniswapV2Pair(lpToken).burn(address(this));
-
-        accountedBalance[lpToken] = 0;
-        lpTokenStorage.isV2LPToken[lpToken] = false;
-
-        if (amount0 > 0) {
-            accountedBalance[token0] += amount0;
-        }
-        if (amount1 > 0) {
-            accountedBalance[token1] += amount1;
-        }
+        return LPProcessingLibrary.executeDissolveV2LPToken(lpTokenStorage, accountedBalance, lpToken);
     }
 
     /// @notice Dissolve a single V3 LP position by decreasing all liquidity and collecting tokens
@@ -150,79 +133,9 @@ library LPTokenLibrary {
         mapping(address => uint256) storage accountedBalance,
         uint256 tokenId
     ) external returns (uint256 amount0, uint256 amount1) {
-        DataTypes.V3LPPositionInfo memory positionInfo = getV3PositionInfo(lpTokenStorage, tokenId);
-        INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
-
-        (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
-        require(liquidity > 0, AmountMustBeGreaterThanZero());
-
-        decreaseV3Liquidity(lpTokenStorage, tokenId, liquidity);
-
-        (amount0, amount1) = collectV3Tokens(lpTokenStorage, tokenId);
-
-        if (amount0 > 0) {
-            accountedBalance[positionInfo.token0] += amount0;
-        }
-        if (amount1 > 0) {
-            accountedBalance[positionInfo.token1] += amount1;
-        }
-
-        lpTokenStorage.v3TokenIdToIndex[tokenId] = 0;
+        return LPProcessingLibrary.executeDissolveV3LPPosition(lpTokenStorage, accountedBalance, tokenId);
     }
 
-    /// @notice Decrease liquidity for a V3 position
-    /// @param lpTokenStorage LP token storage structure
-    /// @param tokenId NFT token ID of the position
-    /// @param liquidity Amount of liquidity to decrease
-    /// @return amount0 Amount of token0 accounted for the decrease
-    /// @return amount1 Amount of token1 accounted for the decrease
-    function decreaseV3Liquidity(DataTypes.LPTokenStorage storage lpTokenStorage, uint256 tokenId, uint128 liquidity)
-        internal
-        returns (uint256 amount0, uint256 amount1)
-    {
-        DataTypes.V3LPPositionInfo memory positionInfo = getV3PositionInfo(lpTokenStorage, tokenId);
-        INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
-
-        INonfungiblePositionManager.DecreaseLiquidityParams memory params =
-            INonfungiblePositionManager.DecreaseLiquidityParams({
-                tokenId: tokenId, liquidity: liquidity, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
-            });
-
-        (amount0, amount1) = positionManager.decreaseLiquidity(params);
-    }
-
-    /// @notice Collect tokens from a V3 position
-    /// @param lpTokenStorage LP token storage structure
-    /// @param tokenId NFT token ID of the position
-    /// @return amount0 Amount of token0 collected
-    /// @return amount1 Amount of token1 collected
-    function collectV3Tokens(DataTypes.LPTokenStorage storage lpTokenStorage, uint256 tokenId)
-        internal
-        returns (uint256 amount0, uint256 amount1)
-    {
-        DataTypes.V3LPPositionInfo memory positionInfo = getV3PositionInfo(lpTokenStorage, tokenId);
-        INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
-
-        INonfungiblePositionManager.CollectParams memory params = INonfungiblePositionManager.CollectParams({
-            tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
-        });
-
-        (amount0, amount1) = positionManager.collect(params);
-    }
-
-    /// @notice Get V3 position info from array
-    /// @param lpTokenStorage LP token storage structure
-    /// @param tokenId NFT token ID of the position
-    /// @return Position info struct
-    function getV3PositionInfo(DataTypes.LPTokenStorage storage lpTokenStorage, uint256 tokenId)
-        internal
-        view
-        returns (DataTypes.V3LPPositionInfo memory)
-    {
-        uint256 index = lpTokenStorage.v3TokenIdToIndex[tokenId];
-        require(index > 0, NotLPToken());
-        return lpTokenStorage.v3LPPositions[index - 1];
-    }
 
     /// @notice Check if there are any LP tokens (V2 or V3) that need to be dissolved
     /// @param lpTokenStorage LP token storage structure
@@ -232,23 +145,7 @@ library LPTokenLibrary {
         DataTypes.LPTokenStorage storage lpTokenStorage,
         mapping(address => uint256) storage accountedBalance
     ) external view returns (bool) {
-        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; ++i) {
-            if (accountedBalance[lpTokenStorage.v2LPTokens[i]] > 0) {
-                return true;
-            }
-        }
-
-        for (uint256 i = 0; i < lpTokenStorage.v3LPPositions.length; ++i) {
-            uint256 tokenId = lpTokenStorage.v3LPPositions[i].tokenId;
-            INonfungiblePositionManager positionManager =
-                INonfungiblePositionManager(lpTokenStorage.v3LPPositions[i].positionManager);
-            (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
-            if (liquidity > 0) {
-                return true;
-            }
-        }
-
-        return false;
+        return LPProcessingLibrary.hasLPTokens(lpTokenStorage, accountedBalance);
     }
 
     /// @notice Distribute 1% of LP tokens as profit (monthly)
@@ -319,7 +216,7 @@ library LPTokenLibrary {
             LPDistributionTooSoon()
         );
 
-        DataTypes.V3LPPositionInfo memory positionInfo = getV3PositionInfo(lpTokenStorage, tokenId);
+        DataTypes.V3LPPositionInfo memory positionInfo = LPProcessingLibrary.getV3PositionInfo(lpTokenStorage, tokenId);
         INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
 
         (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
@@ -329,9 +226,9 @@ library LPTokenLibrary {
             uint128((uint256(liquidity) * Constants.LP_DISTRIBUTION_PERCENT) / Constants.BASIS_POINTS);
         require(liquidityToDecrease > 0, NoProfitToDistribute());
 
-        decreaseV3Liquidity(lpTokenStorage, tokenId, liquidityToDecrease);
+        LPProcessingLibrary.decreaseV3Liquidity(lpTokenStorage, tokenId, liquidityToDecrease);
 
-        (collected0, collected1) = collectV3Tokens(lpTokenStorage, tokenId);
+        (collected0, collected1) = LPProcessingLibrary.collectV3Tokens(lpTokenStorage, tokenId);
 
         lpTokenStorage.v3LastLPDistribution[tokenId] = block.timestamp;
 

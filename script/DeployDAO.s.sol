@@ -44,7 +44,7 @@ contract DeployDAO is Script {
         // Required parameters
         address launchTokenAddress = vm.envAddress("LAUNCH_TOKEN_ADDRESS");
         address mainCollateralAddress = vm.envAddress("MAIN_COLLATERAL_ADDRESS"); // USDT
-        address creatorAddress = vm.envAddress("CREATOR_ADDRESS");
+        address creatorAddress = address(0); // Will be set later via setCreator
 
         // Fundraising parameters (with defaults)
         uint256 creatorProfitPercent = vm.envOr("CREATOR_PROFIT_PERCENT", uint256(4000)); // 40%
@@ -115,6 +115,10 @@ contract DeployDAO is Script {
             totalSupply: vm.envOr("ORDERBOOK_TOTAL_SUPPLY", uint256(1e27)) // 1 billion = 1e27 (1e9 * 1e18)
         });
 
+        // Deploy Voting contract first (before DAO)
+        Voting voting = new Voting();
+        console.log("Voting deployed at:", address(voting));
+
         // Build constructor params
         DataTypes.ConstructorParams memory params = DataTypes.ConstructorParams({
             launchToken: launchTokenAddress,
@@ -146,7 +150,7 @@ contract DeployDAO is Script {
                 v3Paths: new DataTypes.PricePathV3Params[](0),
                 minLiquidity: 1000e18
             }),
-            votingContract: address(0), // Will be set later via setVotingContract
+            votingContract: address(voting), // Set Voting address
             marketMaker: vm.envOr("MARKET_MAKER", address(0)) // Market maker address
         });
 
@@ -162,13 +166,9 @@ contract DeployDAO is Script {
         DAO dao = DAO(payable(address(proxy)));
         console.log("DAO proxy deployed at:", address(dao));
 
-        // Deploy Voting contract
-        Voting voting = new Voting(address(dao));
-        console.log("Voting deployed at:", address(voting));
-
-        // Set voting contract in DAO
-        dao.setVotingContract(address(voting));
-        console.log("Voting contract set in DAO");
+        // Set DAO in Voting contract (only deployer, only once)
+        voting.setDAO(address(dao));
+        console.log("DAO set in Voting contract");
 
         // Log configuration
         if (collateralTokens.length > 0) {
@@ -182,6 +182,15 @@ contract DeployDAO is Script {
         }
 
         vm.stopBroadcast();
+
+        writeDeploymentAddresses(
+            address(daoImplementation),
+            address(dao),
+            address(voting),
+            launchTokenAddress,
+            mainCollateralAddress,
+            dao.admin()
+        );
 
         console.log("\n=== Deployment Summary ===");
         console.log("DAO Implementation:", address(daoImplementation));
@@ -199,5 +208,68 @@ contract DeployDAO is Script {
         console.log("Creator Infra %:", creatorInfraPercent);
         console.log("Royalty Recipient:", royaltyRecipient);
         console.log("Royalty %:", royaltyPercent);
+    }
+
+    function writeDeploymentAddresses(
+        address daoImplementation,
+        address dao,
+        address voting,
+        address launchToken,
+        address mainCollateral,
+        address admin
+    ) internal {
+        string memory DEPLOYMENT_ADDRESSES_FILE = "./.deployment_addresses";
+        string memory ENV_FILE = "./.deployment_addresses.env";
+
+        string memory addressesJson = string(
+            abi.encodePacked(
+                '{"daoImplementation":"',
+                vm.toString(daoImplementation),
+                '",',
+                '"dao":"',
+                vm.toString(dao),
+                '",',
+                '"voting":"',
+                vm.toString(voting),
+                '",',
+                '"launchToken":"',
+                vm.toString(launchToken),
+                '",',
+                '"mainCollateral":"',
+                vm.toString(mainCollateral),
+                '",',
+                '"admin":"',
+                vm.toString(admin),
+                '"}'
+            )
+        );
+        vm.writeFile(DEPLOYMENT_ADDRESSES_FILE, addressesJson);
+        console.log("Deployment addresses saved to", DEPLOYMENT_ADDRESSES_FILE);
+
+        string memory envContent = string(
+            abi.encodePacked(
+                "DAO_IMPLEMENTATION=",
+                vm.toString(daoImplementation),
+                "\n",
+                "DAO=",
+                vm.toString(dao),
+                "\n",
+                "VOTING=",
+                vm.toString(voting),
+                "\n",
+                "LAUNCH_TOKEN=",
+                vm.toString(launchToken),
+                "\n",
+                "MAIN_COLLATERAL=",
+                vm.toString(mainCollateral),
+                "\n",
+                "ADMIN=",
+                vm.toString(admin),
+                "\n"
+            )
+        );
+
+        vm.writeFile(ENV_FILE, envContent);
+        console.log("Environment variables saved to", ENV_FILE);
     }
 }

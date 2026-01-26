@@ -164,7 +164,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     function initialize(DataTypes.ConstructorParams memory params) external initializer {
         require(params.launchToken != address(0), InvalidLaunchToken());
         require(params.mainCollateral != address(0), InvalidAddress());
-        require(params.creator != address(0), InvalidAddress());
         require(params.creatorProfitPercent <= Constants.BASIS_POINTS, InvalidPercentage());
         require(params.creatorInfraPercent <= Constants.BASIS_POINTS, InvalidPercentage());
         require(params.royaltyPercent <= Constants.BASIS_POINTS, InvalidPercentage());
@@ -811,6 +810,39 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         IMultisig(creator).executeTransaction(proposalId, calls);
 
         emit MultisigExecutionPushed(proposalId, msg.sender);
+    }
+
+    /// @notice Set creator address (only admin can call)
+    /// @param newCreator New creator address
+    function setCreator(address newCreator) external onlyAdmin {
+        require(newCreator != address(0), InvalidAddress());
+        require(creator == address(0), TokenAlreadyAdded());
+
+        creator = newCreator;
+        daoState.creator = newCreator;
+
+        emit CreatorSet(newCreator, daoState.creatorProfitPercent, creatorInfraPercent);
+    }
+
+    /// @notice Set market maker address and update all active POC contracts (only admin can call)
+    /// @param newMarketMaker New market maker address
+    function setMarketMaker(address newMarketMaker) external onlyAdmin {
+        require(newMarketMaker != address(0), InvalidAddress());
+
+        address oldMarketMaker = daoState.marketMaker;
+        daoState.marketMaker = newMarketMaker;
+
+        uint256 pocContractsCount = pocContracts.length;
+        for (uint256 i = 0; i < pocContractsCount; ++i) {
+            if (pocContracts[i].active) {
+                if (oldMarketMaker != address(0)) {
+                    IProofOfCapital(pocContracts[i].pocContract).setMarketMaker(oldMarketMaker, false);
+                }
+                IProofOfCapital(pocContracts[i].pocContract).setMarketMaker(newMarketMaker, true);
+            }
+        }
+
+        emit MarketMakerSet(newMarketMaker);
     }
 
     /// @notice Register a PrivateSale contract

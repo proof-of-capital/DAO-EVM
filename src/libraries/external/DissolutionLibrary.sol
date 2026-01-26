@@ -17,9 +17,8 @@ import "../../interfaces/INonfungiblePositionManager.sol";
 import "../../interfaces/IPrivateSale.sol";
 import "../DataTypes.sol";
 import "../Constants.sol";
-import "./VaultLibrary.sol";
 import "../internal/VaultValidationLibrary.sol";
-import "./LPTokenLibrary.sol";
+import "../internal/LPProcessingLibrary.sol";
 
 /// @title DissolutionLibrary
 /// @notice Library for DAO dissolution operations
@@ -66,7 +65,7 @@ library DissolutionLibrary {
             }
         }
 
-        bool hasLPTokens = LPTokenLibrary.hasLPTokens(lpTokenStorage, accountedBalance);
+        bool hasLPTokens = LPProcessingLibrary.hasLPTokens(lpTokenStorage, accountedBalance);
 
         if (hasLPTokens) {
             daoState.currentStage = DataTypes.Stage.WaitingForLPDissolution;
@@ -208,7 +207,7 @@ library DissolutionLibrary {
             address lpToken = lpTokenStorage.v2LPTokens[i];
             if (accountedBalance[lpToken] > 0) {
                 (uint256 amount0, uint256 amount1) =
-                    LPTokenLibrary.executeDissolveV2LPToken(lpTokenStorage, accountedBalance, lpToken);
+                    LPProcessingLibrary.executeDissolveV2LPToken(lpTokenStorage, accountedBalance, lpToken);
                 emit V2LPTokenDissolved(lpToken, amount0, amount1);
             }
         }
@@ -221,7 +220,7 @@ library DissolutionLibrary {
             (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
             if (liquidity > 0) {
                 (uint256 amount0, uint256 amount1) =
-                    LPTokenLibrary.executeDissolveV3LPPosition(lpTokenStorage, accountedBalance, tokenId);
+                    LPProcessingLibrary.executeDissolveV3LPPosition(lpTokenStorage, accountedBalance, tokenId);
                 emit V3LPPositionDissolved(tokenId, amount0, amount1);
             }
         }

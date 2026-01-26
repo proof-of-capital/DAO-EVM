@@ -72,7 +72,8 @@ contract Voting is IVoting {
     error CallDataHashMismatch();
 
     // State variables
-    IDAO public immutable dao;
+    IDAO public dao;
+    address public immutable deployer;
 
     uint256 public votingPeriod;
     uint256 public quorumPercentage;
@@ -105,9 +106,8 @@ contract Voting is IVoting {
         _;
     }
 
-    constructor(address _dao) {
-        require(_dao != address(0), InvalidDAOAddress());
-        dao = IDAO(_dao);
+    constructor() {
+        deployer = msg.sender;
 
         votingPeriod = Constants.DEFAULT_VOTING_PERIOD;
         quorumPercentage = Constants.DEFAULT_QUORUM_PERCENTAGE;
@@ -122,6 +122,16 @@ contract Voting is IVoting {
             quorumPercentage: Constants.DEFAULT_FINANCIAL_QUORUM,
             approvalThreshold: Constants.DEFAULT_FINANCIAL_APPROVAL
         });
+    }
+
+    /// @notice Set DAO contract address (can only be called once by deployer)
+    /// @param _dao DAO contract address
+    function setDAO(address _dao) external {
+        require(msg.sender == deployer, NotAdmin());
+        require(_dao != address(0), InvalidDAOAddress());
+        require(address(dao) == address(0), InvalidAddress());
+        
+        dao = IDAO(_dao);
     }
 
     /// @notice Create a new proposal

@@ -12,3 +12,12 @@ docs/
 
 # Dotenv file
 .env
+
+# Anvil PID file
+.anvil.pid
+
+# Deployment addresses files
+.library_addresses
+.library_addresses.env
+.deployment_addresses
+.deployment_addresses.env
