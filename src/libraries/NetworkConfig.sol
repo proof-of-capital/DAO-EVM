@@ -20,7 +20,26 @@ library NetworkConfig {
     /// @param chainId The chain ID to get configuration for
     /// @return SourceConfig array containing asset, source, and decimals for each asset
     function getNetworkConfig(uint256 chainId) internal pure returns (DataTypes.SourceConfig[] memory) {
-        if (chainId == 137) {
+        if (chainId == 31337) {
+            DataTypes.SourceConfig[] memory configs = new DataTypes.SourceConfig[](3);
+            configs[0] = DataTypes.SourceConfig({
+                asset: address(0x1111111111111111111111111111111111111111),
+                source: address(0x3333333333333333333333333333333333333333),
+                decimals: 8
+            });
+            configs[1] = DataTypes.SourceConfig({
+                asset: address(0x2222222222222222222222222222222222222222),
+                source: address(0x4444444444444444444444444444444444444444),
+                decimals: 8
+            });
+            configs[2] = DataTypes.SourceConfig({
+                asset: address(0x5555555555555555555555555555555555555555),
+                source: address(0x6666666666666666666666666666666666666666),
+                decimals: 8
+            });
+
+            return configs;
+        } else if (chainId == 137) {
             DataTypes.SourceConfig[] memory configs = new DataTypes.SourceConfig[](10);
             configs[0] = DataTypes.SourceConfig({
                 asset: address(0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174),
