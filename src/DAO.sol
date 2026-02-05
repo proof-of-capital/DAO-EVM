@@ -917,6 +917,12 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         return POCLibrary.getPOCCollateralPrice(pocContracts, pocIdx);
     }
 
+    /// @notice Get weighted average launch token price in USD from active POC contracts (view)
+    /// @return Launch price in USD (18 decimals)
+    function getLaunchPriceFromDAO() external view returns (uint256) {
+        return OracleLibrary.getLaunchPriceView(pocContracts);
+    }
+
     /// @notice Get DAO profit share percentage
     /// @return DAO profit share in basis points (10000 = 100%)
     function getDAOProfitShare() external view returns (uint256) {

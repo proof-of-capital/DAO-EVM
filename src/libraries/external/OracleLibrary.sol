@@ -29,8 +29,6 @@ library OracleLibrary {
     error PriceDeviationTooHigh();
     error InvalidPricePath();
 
-    event PriceValidated(uint256 oraclePrice, uint256 poolPrice, uint256 deviationBp);
-
     /// @notice Get price from Chainlink aggregator and normalize to 18 decimals (internal)
     /// @param priceFeed Address of Chainlink price feed aggregator
     /// @return Price in USD (18 decimals)
@@ -71,18 +69,10 @@ library OracleLibrary {
         return _getChainlinkPrice(info.priceFeed);
     }
 
-    /// @notice Get weighted average launch token price from all active POC contracts with pool validation
+    /// @notice Compute weighted average launch token price from active POC contracts (no validation)
     /// @param pocContracts Array of POC contracts
-    /// @param pricePathsStorage Price paths storage for pool validation
-    /// @param launchToken Launch token address
-    /// @param sellableCollaterals Mapping of collateral info
     /// @return Weighted average launch price in USD (18 decimals)
-    function _getLaunchPriceFromPOC(
-        DataTypes.POCInfo[] storage pocContracts,
-        DataTypes.PricePathsStorage storage pricePathsStorage,
-        address launchToken,
-        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals
-    ) internal returns (uint256) {
+    function _computeLaunchPriceFromPOC(DataTypes.POCInfo[] storage pocContracts) internal view returns (uint256) {
         uint256 totalWeightedPrice = 0;
         uint256 totalSharePercent = 0;
 
@@ -117,11 +107,31 @@ library OracleLibrary {
         }
 
         require(totalSharePercent > 0, NoPOCContracts());
-        uint256 oraclePrice = totalWeightedPrice / totalSharePercent;
+        return totalWeightedPrice / totalSharePercent;
+    }
 
+    /// @notice Get weighted average launch token price from all active POC contracts with pool validation
+    /// @param pocContracts Array of POC contracts
+    /// @param pricePathsStorage Price paths storage for pool validation
+    /// @param launchToken Launch token address
+    /// @param sellableCollaterals Mapping of collateral info
+    /// @return Weighted average launch price in USD (18 decimals)
+    function _getLaunchPriceFromPOC(
+        DataTypes.POCInfo[] storage pocContracts,
+        DataTypes.PricePathsStorage storage pricePathsStorage,
+        address launchToken,
+        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals
+    ) internal returns (uint256) {
+        uint256 oraclePrice = _computeLaunchPriceFromPOC(pocContracts);
         _validatePoolPriceInternal(pricePathsStorage, launchToken, sellableCollaterals, oraclePrice);
-
         return oraclePrice;
+    }
+
+    /// @notice Get weighted average launch token price from active POC contracts (view, no pool validation)
+    /// @param pocContracts Array of POC contracts
+    /// @return Weighted average launch price in USD (18 decimals)
+    function getLaunchPriceView(DataTypes.POCInfo[] storage pocContracts) external view returns (uint256) {
+        return _computeLaunchPriceFromPOC(pocContracts);
     }
 
     /// @notice Get price for any token - handles launch token via POC and collaterals via Chainlink
@@ -341,8 +351,6 @@ library OracleLibrary {
         uint256 deviation = _calculateDeviationInternal(oraclePrice, poolPrice);
 
         require(deviation <= Constants.MAX_PRICE_DEVIATION_BP, PriceDeviationTooHigh());
-
-        emit PriceValidated(oraclePrice, poolPrice, deviation);
     }
 
     /// @notice Add V2 price path to storage

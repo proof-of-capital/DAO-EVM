@@ -394,4 +394,5 @@ interface IDAO {
     function getDAOProfitShare() external view returns (uint256);
     function getVetoThreshold() external view returns (uint256);
     function getClosingThreshold() external view returns (uint256);
+    function getLaunchPriceFromDAO() external view returns (uint256);
 }
