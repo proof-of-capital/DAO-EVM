@@ -31,7 +31,7 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "../../interfaces/IAggregatorV3.sol";
+import "../../interfaces/IPriceOracle.sol";
 import "../DataTypes.sol";
 import "../internal/SwapLibrary.sol";
 import "../Constants.sol";
@@ -59,6 +59,7 @@ library Orderbook {
     /// @param launchToken Launch token reference from storage
     /// @param orderbookParams Orderbook parameters from storage (totalSold will be updated)
     /// @param sellableCollaterals Collaterals mapping from storage
+    /// @param priceOracle Price oracle for asset prices
     /// @param accountedBalance Accounted balance mapping from storage
     /// @param availableRouterByAdmin Router whitelist mapping from storage
     /// @param totalShares Total shares supply
@@ -68,6 +69,7 @@ library Orderbook {
         IERC20 launchToken,
         DataTypes.OrderbookParams storage orderbookParams,
         mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
+        IPriceOracle priceOracle,
         mapping(address => uint256) storage accountedBalance,
         mapping(address => bool) storage availableRouterByAdmin,
         uint256 totalShares,
@@ -77,7 +79,7 @@ library Orderbook {
 
         require(collateralInfo.active, CollateralNotSellable());
         require(orderbookParams.initialPrice > 0, OrderbookNotInitialized());
-        uint256 collateralPriceUSD = getCollateralPrice(collateralInfo);
+        uint256 collateralPriceUSD = priceOracle.getAssetPrice(params.collateral);
         require(collateralPriceUSD > 0, InvalidCollateralPrice());
 
         require(availableRouterByAdmin[params.router], SwapLibrary.RouterNotAvailable());
@@ -105,25 +107,6 @@ library Orderbook {
         updateCurrentLevel(orderbookParams, receivedCollateralInUsd, params.launchTokenAmount, totalShares, sharePrice);
 
         emit LaunchTokenSold(msg.sender, params.collateral, params.launchTokenAmount, receivedCollateral);
-    }
-
-    /// @notice Get collateral price from Chainlink oracle
-    /// @param collateralInfo Information about the collateral from storage
-    /// @return Price in USD (18 decimals)
-    function getCollateralPrice(DataTypes.CollateralInfo storage collateralInfo) internal view returns (uint256) {
-        IAggregatorV3 priceFeed = IAggregatorV3(collateralInfo.priceFeed);
-        (, int256 price,, uint256 updatedAt,) = priceFeed.latestRoundData();
-        require(price > 0, InvalidPrice());
-        require(block.timestamp - updatedAt <= Constants.ORACLE_MAX_AGE, StalePrice());
-
-        uint8 decimals = priceFeed.decimals();
-
-        if (decimals < 18) {
-            return uint256(price) * (10 ** (18 - decimals));
-        } else if (decimals > 18) {
-            return uint256(price) / (10 ** (decimals - 18));
-        }
-        return uint256(price);
     }
 
     /// @notice Update current level after selling launch tokens

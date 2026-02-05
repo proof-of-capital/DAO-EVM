@@ -36,6 +36,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./interfaces/IDAO.sol";
+import "./interfaces/IPriceOracle.sol";
 import "./interfaces/IVoting.sol";
 import "./interfaces/IAggregatorV3.sol";
 import "./interfaces/IProofOfCapital.sol";
@@ -65,6 +66,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     address public votingContract;
     IERC20 public launchToken;
     address public mainCollateral;
+    IPriceOracle public priceOracle;
 
     address public creator;
     uint256 public creatorInfraPercent;
@@ -172,9 +174,11 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(params.orderbookParams.initialPrice > 0, InvalidInitialPrice());
         require(params.orderbookParams.initialVolume > 0, InvalidVolume());
         require(params.orderbookParams.totalSupply > 0, InvalidVolume());
+        require(params.priceOracle != address(0), InvalidAddress());
 
         launchToken = IERC20(params.launchToken);
         mainCollateral = params.mainCollateral;
+        priceOracle = IPriceOracle(params.priceOracle);
         admin = msg.sender;
         creator = params.creator;
         creatorInfraPercent = params.creatorInfraPercent;
@@ -517,6 +521,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             launchToken,
             orderbookParams,
             sellableCollaterals,
+            priceOracle,
             accountedBalance,
             availableRouterByAdmin,
             vaultStorage.totalSharesSupply,
@@ -530,32 +535,25 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         return daoState.totalCollectedMainCollateral;
     }
 
-    /// @notice Get collateral price from Chainlink oracle
+    /// @notice Get collateral price from price oracle
     /// @param collateral Collateral token address
     /// @return Price in USD (18 decimals)
     function getCollateralPrice(address collateral) public view returns (uint256) {
-        return Orderbook.getCollateralPrice(sellableCollaterals[collateral]);
+        require(sellableCollaterals[collateral].active, CollateralNotActive());
+        return priceOracle.getAssetPrice(collateral);
     }
 
     /// @notice Add a POC contract with allocation share
     /// @param pocContract POC contract address
     /// @param collateralToken Collateral token for this POC
-    /// @param priceFeed Chainlink price feed for the collateral
     /// @param sharePercent Allocation percentage in basis points (10000 = 100%)
-    function addPOCContract(address pocContract, address collateralToken, address priceFeed, uint256 sharePercent)
+    function addPOCContract(address pocContract, address collateralToken, uint256 sharePercent)
         external
         onlyViaGovernanceExecution
         atStage(DataTypes.Stage.Active)
     {
         POCLibrary.executeAddPOCContract(
-            pocContracts,
-            pocIndex,
-            isPocContract,
-            sellableCollaterals,
-            pocContract,
-            collateralToken,
-            priceFeed,
-            sharePercent
+            pocContracts, pocIndex, isPocContract, sellableCollaterals, pocContract, collateralToken, sharePercent
         );
     }
 
@@ -617,6 +615,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             accountedBalance,
             availableRouterByAdmin,
             sellableCollaterals,
+            priceOracle,
             mainCollateral,
             address(launchToken),
             daoState.totalCollectedMainCollateral,
@@ -903,24 +902,26 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     }
 
     /// @notice Get oracle price for any token (external wrapper for library calls)
-    /// @dev For launch token returns weighted average from POC contracts with pool validation, for collaterals returns Chainlink price
+    /// @dev For launch token returns weighted average from POC contracts with pool validation, for collaterals returns price from price oracle
     /// @param token Token address
     /// @return Price in USD (18 decimals)
     function getOraclePrice(address token) external returns (uint256) {
-        return OracleLibrary.getPrice(sellableCollaterals, pocContracts, pricePathsStorage, address(launchToken), token);
+        return OracleLibrary.getPrice(
+            priceOracle, sellableCollaterals, pocContracts, pricePathsStorage, address(launchToken), token
+        );
     }
 
-    /// @notice Get POC collateral price from its oracle (external wrapper for library calls)
+    /// @notice Get POC collateral price from price oracle (external wrapper for library calls)
     /// @param pocIdx POC index
     /// @return Price in USD (18 decimals)
     function getPOCCollateralPrice(uint256 pocIdx) external view returns (uint256) {
-        return POCLibrary.getPOCCollateralPrice(pocContracts, pocIdx);
+        return POCLibrary.getPOCCollateralPrice(priceOracle, pocContracts, pocIdx);
     }
 
     /// @notice Get weighted average launch token price in USD from active POC contracts (view)
     /// @return Launch price in USD (18 decimals)
     function getLaunchPriceFromDAO() external view returns (uint256) {
-        return OracleLibrary.getLaunchPriceView(pocContracts);
+        return OracleLibrary.getLaunchPriceView(priceOracle, pocContracts);
     }
 
     /// @notice Get DAO profit share percentage

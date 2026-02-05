@@ -12,6 +12,7 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "../../interfaces/IPriceOracle.sol";
 import "../../interfaces/IProofOfCapital.sol";
 import "../DataTypes.sol";
 import "../Constants.sol";
@@ -56,15 +57,15 @@ library POCLibrary {
     event CreatorLaunchesReturned(uint256 amount, uint256 profitPercentEquivalent, uint256 newCreatorProfitPercent);
     event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
     event POCContractRemoved(address indexed pocContract);
-    event SellableCollateralAdded(address indexed token, address indexed priceFeed);
+    event SellableCollateralAdded(address indexed token);
     event LaunchesReturnedToPOC(uint256 totalAmount, uint256 pocCount);
 
     /// @notice Exchange mainCollateral for launch tokens from a specific POC contract
-    /// @param daoState DAO state storage structure
     /// @param pocContracts Array of POC contracts
     /// @param accountedBalance Mapping of accounted balances
     /// @param availableRouterByAdmin Mapping of available routers
     /// @param sellableCollaterals Mapping of sellable collaterals
+    /// @param priceOracle Price oracle for asset prices
     /// @param mainCollateral Main collateral token address
     /// @param launchToken Launch token address
     /// @param totalCollectedMainCollateral Total collected main collateral
@@ -72,11 +73,12 @@ library POCLibrary {
     /// @param swapData Encoded swap parameters
     /// @return launchReceived Amount of launch tokens received
     function executeExchangeForPOC(
-        DataTypes.DAOState storage daoState,
+        DataTypes.DAOState storage,
         DataTypes.POCInfo[] storage pocContracts,
         mapping(address => uint256) storage accountedBalance,
         mapping(address => bool) storage availableRouterByAdmin,
         mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
+        IPriceOracle priceOracle,
         address mainCollateral,
         address launchToken,
         uint256 totalCollectedMainCollateral,
@@ -107,8 +109,8 @@ library POCLibrary {
             require(params.router != address(0), InvalidAddress());
             require(availableRouterByAdmin[params.router], RouterNotAvailable());
 
-            uint256 mainCollateralPrice = OracleLibrary.getOraclePrice(sellableCollaterals, mainCollateral);
-            uint256 collateralPrice = OracleLibrary.getChainlinkPrice(poc.priceFeed);
+            uint256 mainCollateralPrice = OracleLibrary.getOraclePrice(priceOracle, sellableCollaterals, mainCollateral);
+            uint256 collateralPrice = priceOracle.getAssetPrice(poc.collateralToken);
 
             uint256 expectedCollateral = (collateralAmountForPOC * mainCollateralPrice) / collateralPrice;
 
@@ -151,17 +153,18 @@ library POCLibrary {
         );
     }
 
-    /// @notice Get POC collateral price from its oracle
+    /// @notice Get POC collateral price from price oracle
+    /// @param priceOracle Price oracle contract
     /// @param pocContracts Array of POC contracts
     /// @param pocIdx POC index
     /// @return Price in USD (18 decimals)
-    function getPOCCollateralPrice(DataTypes.POCInfo[] storage pocContracts, uint256 pocIdx)
+    function getPOCCollateralPrice(IPriceOracle priceOracle, DataTypes.POCInfo[] storage pocContracts, uint256 pocIdx)
         external
         view
         returns (uint256)
     {
         DataTypes.POCInfo storage poc = pocContracts[pocIdx];
-        return OracleLibrary.getChainlinkPrice(poc.priceFeed);
+        return priceOracle.getAssetPrice(poc.collateralToken);
     }
 
     /// @notice Return launch tokens from POC contract, restoring creator's profit share
@@ -213,7 +216,6 @@ library POCLibrary {
     /// @param sellableCollaterals Mapping of sellable collaterals
     /// @param pocContract POC contract address
     /// @param collateralToken Collateral token for this POC
-    /// @param priceFeed Chainlink price feed for the collateral
     /// @param sharePercent Allocation percentage in basis points (10000 = 100%)
     function executeAddPOCContract(
         DataTypes.POCInfo[] storage pocContracts,
@@ -222,13 +224,11 @@ library POCLibrary {
         mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
         address pocContract,
         address collateralToken,
-        address priceFeed,
         uint256 sharePercent
     ) external {
         require(pocContracts.length < Constants.MAX_POC_CONTRACTS, MaxPOCContractsReached());
         require(pocContract != address(0), InvalidAddress());
         require(collateralToken != address(0), InvalidAddress());
-        require(priceFeed != address(0), InvalidAddress());
         require(sharePercent > 0 && sharePercent <= Constants.BASIS_POINTS, InvalidPercentage());
         require(pocIndex[pocContract] == 0, POCAlreadyExists());
 
@@ -239,16 +239,14 @@ library POCLibrary {
         require(totalShare <= Constants.BASIS_POINTS, TotalShareExceeds100Percent());
 
         if (!sellableCollaterals[collateralToken].active) {
-            sellableCollaterals[collateralToken] =
-                DataTypes.CollateralInfo({token: collateralToken, priceFeed: priceFeed, active: true});
-            emit SellableCollateralAdded(collateralToken, priceFeed);
+            sellableCollaterals[collateralToken] = DataTypes.CollateralInfo({token: collateralToken, active: true});
+            emit SellableCollateralAdded(collateralToken);
         }
 
         pocContracts.push(
             DataTypes.POCInfo({
                 pocContract: pocContract,
                 collateralToken: collateralToken,
-                priceFeed: priceFeed,
                 sharePercent: sharePercent,
                 active: true,
                 exchanged: false,

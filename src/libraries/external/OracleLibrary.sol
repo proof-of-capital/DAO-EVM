@@ -11,6 +11,7 @@
 pragma solidity ^0.8.33;
 
 import "../../interfaces/IAggregatorV3.sol";
+import "../../interfaces/IPriceOracle.sol";
 import "../../interfaces/IProofOfCapital.sol";
 import "../../interfaces/IQuoterV2.sol";
 import "../../interfaces/IUniswapV2Router01.sol";
@@ -56,23 +57,29 @@ library OracleLibrary {
     }
 
     /// @notice Get oracle price for a collateral token
+    /// @param oracle Price oracle contract
     /// @param sellableCollaterals Mapping of collateral info
     /// @param token Collateral token address
     /// @return Price in USD (18 decimals)
-    function getOraclePrice(mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals, address token)
-        external
-        view
-        returns (uint256)
-    {
+    function getOraclePrice(
+        IPriceOracle oracle,
+        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
+        address token
+    ) external view returns (uint256) {
         DataTypes.CollateralInfo storage info = sellableCollaterals[token];
         require(info.active, CollateralNotActive());
-        return _getChainlinkPrice(info.priceFeed);
+        return oracle.getAssetPrice(token);
     }
 
     /// @notice Compute weighted average launch token price from active POC contracts (no validation)
+    /// @param oracle Price oracle contract
     /// @param pocContracts Array of POC contracts
     /// @return Weighted average launch price in USD (18 decimals)
-    function _computeLaunchPriceFromPOC(DataTypes.POCInfo[] storage pocContracts) internal view returns (uint256) {
+    function _computeLaunchPriceFromPOC(IPriceOracle oracle, DataTypes.POCInfo[] storage pocContracts)
+        internal
+        view
+        returns (uint256)
+    {
         uint256 totalWeightedPrice = 0;
         uint256 totalSharePercent = 0;
 
@@ -89,7 +96,7 @@ library OracleLibrary {
                 continue;
             }
 
-            uint256 collateralPriceUSD = _getChainlinkPrice(poc.priceFeed);
+            uint256 collateralPriceUSD = oracle.getAssetPrice(poc.collateralToken);
 
             if (collateralPriceUSD == 0) {
                 continue;
@@ -111,30 +118,36 @@ library OracleLibrary {
     }
 
     /// @notice Get weighted average launch token price from all active POC contracts with pool validation
+    /// @param oracle Price oracle contract
     /// @param pocContracts Array of POC contracts
     /// @param pricePathsStorage Price paths storage for pool validation
     /// @param launchToken Launch token address
-    /// @param sellableCollaterals Mapping of collateral info
     /// @return Weighted average launch price in USD (18 decimals)
     function _getLaunchPriceFromPOC(
+        IPriceOracle oracle,
         DataTypes.POCInfo[] storage pocContracts,
         DataTypes.PricePathsStorage storage pricePathsStorage,
-        address launchToken,
-        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals
+        address launchToken
     ) internal returns (uint256) {
-        uint256 oraclePrice = _computeLaunchPriceFromPOC(pocContracts);
-        _validatePoolPriceInternal(pricePathsStorage, launchToken, sellableCollaterals, oraclePrice);
+        uint256 oraclePrice = _computeLaunchPriceFromPOC(oracle, pocContracts);
+        _validatePoolPriceInternal(oracle, pricePathsStorage, launchToken, oraclePrice);
         return oraclePrice;
     }
 
     /// @notice Get weighted average launch token price from active POC contracts (view, no pool validation)
+    /// @param oracle Price oracle contract
     /// @param pocContracts Array of POC contracts
     /// @return Weighted average launch price in USD (18 decimals)
-    function getLaunchPriceView(DataTypes.POCInfo[] storage pocContracts) external view returns (uint256) {
-        return _computeLaunchPriceFromPOC(pocContracts);
+    function getLaunchPriceView(IPriceOracle oracle, DataTypes.POCInfo[] storage pocContracts)
+        external
+        view
+        returns (uint256)
+    {
+        return _computeLaunchPriceFromPOC(oracle, pocContracts);
     }
 
-    /// @notice Get price for any token - handles launch token via POC and collaterals via Chainlink
+    /// @notice Get price for any token - handles launch token via POC and collaterals via price oracle
+    /// @param oracle Price oracle contract
     /// @param sellableCollaterals Mapping of collateral info
     /// @param pocContracts Array of POC contracts
     /// @param pricePathsStorage Price paths storage for pool validation
@@ -142,6 +155,7 @@ library OracleLibrary {
     /// @param token Token address to get price for
     /// @return Price in USD (18 decimals)
     function getPrice(
+        IPriceOracle oracle,
         mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
         DataTypes.POCInfo[] storage pocContracts,
         DataTypes.PricePathsStorage storage pricePathsStorage,
@@ -149,12 +163,12 @@ library OracleLibrary {
         address token
     ) external returns (uint256) {
         if (token == launchToken) {
-            return _getLaunchPriceFromPOC(pocContracts, pricePathsStorage, launchToken, sellableCollaterals);
+            return _getLaunchPriceFromPOC(oracle, pocContracts, pricePathsStorage, launchToken);
         }
 
         DataTypes.CollateralInfo storage info = sellableCollaterals[token];
         require(info.active, CollateralNotActive());
-        return _getChainlinkPrice(info.priceFeed);
+        return oracle.getAssetPrice(token);
     }
 
     /// @notice Calculate price deviation in basis points
@@ -230,9 +244,9 @@ library OracleLibrary {
 
     /// @notice Calculate weighted average pool price from all configured paths (internal version)
     function _getWeightedPoolPriceInternal(
+        IPriceOracle oracle,
         DataTypes.PricePathsStorage storage pricePathsStorage,
-        address launchToken,
-        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals
+        address launchToken
     ) internal returns (uint256 weightedPrice, uint256 totalWeight) {
         uint256 quoteAmount = Constants.PRICE_QUOTE_AMOUNT;
 
@@ -256,7 +270,7 @@ library OracleLibrary {
             }
 
             address outputToken = v2Path.path[v2Path.path.length - 1];
-            uint256 collateralPrice = _getCollateralPriceFromChainlink(sellableCollaterals, outputToken);
+            uint256 collateralPrice = _getCollateralPriceFromOracle(oracle, outputToken);
 
             if (collateralPrice == 0) {
                 continue;
@@ -282,7 +296,7 @@ library OracleLibrary {
             }
 
             address outputToken = _decodeLastTokenFromV3Path(v3Path.path);
-            uint256 collateralPrice = _getCollateralPriceFromChainlink(sellableCollaterals, outputToken);
+            uint256 collateralPrice = _getCollateralPriceFromOracle(oracle, outputToken);
 
             if (collateralPrice == 0) {
                 continue;
@@ -300,49 +314,31 @@ library OracleLibrary {
         }
     }
 
-    /// @notice Get collateral price directly from Chainlink (returns 0 on error)
-    function _getCollateralPriceFromChainlink(
-        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
-        address token
-    ) internal view returns (uint256 price) {
-        DataTypes.CollateralInfo storage info = sellableCollaterals[token];
-        if (info.active && info.priceFeed != address(0)) {
-            try IAggregatorV3(info.priceFeed).latestRoundData() returns (
-                uint80, int256 _price, uint256, uint256 updatedAt, uint80
-            ) {
-                if (_price > 0 && block.timestamp - updatedAt <= Constants.ORACLE_MAX_AGE) {
-                    uint8 decimals = IAggregatorV3(info.priceFeed).decimals();
-                    if (decimals < 18) {
-                        price = uint256(_price) * (10 ** (18 - decimals));
-                    } else if (decimals > 18) {
-                        price = uint256(_price) / (10 ** (decimals - 18));
-                    } else {
-                        price = uint256(_price);
-                    }
-                }
-            } catch {
-                price = 0;
-            }
+    /// @notice Get collateral price from price oracle (returns 0 on error)
+    function _getCollateralPriceFromOracle(IPriceOracle oracle, address token) internal view returns (uint256 price) {
+        try oracle.getAssetPrice(token) returns (uint256 p) {
+            price = p;
+        } catch {
+            price = 0;
         }
     }
 
     /// @notice Validate that pool price does not deviate from oracle price by more than MAX_PRICE_DEVIATION_BP
+    /// @param oracle Price oracle contract
     /// @param pricePathsStorage Price paths storage
     /// @param launchToken Launch token address
-    /// @param sellableCollaterals Mapping of collateral info
     /// @param oraclePrice Oracle price to validate against
     function _validatePoolPriceInternal(
+        IPriceOracle oracle,
         DataTypes.PricePathsStorage storage pricePathsStorage,
         address launchToken,
-        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
         uint256 oraclePrice
     ) internal {
         if (pricePathsStorage.v2Paths.length == 0 && pricePathsStorage.v3Paths.length == 0) {
             return;
         }
 
-        (uint256 poolPrice, uint256 totalWeight) =
-            _getWeightedPoolPriceInternal(pricePathsStorage, launchToken, sellableCollaterals);
+        (uint256 poolPrice, uint256 totalWeight) = _getWeightedPoolPriceInternal(oracle, pricePathsStorage, launchToken);
 
         if (totalWeight == 0 || poolPrice == 0) {
             return;

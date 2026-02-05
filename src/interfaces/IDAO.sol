@@ -157,8 +157,8 @@ interface IDAO {
     event LaunchTokenSold(
         address indexed seller, address indexed collateral, uint256 launchAmount, uint256 collateralAmount
     );
-    event SellableCollateralAdded(address indexed token, address indexed priceFeed);
-    event RewardTokenAdded(address indexed token, address indexed priceFeed);
+    event SellableCollateralAdded(address indexed token);
+    event RewardTokenAdded(address indexed token);
     event ProfitDistributed(address indexed token, uint256 amount);
     event RoyaltyDistributed(address indexed token, address indexed recipient, uint256 amount);
     event CreatorProfitDistributed(address indexed token, address indexed creator, uint256 amount);
@@ -269,8 +269,7 @@ interface IDAO {
     // FUNDRAISING MANAGEMENT
     // ============================================
 
-    function addPOCContract(address pocContract, address collateralToken, address priceFeed, uint256 sharePercent)
-        external;
+    function addPOCContract(address pocContract, address collateralToken, uint256 sharePercent) external;
     function removePOCContract(address pocContract) external;
     function withdrawFundraising() external;
     function extendFundraising() external;
@@ -362,7 +361,7 @@ interface IDAO {
 
     // Routers and tokens
     function availableRouterByAdmin(address) external view returns (bool);
-    function sellableCollaterals(address) external view returns (address token, address priceFeed, bool active);
+    function sellableCollaterals(address) external view returns (address token, bool active);
     function rewardTokens(uint256) external view returns (address);
     function rewardTokenInfo(address) external view returns (DataTypes.RewardTokenInfo memory);
 

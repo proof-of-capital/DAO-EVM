@@ -49,8 +49,8 @@ library FundraisingLibrary {
     error CancelPeriodNotPassed();
     error DepositLimitExceeded();
 
-    event SellableCollateralAdded(address indexed token, address indexed priceFeed);
-    event RewardTokenAdded(address indexed token, address indexed priceFeed);
+    event SellableCollateralAdded(address indexed token);
+    event RewardTokenAdded(address indexed token);
     event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
     event FundraisingWithdrawal(uint256 indexed vaultId, address indexed sender, uint256 mainCollateralAmount);
     event ExchangeFinalized(uint256 accountedLaunchBalance, uint256 sharePrice, uint256 infraLaunches);
@@ -84,21 +84,19 @@ library FundraisingLibrary {
 
             require(poc.pocContract != address(0), InvalidAddress());
             require(poc.collateralToken != address(0), InvalidAddress());
-            require(poc.priceFeed != address(0), InvalidAddress());
             require(poc.sharePercent > 0 && poc.sharePercent <= Constants.BASIS_POINTS, InvalidPercentage());
             require(pocIndex[poc.pocContract] == 0, POCAlreadyExists());
 
             if (!sellableCollaterals[poc.collateralToken].active) {
                 sellableCollaterals[poc.collateralToken] =
-                    DataTypes.CollateralInfo({token: poc.collateralToken, priceFeed: poc.priceFeed, active: true});
-                emit SellableCollateralAdded(poc.collateralToken, poc.priceFeed);
+                    DataTypes.CollateralInfo({token: poc.collateralToken, active: true});
+                emit SellableCollateralAdded(poc.collateralToken);
             }
 
             pocContracts.push(
                 DataTypes.POCInfo({
                     pocContract: poc.pocContract,
                     collateralToken: poc.collateralToken,
-                    priceFeed: poc.priceFeed,
                     sharePercent: poc.sharePercent,
                     active: true,
                     exchanged: false,
@@ -113,8 +111,8 @@ library FundraisingLibrary {
             if (!rewardsStorage.rewardTokenInfo[poc.collateralToken].active) {
                 rewardsStorage.rewardTokens.push(poc.collateralToken);
                 rewardsStorage.rewardTokenInfo[poc.collateralToken] =
-                    DataTypes.RewardTokenInfo({token: poc.collateralToken, priceFeed: poc.priceFeed, active: true});
-                emit RewardTokenAdded(poc.collateralToken, poc.priceFeed);
+                    DataTypes.RewardTokenInfo({token: poc.collateralToken, active: true});
+                emit RewardTokenAdded(poc.collateralToken);
             }
 
             emit POCContractAdded(poc.pocContract, poc.collateralToken, poc.sharePercent);
@@ -135,20 +133,19 @@ library FundraisingLibrary {
             DataTypes.RewardTokenConstructorParams memory reward = rewardTokenParams[i];
 
             require(reward.token != address(0), InvalidAddress());
-            require(reward.priceFeed != address(0), InvalidAddress());
             require(!rewardsStorage.rewardTokenInfo[reward.token].active, TokenAlreadyAdded());
 
             rewardsStorage.rewardTokens.push(reward.token);
             rewardsStorage.rewardTokenInfo[reward.token] =
-                DataTypes.RewardTokenInfo({token: reward.token, priceFeed: reward.priceFeed, active: true});
-            emit RewardTokenAdded(reward.token, reward.priceFeed);
+                DataTypes.RewardTokenInfo({token: reward.token, active: true});
+            emit RewardTokenAdded(reward.token);
         }
 
         if (!rewardsStorage.rewardTokenInfo[address(launchToken)].active) {
             rewardsStorage.rewardTokens.push(address(launchToken));
             rewardsStorage.rewardTokenInfo[address(launchToken)] =
-                DataTypes.RewardTokenInfo({token: address(launchToken), priceFeed: address(0), active: true});
-            emit RewardTokenAdded(address(launchToken), address(0));
+                DataTypes.RewardTokenInfo({token: address(launchToken), active: true});
+            emit RewardTokenAdded(address(launchToken));
         }
     }
 

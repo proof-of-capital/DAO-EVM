@@ -9,7 +9,6 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./interfaces/IPrivateSale.sol";
 import "./interfaces/IDAO.sol";
 import "./interfaces/IProofOfCapital.sol";
-import "./interfaces/IAggregatorV3.sol";
 import "./interfaces/IUniswapV2Router02.sol";
 import "./interfaces/ISwapRouter.sol";
 import "./libraries/DataTypes.sol";
@@ -140,9 +139,8 @@ contract PrivateSale is IPrivateSale, ReentrancyGuard {
 
         uint256 actualCollateralAmount = collateralAmount;
         if (collateralAddr != mainCollateral) {
-            actualCollateralAmount = _swapToCollateral(
-                mainCollateral, collateralAddr, collateralAmount, router, swapType, swapData, pocInfo.priceFeed
-            );
+            actualCollateralAmount =
+                _swapToCollateral(mainCollateral, collateralAddr, collateralAmount, router, swapType, swapData);
         }
 
         uint256 launchBalanceBefore = IERC20(launchToken).balanceOf(address(this));
@@ -270,17 +268,13 @@ contract PrivateSale is IPrivateSale, ReentrancyGuard {
         uint256 amount,
         address router,
         DataTypes.SwapType swapType,
-        bytes calldata swapData,
-        address collateralPriceFeed
+        bytes calldata swapData
     ) internal returns (uint256) {
         require(router != address(0), InvalidAddress());
         require(IDAO(dao).availableRouterByAdmin(router), RouterNotAvailable());
 
-        (, address mainCollateralPriceFeed, bool mainCollateralActive) = IDAO(dao).sellableCollaterals(from);
-        require(mainCollateralActive, InvalidState());
-
-        uint256 mainCollateralPrice = _getChainlinkPrice(mainCollateralPriceFeed);
-        uint256 collateralPrice = _getChainlinkPrice(collateralPriceFeed);
+        uint256 mainCollateralPrice = IDAO(dao).getCollateralPrice(from);
+        uint256 collateralPrice = IDAO(dao).getCollateralPrice(to);
 
         uint256 expectedCollateral = (amount * mainCollateralPrice) / collateralPrice;
 
@@ -307,22 +301,6 @@ contract PrivateSale is IPrivateSale, ReentrancyGuard {
         uint256 amountOutMin
     ) internal returns (uint256 amountOut) {
         return SwapLibrary.executeSwap(router, swapType, swapData, tokenIn, tokenOut, amountIn, amountOutMin);
-    }
-
-    function _getChainlinkPrice(address priceFeed) internal view returns (uint256) {
-        IAggregatorV3 aggregator = IAggregatorV3(priceFeed);
-        (, int256 price,, uint256 updatedAt,) = aggregator.latestRoundData();
-        require(price > 0, InvalidPrice());
-        require(block.timestamp - updatedAt <= Constants.ORACLE_MAX_AGE, StalePrice());
-
-        uint8 decimals = aggregator.decimals();
-
-        if (decimals < 18) {
-            return uint256(price) * (10 ** (18 - decimals));
-        } else if (decimals > 18) {
-            return uint256(price) / (10 ** (decimals - 18));
-        }
-        return uint256(price);
     }
 
     function _calculateDeviation(uint256 expected, uint256 actual) internal pure returns (uint256) {

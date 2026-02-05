@@ -61,17 +61,7 @@ contract DeployDAO is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // Prepare collaterals for constructor
-        address[] memory collateralTokens;
-        address[] memory priceFeeds;
-
-        // Optional: Load collaterals if configured
-        if (vm.envOr("ADD_COLLATERALS", false)) {
-            collateralTokens = vm.envAddress("COLLATERAL_ADDRESSES", ",");
-            priceFeeds = vm.envAddress("PRICE_FEED_ADDRESSES", ",");
-
-            require(collateralTokens.length == priceFeeds.length, "Collaterals and price feeds length mismatch");
-        }
+        address[] memory collateralTokens = new address[](0);
 
         // Prepare routers and reward tokens for constructor
         address[] memory routers;
@@ -84,17 +74,11 @@ contract DeployDAO is Script {
         }
 
         // Optional: Load additional reward tokens if configured
-        // Format: REWARD_TOKEN_ADDRESSES=token1,token2,... REWARD_TOKEN_PRICE_FEEDS=feed1,feed2,...
         if (vm.envOr("ADD_REWARD_TOKENS", false)) {
             address[] memory rewardTokens = vm.envAddress("REWARD_TOKEN_ADDRESSES", ",");
-            address[] memory rewardPriceFeeds = vm.envAddress("REWARD_TOKEN_PRICE_FEEDS", ",");
-
-            require(rewardTokens.length == rewardPriceFeeds.length, "Reward tokens and price feeds length mismatch");
-
             rewardTokenParams = new DataTypes.RewardTokenConstructorParams[](rewardTokens.length);
             for (uint256 i = 0; i < rewardTokens.length; i++) {
-                rewardTokenParams[i] =
-                    DataTypes.RewardTokenConstructorParams({token: rewardTokens[i], priceFeed: rewardPriceFeeds[i]});
+                rewardTokenParams[i] = DataTypes.RewardTokenConstructorParams({token: rewardTokens[i]});
             }
         }
 
@@ -119,6 +103,8 @@ contract DeployDAO is Script {
         Voting voting = new Voting();
         console.log("Voting deployed at:", address(voting));
 
+        address priceOracleAddress = vm.envAddress("PRICE_ORACLE_ADDRESS");
+
         // Build constructor params
         DataTypes.ConstructorParams memory params = DataTypes.ConstructorParams({
             launchToken: launchTokenAddress,
@@ -136,7 +122,6 @@ contract DeployDAO is Script {
             fundraisingDuration: fundraisingDuration,
             extensionPeriod: extensionPeriod,
             collateralTokens: collateralTokens,
-            priceFeeds: priceFeeds,
             routers: routers,
             tokens: tokens, // Deprecated: kept for backward compatibility
             pocParams: pocParams,
@@ -150,6 +135,7 @@ contract DeployDAO is Script {
                 v3Paths: new DataTypes.PricePathV3Params[](0),
                 minLiquidity: 1000e18
             }),
+            priceOracle: priceOracleAddress,
             votingContract: address(voting), // Set Voting address
             marketMaker: vm.envOr("MARKET_MAKER", address(0)) // Market maker address
         });

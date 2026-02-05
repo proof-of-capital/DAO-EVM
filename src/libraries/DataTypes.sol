@@ -133,14 +133,12 @@ library DataTypes {
     /// @notice Collateral information
     struct CollateralInfo {
         address token; // Collateral token address
-        address priceFeed; // Chainlink price feed address
         bool active; // Whether collateral is active
     }
 
     /// @notice Reward token information
     struct RewardTokenInfo {
         address token; // Reward token address
-        address priceFeed; // Chainlink price feed address
         bool active; // Whether reward token is active
     }
 
@@ -231,7 +229,6 @@ library DataTypes {
     struct POCInfo {
         address pocContract; // POC contract address
         address collateralToken; // Collateral token accepted by this POC
-        address priceFeed; // Chainlink price feed for collateral
         uint256 sharePercent; // Allocation percentage in basis points (10000 = 100%)
         bool active; // Whether this POC is active
         bool exchanged; // Whether funds were already exchanged for this POC
@@ -352,14 +349,12 @@ library DataTypes {
     struct POCConstructorParams {
         address pocContract;
         address collateralToken;
-        address priceFeed;
         uint256 sharePercent;
     }
 
     /// @notice Reward token parameters for constructor
     struct RewardTokenConstructorParams {
         address token;
-        address priceFeed;
     }
 
     /// @notice Orderbook parameters for constructor (without cache fields)
@@ -389,7 +384,6 @@ library DataTypes {
         uint256 fundraisingDuration;
         uint256 extensionPeriod;
         address[] collateralTokens;
-        address[] priceFeeds;
         address[] routers;
         address[] tokens; // Deprecated: use rewardTokenParams instead
         POCConstructorParams[] pocParams;
@@ -399,6 +393,7 @@ library DataTypes {
         V3LPPositionParams[] v3LPPositions; // V3 LP positions for initialization (optional)
         address[] allowedExitTokens; // Tokens allowed for exit payments (global list)
         TokenPricePathsParams launchTokenPricePaths; // Paths for launch token price validation
+        address priceOracle; // Price oracle for asset prices
         address votingContract; // Voting contract address (optional, can be set later)
         address marketMaker; // Initial market maker address
     }

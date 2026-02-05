@@ -155,7 +155,7 @@ contract ReturnWallet is IReturnWallet {
         require(router != address(0), InvalidAddress());
         require(trustedRouters[router], RouterNotTrusted());
 
-        (,, bool active) = dao.sellableCollaterals(tokenIn);
+        (, bool active) = dao.sellableCollaterals(tokenIn);
         require(!active, TokenIsCollateral());
 
         uint256 launchOut = _executeSwapWithPriceCheck(tokenIn, amountIn, minLaunchOut, router, swapType, swapData);
