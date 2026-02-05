@@ -123,5 +123,15 @@ library Constants {
     bytes4 public constant SET_COMMON_EMERGENCY_INVESTOR_SELECTOR = 0x7024e081;
     uint256 public constant MULTISIG_WAITING_FOR_LP_TIMEOUT = 14 days;
     uint256 public constant LP_EXTEND_LOCK_PERIOD = 180 days;
+
+    // ============================================
+    // DEPEG CONSTANTS
+    // ============================================
+
+    uint256 public constant DEPEG_WITHDRAW_PERCENT = 9900; // 99% in basis points
+    uint256 public constant DEPEG_RESTORE_THRESHOLD_BP = 9900; // 99% returned to consider depeg restored
+    uint256 public constant DEPEG_REBALANCE_HALF_BP = 5000; // 50% in basis points (max launch/collateral to use)
+    uint256 public constant DEPEG_COLLATERAL_MIN_PERCENT = 100; // 1% in basis points (min collateral to trigger rebalance)
+    uint256 public constant DEPEG_GRACE_PERIOD = 7 days;
 }
 

@@ -323,6 +323,20 @@ library OracleLibrary {
         }
     }
 
+    /// @notice Validate pool price against oracle price (for depeg recovery: use priceOracle only)
+    /// @param oracle Price oracle contract
+    /// @param pricePathsStorage Price paths storage
+    /// @param launchToken Launch token address
+    /// @param oraclePrice Oracle price to validate against (e.g. priceOracle.getAssetPrice(launchToken))
+    function validatePoolPriceWithOracle(
+        IPriceOracle oracle,
+        DataTypes.PricePathsStorage storage pricePathsStorage,
+        address launchToken,
+        uint256 oraclePrice
+    ) external {
+        _validatePoolPriceInternal(oracle, pricePathsStorage, launchToken, oraclePrice);
+    }
+
     /// @notice Validate that pool price does not deviate from oracle price by more than MAX_PRICE_DEVIATION_BP
     /// @param oracle Price oracle contract
     /// @param pricePathsStorage Price paths storage

@@ -13,6 +13,7 @@ pragma solidity ^0.8.33;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "../DataTypes.sol";
+import "../Constants.sol";
 import "../../interfaces/INonfungiblePositionManager.sol";
 import "../../interfaces/IUniswapV2Pair.sol";
 
@@ -81,6 +82,71 @@ library LPProcessingLibrary {
         }
         if (amount1 > 0) {
             accountedBalance[token1] += amount1;
+        }
+    }
+
+    /// @notice Withdraw configured share of V2 LP tokens (burn) and credit underlying to accountedBalance (depeg recovery)
+    /// @param lpTokenStorage LP token storage structure
+    /// @param accountedBalance Accounted balance mapping
+    /// @param lpToken Address of the V2 LP token (Pair contract)
+    /// @return amount0 Amount of token0 received
+    /// @return amount1 Amount of token1 received
+    function executeWithdrawDepegV2(
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        mapping(address => uint256) storage accountedBalance,
+        address lpToken
+    ) internal returns (uint256 amount0, uint256 amount1) {
+        uint256 lpBalance = accountedBalance[lpToken];
+        require(lpBalance > 0, AmountMustBeGreaterThanZero());
+
+        uint256 amountToBurn = (lpBalance * Constants.DEPEG_WITHDRAW_PERCENT) / Constants.BASIS_POINTS;
+        require(amountToBurn > 0, AmountMustBeGreaterThanZero());
+
+        address token0 = IUniswapV2Pair(lpToken).token0();
+        address token1 = IUniswapV2Pair(lpToken).token1();
+
+        IERC20(lpToken).safeTransfer(lpToken, amountToBurn);
+        (amount0, amount1) = IUniswapV2Pair(lpToken).burn(address(this));
+
+        accountedBalance[lpToken] = lpBalance - amountToBurn;
+
+        if (amount0 > 0) {
+            accountedBalance[token0] += amount0;
+        }
+        if (amount1 > 0) {
+            accountedBalance[token1] += amount1;
+        }
+    }
+
+    /// @notice Withdraw configured share of V3 position liquidity, collect tokens and credit to accountedBalance (depeg recovery)
+    /// @param lpTokenStorage LP token storage structure
+    /// @param accountedBalance Accounted balance mapping
+    /// @param tokenId NFT token ID of the V3 position
+    /// @return amount0 Amount of token0 received
+    /// @return amount1 Amount of token1 received
+    function executeWithdrawDepegV3(
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        mapping(address => uint256) storage accountedBalance,
+        uint256 tokenId
+    ) internal returns (uint256 amount0, uint256 amount1) {
+        DataTypes.V3LPPositionInfo memory positionInfo = getV3PositionInfo(lpTokenStorage, tokenId);
+        INonfungiblePositionManager positionManager = INonfungiblePositionManager(positionInfo.positionManager);
+
+        (,,,,,,, uint128 liquidity,,,,) = positionManager.positions(tokenId);
+        require(liquidity > 0, AmountMustBeGreaterThanZero());
+
+        uint128 liquidityToDecrease =
+            uint128((uint256(liquidity) * Constants.DEPEG_WITHDRAW_PERCENT) / Constants.BASIS_POINTS);
+        require(liquidityToDecrease > 0, AmountMustBeGreaterThanZero());
+
+        decreaseV3Liquidity(lpTokenStorage, tokenId, liquidityToDecrease);
+        (amount0, amount1) = collectV3Tokens(lpTokenStorage, tokenId);
+
+        if (amount0 > 0) {
+            accountedBalance[positionInfo.token0] += amount0;
+        }
+        if (amount1 > 0) {
+            accountedBalance[positionInfo.token1] += amount1;
         }
     }
 

@@ -105,6 +105,25 @@ contract DeployDAO is Script {
 
         address priceOracleAddress = vm.envAddress("PRICE_ORACLE_ADDRESS");
 
+        DataTypes.LPTokenDepegParams[] memory lpDepegParams;
+        if (vm.envOr("ADD_LP_DEPEG_PARAMS", false)) {
+            address[] memory depegTokens = vm.envAddress("LP_DEPEG_TOKENS", ",");
+            uint256[] memory depegRatiosBps = vm.envUint("LP_DEPEG_RATIOS_BPS", ",");
+            uint256[] memory depegThresholds = vm.envUint("LP_DEPEG_THRESHOLDS", ",");
+            require(
+                depegTokens.length == depegRatiosBps.length && depegTokens.length == depegThresholds.length,
+                "LP_DEPEG array length mismatch"
+            );
+            lpDepegParams = new DataTypes.LPTokenDepegParams[](depegTokens.length);
+            for (uint256 i = 0; i < depegTokens.length; i++) {
+                lpDepegParams[i] = DataTypes.LPTokenDepegParams({
+                    token: depegTokens[i], ratioBps: depegRatiosBps[i], depegThresholdMinPrice: depegThresholds[i]
+                });
+            }
+        } else {
+            lpDepegParams = new DataTypes.LPTokenDepegParams[](0);
+        }
+
         // Build constructor params
         DataTypes.ConstructorParams memory params = DataTypes.ConstructorParams({
             launchToken: launchTokenAddress,
@@ -137,7 +156,8 @@ contract DeployDAO is Script {
             }),
             priceOracle: priceOracleAddress,
             votingContract: address(voting), // Set Voting address
-            marketMaker: vm.envOr("MARKET_MAKER", address(0)) // Market maker address
+            marketMaker: vm.envOr("MARKET_MAKER", address(0)), // Market maker address
+            lpDepegParams: lpDepegParams
         });
 
         // Deploy DAO implementation contract (upgradeable pattern)

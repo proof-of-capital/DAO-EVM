@@ -41,7 +41,6 @@ import "./interfaces/IVoting.sol";
 import "./interfaces/IAggregatorV3.sol";
 import "./interfaces/IProofOfCapital.sol";
 import "./interfaces/INonfungiblePositionManager.sol";
-import "./interfaces/IUniswapV2Pair.sol";
 import "./interfaces/IMultisig.sol";
 import "./libraries/external/Orderbook.sol";
 import "./libraries/DataTypes.sol";
@@ -260,6 +259,20 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         primaryLPTokenType = params.primaryLPTokenType;
 
         OracleLibrary.initializePricePaths(pricePathsStorage, params.launchTokenPricePaths);
+
+        if (params.lpDepegParams.length > 0) {
+            uint256 totalRatioBps;
+            for (uint256 i = 0; i < params.lpDepegParams.length; ++i) {
+                DataTypes.LPTokenDepegParams memory p = params.lpDepegParams[i];
+                require(p.token != address(0), InvalidAddress());
+                DataTypes.CollateralInfo storage info = sellableCollaterals[p.token];
+                info.token = p.token;
+                info.ratioBps = p.ratioBps;
+                info.depegThresholdMinPrice = p.depegThresholdMinPrice;
+                totalRatioBps += p.ratioBps;
+            }
+            require(totalRatioBps == Constants.BASIS_POINTS, InvalidPercentage());
+        }
 
         require(params.votingContract != address(0), InvalidAddress());
         votingContract = params.votingContract;
@@ -652,20 +665,17 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         DataTypes.PricePathV2Params[] calldata newV2PricePaths,
         DataTypes.PricePathV3Params[] calldata newV3PricePaths
     ) external nonReentrant onlyCreator atStage(DataTypes.Stage.WaitingForLP) {
+        DataTypes.ProvideLPTokensParams memory params = DataTypes.ProvideLPTokensParams({
+            v2LPTokenAddresses: v2LPTokenAddresses,
+            v2LPAmounts: v2LPAmounts,
+            v3TokenIds: v3TokenIds,
+            newV2PricePaths: newV2PricePaths,
+            newV3PricePaths: newV3PricePaths,
+            primaryLPTokenType: primaryLPTokenType,
+            daoAddress: address(this)
+        });
         LPTokenLibrary.executeProvideLPTokens(
-            lpTokenStorage,
-            rewardsStorage,
-            daoState,
-            pricePathsStorage,
-            accountedBalance,
-            v2LPTokenAddresses,
-            v2LPAmounts,
-            v3TokenIds,
-            newV2PricePaths,
-            newV3PricePaths,
-            primaryLPTokenType,
-            pocContracts,
-            address(this)
+            lpTokenStorage, rewardsStorage, daoState, pricePathsStorage, accountedBalance, params, pocContracts
         );
     }
 
@@ -702,6 +712,118 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         require(msg.sender == address(votingContract), OnlyVotingContract());
         require(targetContract != address(0), InvalidAddress());
         Address.functionCall(targetContract, callData);
+    }
+
+    /// @notice Declare depeg for an LP: withdraw 99% liquidity and record depeg state (participant or admin, Active/Closing)
+    /// @dev Caller must ensure at least one token in the LP has oracle price below its depeg threshold
+    /// @param lpToken V2 LP token (pair) address; use address(0) for V3
+    /// @param tokenId V3 position NFT id; use 0 for V2
+    /// @param lpType V2 or V3
+    function declareDepeg(address lpToken, uint256 tokenId, DataTypes.LPTokenType lpType)
+        external
+        nonReentrant
+        onlyParticipantOrAdmin
+        atActiveOrClosingStage
+    {
+        LPTokenLibrary.executeDeclareDepegWithCheck(
+            lpTokenStorage, accountedBalance, lpToken, tokenId, lpType, sellableCollaterals, priceOracle
+        );
+    }
+
+    /// @notice Add liquidity back to a V2 pool after depeg (anyone); validates pool price vs priceOracle
+    /// @param lpToken V2 LP token (pair) address
+    /// @param router V2 router for addLiquidity (must be in availableRouterByAdmin)
+    /// @param amount0 Amount of token0 to add
+    /// @param amount1 Amount of token1 to add
+    /// @param amount0Min Minimum token0 (slippage)
+    /// @param amount1Min Minimum token1 (slippage)
+    function addLiquidityBackV2(
+        address lpToken,
+        address router,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 amount0Min,
+        uint256 amount1Min
+    ) external nonReentrant atActiveOrClosingStage {
+        LPTokenLibrary.AddLiquidityBackParams memory p = LPTokenLibrary.AddLiquidityBackParams({
+            router: router,
+            amount0: amount0,
+            amount1: amount1,
+            amount0Min: amount0Min,
+            amount1Min: amount1Min,
+            priceOracle: priceOracle,
+            launchToken: address(launchToken)
+        });
+        LPTokenLibrary.executeAddLiquidityBackV2(
+            lpTokenStorage, accountedBalance, lpToken, p, availableRouterByAdmin, pricePathsStorage
+        );
+    }
+
+    /// @notice Add liquidity back to a V3 position after depeg (anyone); validates pool price vs priceOracle
+    /// @param tokenId V3 position NFT id
+    /// @param amount0 Amount of token0 to add
+    /// @param amount1 Amount of token1 to add
+    /// @param amount0Min Minimum token0 (slippage)
+    /// @param amount1Min Minimum token1 (slippage)
+    function addLiquidityBackV3(
+        uint256 tokenId,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 amount0Min,
+        uint256 amount1Min
+    ) external nonReentrant atActiveOrClosingStage {
+        LPTokenLibrary.AddLiquidityBackParams memory p = LPTokenLibrary.AddLiquidityBackParams({
+            router: address(0),
+            amount0: amount0,
+            amount1: amount1,
+            amount0Min: amount0Min,
+            amount1Min: amount1Min,
+            priceOracle: priceOracle,
+            launchToken: address(launchToken)
+        });
+        LPTokenLibrary.executeAddLiquidityBackV3(lpTokenStorage, accountedBalance, tokenId, p, pricePathsStorage);
+    }
+
+    /// @notice Rebalance: swap at most half of source for destination (depeg recovery; anyone). Direction: LaunchToCollateral or CollateralToLaunch.
+    /// @param collateral Collateral token (buy when LaunchToCollateral, sell when CollateralToLaunch)
+    /// @param router Router for swap (must be in availableRouterByAdmin)
+    /// @param swapType Swap type
+    /// @param swapData Encoded swap parameters
+    /// @param direction LaunchToCollateral or CollateralToLaunch
+    /// @param amountIn Amount of source token to swap
+    /// @param minOut Minimum destination token out (slippage)
+    function rebalance(
+        address collateral,
+        address router,
+        DataTypes.SwapType swapType,
+        bytes calldata swapData,
+        DataTypes.RebalanceDirection direction,
+        uint256 amountIn,
+        uint256 minOut
+    ) external nonReentrant atActiveOrClosingStage {
+        LPTokenLibrary.executeRebalance(
+            accountedBalance,
+            address(launchToken),
+            collateral,
+            router,
+            swapType,
+            swapData,
+            direction,
+            amountIn,
+            minOut,
+            availableRouterByAdmin
+        );
+    }
+
+    /// @notice Finalize depeg after grace period (7 days): mark LP as no longer used (anyone)
+    /// @param lpToken V2 LP token address; use address(0) for V3
+    /// @param tokenId V3 position NFT id; use 0 for V2
+    /// @param lpType V2 or V3
+    function finalizeDepegAfterGracePeriod(address lpToken, uint256 tokenId, DataTypes.LPTokenType lpType)
+        external
+        atActiveOrClosingStage
+    {
+        LPTokenLibrary.executeFinalizeDepegAfterGracePeriod(lpTokenStorage, lpToken, tokenId, lpType);
     }
 
     /// @notice Dissolve all LP tokens (V2 and V3) and transition to Dissolved stage
@@ -1020,6 +1142,16 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @notice Getter for v3PositionManager (backward compatibility)
     function v3PositionManager() external view returns (address) {
         return lpTokenStorage.v3PositionManager;
+    }
+
+    /// @notice Getter for depeg info of a V2 LP token
+    function depegInfoV2(address lpToken) external view returns (DataTypes.DepegInfo memory) {
+        return lpTokenStorage.depegInfoV2[lpToken];
+    }
+
+    /// @notice Getter for depeg info of a V3 position
+    function depegInfoV3(uint256 tokenId) external view returns (DataTypes.DepegInfo memory) {
+        return lpTokenStorage.depegInfoV3[tokenId];
     }
 
     /// @notice Getter for vaultMainCollateralDeposit (backward compatibility)

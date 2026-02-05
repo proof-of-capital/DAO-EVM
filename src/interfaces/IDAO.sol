@@ -137,6 +137,7 @@ interface IDAO {
     error POCReturnTooSoon();
     error POCReturnExceedsMaxAmount();
     error NoPOCContractsActive();
+    error NoDepegCondition();
 
     // ============================================
     // EVENTS
@@ -296,6 +297,32 @@ interface IDAO {
     function dissolveIfLocksEnded() external;
     function claimDissolution(address[] calldata tokens) external;
     function claimCreatorDissolution() external;
+    function declareDepeg(address lpToken, uint256 tokenId, DataTypes.LPTokenType lpType) external;
+    function addLiquidityBackV2(
+        address lpToken,
+        address router,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 amount0Min,
+        uint256 amount1Min
+    ) external;
+    function addLiquidityBackV3(
+        uint256 tokenId,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 amount0Min,
+        uint256 amount1Min
+    ) external;
+    function rebalance(
+        address collateral,
+        address router,
+        DataTypes.SwapType swapType,
+        bytes calldata swapData,
+        DataTypes.RebalanceDirection direction,
+        uint256 amountIn,
+        uint256 minOut
+    ) external;
+    function finalizeDepegAfterGracePeriod(address lpToken, uint256 tokenId, DataTypes.LPTokenType lpType) external;
     function executeProposal(address targetContract, bytes calldata callData) external;
     function provideLPTokens(
         address[] calldata v2LPTokenAddresses,
@@ -361,7 +388,10 @@ interface IDAO {
 
     // Routers and tokens
     function availableRouterByAdmin(address) external view returns (bool);
-    function sellableCollaterals(address) external view returns (address token, bool active);
+    function sellableCollaterals(address)
+        external
+        view
+        returns (address token, bool active, uint256 ratioBps, uint256 depegThresholdMinPrice);
     function rewardTokens(uint256) external view returns (address);
     function rewardTokenInfo(address) external view returns (DataTypes.RewardTokenInfo memory);
 
@@ -376,6 +406,10 @@ interface IDAO {
     function isV2LPToken(address) external view returns (bool);
     function lastLPDistribution(address) external view returns (uint256);
     function lpTokenAddedAt(address) external view returns (uint256);
+
+    // Depeg
+    function depegInfoV2(address) external view returns (DataTypes.DepegInfo memory);
+    function depegInfoV3(uint256) external view returns (DataTypes.DepegInfo memory);
 
     // V3 LP positions
     function v3LPPositions(uint256) external view returns (DataTypes.V3LPPositionInfo memory);

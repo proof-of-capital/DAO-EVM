@@ -60,6 +60,17 @@ library POCLibrary {
     event SellableCollateralAdded(address indexed token);
     event LaunchesReturnedToPOC(uint256 totalAmount, uint256 pocCount);
 
+    struct ExecuteExchangeForPOCParams {
+        uint256 pocIdx;
+        uint256 amount;
+        address router;
+        DataTypes.SwapType swapType;
+        IPriceOracle priceOracle;
+        address mainCollateral;
+        address launchToken;
+        uint256 totalCollectedMainCollateral;
+    }
+
     /// @notice Exchange mainCollateral for launch tokens from a specific POC contract
     /// @param pocContracts Array of POC contracts
     /// @param accountedBalance Mapping of accounted balances
@@ -239,7 +250,9 @@ library POCLibrary {
         require(totalShare <= Constants.BASIS_POINTS, TotalShareExceeds100Percent());
 
         if (!sellableCollaterals[collateralToken].active) {
-            sellableCollaterals[collateralToken] = DataTypes.CollateralInfo({token: collateralToken, active: true});
+            sellableCollaterals[collateralToken] = DataTypes.CollateralInfo({
+                token: collateralToken, active: true, ratioBps: 0, depegThresholdMinPrice: 0
+            });
             emit SellableCollateralAdded(collateralToken);
         }
 

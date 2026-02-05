@@ -90,6 +90,12 @@ library DataTypes {
         V3 // Uniswap V3 LP positions (NFT)
     }
 
+    /// @notice Rebalance direction for depeg recovery swap
+    enum RebalanceDirection {
+        LaunchToCollateral,
+        CollateralToLaunch
+    }
+
     // ============================================
     // VAULT STRUCTURES
     // ============================================
@@ -134,6 +140,8 @@ library DataTypes {
     struct CollateralInfo {
         address token; // Collateral token address
         bool active; // Whether collateral is active
+        uint256 ratioBps; // LP ratio in basis points (for depeg recovery)
+        uint256 depegThresholdMinPrice; // Min price in USD (18 decimals); 0 = no depeg check
     }
 
     /// @notice Reward token information
@@ -274,6 +282,25 @@ library DataTypes {
         uint256 tokenId; // NFT token ID of the position
     }
 
+    /// @notice Per-token params for LP ratios and depeg threshold (constructor)
+    struct LPTokenDepegParams {
+        address token;
+        uint256 ratioBps; // Weight in basis points (sum across all = 10000)
+        uint256 depegThresholdMinPrice; // Min price in USD (18 decimals); 0 = no depeg check for this token
+    }
+
+    /// @notice Depeg state for one LP (V2 or V3)
+    struct DepegInfo {
+        uint256 timestamp;
+        uint256 amountToken0;
+        uint256 amountToken1;
+        address token0;
+        address token1;
+        uint256 returnedToken0;
+        uint256 returnedToken1;
+        bool lpUnused; // true after finalizeDepegAfterGracePeriod
+    }
+
     // ============================================
     // PRICE VALIDATION STRUCTURES
     // ============================================
@@ -300,6 +327,17 @@ library DataTypes {
     struct PricePathV3Params {
         address quoter; // QuoterV2 address
         bytes path; // Encoded path (tokenIn, fee, tokenOut, fee, ...)
+    }
+
+    /// @notice Params for provideLPTokens (memory struct to avoid stack too deep)
+    struct ProvideLPTokensParams {
+        address[] v2LPTokenAddresses;
+        uint256[] v2LPAmounts;
+        uint256[] v3TokenIds;
+        PricePathV2Params[] newV2PricePaths;
+        PricePathV3Params[] newV3PricePaths;
+        LPTokenType primaryLPTokenType;
+        address daoAddress;
     }
 
     /// @notice Token price paths configuration
@@ -396,6 +434,7 @@ library DataTypes {
         address priceOracle; // Price oracle for asset prices
         address votingContract; // Voting contract address (optional, can be set later)
         address marketMaker; // Initial market maker address
+        LPTokenDepegParams[] lpDepegParams; // LP token ratios and depeg thresholds per token (optional)
     }
 
     // ============================================
@@ -438,6 +477,8 @@ library DataTypes {
         mapping(address => uint256) lpTokenAddedAt;
         mapping(uint256 => uint256) v3LastLPDistribution;
         mapping(uint256 => uint256) v3LPTokenAddedAt;
+        mapping(address => DepegInfo) depegInfoV2;
+        mapping(uint256 => DepegInfo) depegInfoV3;
     }
 
     /// @notice Storage structure for DAO state

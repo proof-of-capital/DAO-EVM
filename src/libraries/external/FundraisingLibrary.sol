@@ -88,8 +88,9 @@ library FundraisingLibrary {
             require(pocIndex[poc.pocContract] == 0, POCAlreadyExists());
 
             if (!sellableCollaterals[poc.collateralToken].active) {
-                sellableCollaterals[poc.collateralToken] =
-                    DataTypes.CollateralInfo({token: poc.collateralToken, active: true});
+                sellableCollaterals[poc.collateralToken] = DataTypes.CollateralInfo({
+                    token: poc.collateralToken, active: true, ratioBps: 0, depegThresholdMinPrice: 0
+                });
                 emit SellableCollateralAdded(poc.collateralToken);
             }
 

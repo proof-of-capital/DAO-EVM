@@ -16,8 +16,12 @@ import "../DataTypes.sol";
 import "../Constants.sol";
 import "../../interfaces/INonfungiblePositionManager.sol";
 import "../../interfaces/IUniswapV2Pair.sol";
+import "../../interfaces/IUniswapV2Router01.sol";
 import "../../interfaces/IProofOfCapital.sol";
+import "../../interfaces/IPriceOracle.sol";
 import "../internal/LPProcessingLibrary.sol";
+import "../internal/SwapLibrary.sol";
+import "./OracleLibrary.sol";
 
 /// @title LPTokenLibrary
 /// @notice Library for managing LP tokens (V2 and V3)
@@ -34,6 +38,11 @@ library LPTokenLibrary {
     error LPDistributionTooSoon();
     error NoProfitToDistribute();
     error NoShares();
+    error AlreadyInDepeg();
+    error NotInDepeg();
+    error InsufficientAccountedBalance();
+    error DepegGracePeriodNotPassed();
+    error NoDepegCondition();
 
     event LPTokensProvided(address indexed lpToken, uint256 amount);
     event V3LPPositionProvided(uint256 indexed tokenId, address token0, address token1);
@@ -43,6 +52,24 @@ library LPTokenLibrary {
     event V3LiquidityDecreased(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
     event StageChanged(DataTypes.Stage oldStage, DataTypes.Stage newStage);
     event MarketMakerSet(address indexed marketMaker);
+    event DepegDeclared(
+        address lpToken,
+        uint256 tokenId,
+        DataTypes.LPTokenType lpType,
+        uint256 timestamp,
+        uint256 amount0,
+        uint256 amount1
+    );
+
+    struct AddLiquidityBackParams {
+        address router;
+        uint256 amount0;
+        uint256 amount1;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        IPriceOracle priceOracle;
+        address launchToken;
+    }
 
     /// @notice Provide V2 LP tokens
     /// @param lpTokenStorage LP token storage structure
@@ -136,6 +163,295 @@ library LPTokenLibrary {
         return LPProcessingLibrary.executeDissolveV3LPPosition(lpTokenStorage, accountedBalance, tokenId);
     }
 
+    /// @notice Declare depeg with threshold check: verify at least one token is below depeg threshold, then withdraw 99% and record DepegInfo
+    function executeDeclareDepegWithCheck(
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        mapping(address => uint256) storage accountedBalance,
+        address lpToken,
+        uint256 tokenId,
+        DataTypes.LPTokenType lpType,
+        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
+        IPriceOracle priceOracle
+    ) external {
+        address token0;
+        address token1;
+        if (lpType == DataTypes.LPTokenType.V2) {
+            require(lpToken != address(0), InvalidAddress());
+            require(tokenId == 0, InvalidAddress());
+            token0 = IUniswapV2Pair(lpToken).token0();
+            token1 = IUniswapV2Pair(lpToken).token1();
+        } else {
+            require(lpToken == address(0) && tokenId != 0, InvalidAddress());
+            DataTypes.V3LPPositionInfo memory pos =
+                lpTokenStorage.v3LPPositions[lpTokenStorage.v3TokenIdToIndex[tokenId] - 1];
+            token0 = pos.token0;
+            token1 = pos.token1;
+        }
+        bool depegTriggered;
+        if (sellableCollaterals[token0].depegThresholdMinPrice > 0) {
+            uint256 price0 = priceOracle.getAssetPrice(token0);
+            if (price0 < sellableCollaterals[token0].depegThresholdMinPrice) depegTriggered = true;
+        }
+        if (!depegTriggered && sellableCollaterals[token1].depegThresholdMinPrice > 0) {
+            uint256 price1 = priceOracle.getAssetPrice(token1);
+            if (price1 < sellableCollaterals[token1].depegThresholdMinPrice) depegTriggered = true;
+        }
+        require(depegTriggered, NoDepegCondition());
+        _executeDeclareDepeg(lpTokenStorage, accountedBalance, lpToken, tokenId, lpType);
+    }
+
+    /// @notice Declare depeg: withdraw 99% of LP liquidity and record DepegInfo (caller must have verified depeg threshold)
+    function executeDeclareDepeg(
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        mapping(address => uint256) storage accountedBalance,
+        address lpToken,
+        uint256 tokenId,
+        DataTypes.LPTokenType lpType
+    ) external {
+        _executeDeclareDepeg(lpTokenStorage, accountedBalance, lpToken, tokenId, lpType);
+    }
+
+    function _executeDeclareDepeg(
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        mapping(address => uint256) storage accountedBalance,
+        address lpToken,
+        uint256 tokenId,
+        DataTypes.LPTokenType lpType
+    ) internal {
+        uint256 amount0;
+        uint256 amount1;
+        address token0;
+        address token1;
+
+        if (lpType == DataTypes.LPTokenType.V2) {
+            require(lpToken != address(0), InvalidAddress());
+            require(tokenId == 0, InvalidAddress());
+            require(lpTokenStorage.depegInfoV2[lpToken].timestamp == 0, AlreadyInDepeg());
+            token0 = IUniswapV2Pair(lpToken).token0();
+            token1 = IUniswapV2Pair(lpToken).token1();
+            (amount0, amount1) = LPProcessingLibrary.executeWithdrawDepegV2(lpTokenStorage, accountedBalance, lpToken);
+            lpTokenStorage.depegInfoV2[lpToken] = DataTypes.DepegInfo({
+                timestamp: block.timestamp,
+                amountToken0: amount0,
+                amountToken1: amount1,
+                token0: token0,
+                token1: token1,
+                returnedToken0: 0,
+                returnedToken1: 0,
+                lpUnused: false
+            });
+        } else if (lpType == DataTypes.LPTokenType.V3) {
+            require(lpToken == address(0), InvalidAddress());
+            require(tokenId != 0, InvalidAddress());
+            require(lpTokenStorage.depegInfoV3[tokenId].timestamp == 0, AlreadyInDepeg());
+            DataTypes.V3LPPositionInfo memory positionInfo =
+                LPProcessingLibrary.getV3PositionInfo(lpTokenStorage, tokenId);
+            token0 = positionInfo.token0;
+            token1 = positionInfo.token1;
+            (amount0, amount1) = LPProcessingLibrary.executeWithdrawDepegV3(lpTokenStorage, accountedBalance, tokenId);
+            lpTokenStorage.depegInfoV3[tokenId] = DataTypes.DepegInfo({
+                timestamp: block.timestamp,
+                amountToken0: amount0,
+                amountToken1: amount1,
+                token0: token0,
+                token1: token1,
+                returnedToken0: 0,
+                returnedToken1: 0,
+                lpUnused: false
+            });
+        } else {
+            revert InvalidAddress();
+        }
+
+        emit DepegDeclared(lpToken, tokenId, lpType, block.timestamp, amount0, amount1);
+    }
+
+    /// @notice Add liquidity back to a V2 pool (depeg recovery); updates depeg returned amounts and clears depeg if >= 99% restored
+    function executeAddLiquidityBackV2(
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        mapping(address => uint256) storage accountedBalance,
+        address lpToken,
+        AddLiquidityBackParams memory p,
+        mapping(address => bool) storage availableRouterByAdmin,
+        DataTypes.PricePathsStorage storage pricePathsStorage
+    ) external {
+        require(availableRouterByAdmin[p.router], SwapLibrary.RouterNotAvailable());
+        require(lpToken != address(0) && p.router != address(0), InvalidAddress());
+        DataTypes.DepegInfo storage info = lpTokenStorage.depegInfoV2[lpToken];
+        require(info.timestamp != 0, NotInDepeg());
+
+        address token0 = IUniswapV2Pair(lpToken).token0();
+        address token1 = IUniswapV2Pair(lpToken).token1();
+        require(
+            accountedBalance[token0] >= p.amount0 && accountedBalance[token1] >= p.amount1,
+            InsufficientAccountedBalance()
+        );
+
+        accountedBalance[token0] -= p.amount0;
+        accountedBalance[token1] -= p.amount1;
+
+        IERC20(token0).forceApprove(p.router, p.amount0);
+        IERC20(token1).forceApprove(p.router, p.amount1);
+        (uint256 used0, uint256 used1, uint256 liquidity) = IUniswapV2Router01(p.router)
+            .addLiquidity(
+                token0, token1, p.amount0, p.amount1, p.amount0Min, p.amount1Min, address(this), block.timestamp
+            );
+        IERC20(token0).forceApprove(p.router, 0);
+        IERC20(token1).forceApprove(p.router, 0);
+
+        if (p.amount0 - used0 > 0) accountedBalance[token0] += (p.amount0 - used0);
+        if (p.amount1 - used1 > 0) accountedBalance[token1] += (p.amount1 - used1);
+
+        accountedBalance[lpToken] += liquidity;
+
+        info.returnedToken0 += used0;
+        info.returnedToken1 += used1;
+        _clearDepegIfRestored(lpTokenStorage, lpToken, 0, DataTypes.LPTokenType.V2);
+        OracleLibrary.validatePoolPriceWithOracle(
+            p.priceOracle, pricePathsStorage, p.launchToken, p.priceOracle.getAssetPrice(p.launchToken)
+        );
+    }
+
+    /// @notice Add liquidity back to a V3 position (depeg recovery); updates depeg returned amounts and clears depeg if >= 99% restored
+    function executeAddLiquidityBackV3(
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        mapping(address => uint256) storage accountedBalance,
+        uint256 tokenId,
+        AddLiquidityBackParams memory p,
+        DataTypes.PricePathsStorage storage pricePathsStorage
+    ) external {
+        require(tokenId != 0, InvalidAddress());
+        DataTypes.DepegInfo storage info = lpTokenStorage.depegInfoV3[tokenId];
+        require(info.timestamp != 0, NotInDepeg());
+
+        DataTypes.V3LPPositionInfo memory positionInfo = LPProcessingLibrary.getV3PositionInfo(lpTokenStorage, tokenId);
+        address token0 = positionInfo.token0;
+        address token1 = positionInfo.token1;
+        require(
+            accountedBalance[token0] >= p.amount0 && accountedBalance[token1] >= p.amount1,
+            InsufficientAccountedBalance()
+        );
+
+        accountedBalance[token0] -= p.amount0;
+        accountedBalance[token1] -= p.amount1;
+
+        INonfungiblePositionManager pm = INonfungiblePositionManager(positionInfo.positionManager);
+        IERC20(token0).forceApprove(address(pm), p.amount0);
+        IERC20(token1).forceApprove(address(pm), p.amount1);
+        INonfungiblePositionManager.IncreaseLiquidityParams memory params =
+            INonfungiblePositionManager.IncreaseLiquidityParams({
+                tokenId: tokenId,
+                amount0Desired: p.amount0,
+                amount1Desired: p.amount1,
+                amount0Min: p.amount0Min,
+                amount1Min: p.amount1Min,
+                deadline: block.timestamp
+            });
+        (, uint256 used0, uint256 used1) = pm.increaseLiquidity(params);
+        IERC20(token0).forceApprove(address(pm), 0);
+        IERC20(token1).forceApprove(address(pm), 0);
+
+        if (p.amount0 - used0 > 0) accountedBalance[token0] += (p.amount0 - used0);
+        if (p.amount1 - used1 > 0) accountedBalance[token1] += (p.amount1 - used1);
+
+        info.returnedToken0 += used0;
+        info.returnedToken1 += used1;
+        _clearDepegIfRestored(lpTokenStorage, address(0), tokenId, DataTypes.LPTokenType.V3);
+        OracleLibrary.validatePoolPriceWithOracle(
+            p.priceOracle, pricePathsStorage, p.launchToken, p.priceOracle.getAssetPrice(p.launchToken)
+        );
+    }
+
+    /// @notice Clear depeg record if returned amounts >= 99% of withdrawn
+    function _clearDepegIfRestored(
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        address lpToken,
+        uint256 tokenId,
+        DataTypes.LPTokenType lpType
+    ) internal {
+        if (lpType == DataTypes.LPTokenType.V2) {
+            DataTypes.DepegInfo storage info = lpTokenStorage.depegInfoV2[lpToken];
+            if (info.amountToken0 == 0 && info.amountToken1 == 0) return;
+            bool restored0 = info.amountToken0 == 0
+                || (info.returnedToken0 * Constants.BASIS_POINTS
+                        >= info.amountToken0 * Constants.DEPEG_RESTORE_THRESHOLD_BP);
+            bool restored1 = info.amountToken1 == 0
+                || (info.returnedToken1 * Constants.BASIS_POINTS
+                        >= info.amountToken1 * Constants.DEPEG_RESTORE_THRESHOLD_BP);
+            if (restored0 && restored1) {
+                info.timestamp = 0;
+            }
+        } else {
+            DataTypes.DepegInfo storage info = lpTokenStorage.depegInfoV3[tokenId];
+            if (info.amountToken0 == 0 && info.amountToken1 == 0) return;
+            bool restored0 = info.amountToken0 == 0
+                || (info.returnedToken0 * Constants.BASIS_POINTS
+                        >= info.amountToken0 * Constants.DEPEG_RESTORE_THRESHOLD_BP);
+            bool restored1 = info.amountToken1 == 0
+                || (info.returnedToken1 * Constants.BASIS_POINTS
+                        >= info.amountToken1 * Constants.DEPEG_RESTORE_THRESHOLD_BP);
+            if (restored0 && restored1) {
+                info.timestamp = 0;
+            }
+        }
+    }
+
+    /// @notice Rebalance from launch only: swap at most half of accounted launch for collateral (depeg recovery)
+    /// @notice Rebalance: swap at most half of source token for destination (depeg recovery). Direction selects launch->collateral or collateral->launch.
+    function executeRebalance(
+        mapping(address => uint256) storage accountedBalance,
+        address launchToken,
+        address collateral,
+        address router,
+        DataTypes.SwapType swapType,
+        bytes calldata swapData,
+        DataTypes.RebalanceDirection direction,
+        uint256 amountIn,
+        uint256 minOut,
+        mapping(address => bool) storage availableRouterByAdmin
+    ) external {
+        require(availableRouterByAdmin[router], SwapLibrary.RouterNotAvailable());
+        (address tokenIn, address tokenOut) = direction == DataTypes.RebalanceDirection.LaunchToCollateral
+            ? (launchToken, collateral)
+            : (collateral, launchToken);
+        uint256 maxIn = (accountedBalance[tokenIn] * Constants.DEPEG_REBALANCE_HALF_BP) / Constants.BASIS_POINTS;
+        require(amountIn <= maxIn && amountIn > 0, InvalidAddress());
+        require(accountedBalance[tokenIn] >= amountIn, InsufficientAccountedBalance());
+        accountedBalance[tokenIn] -= amountIn;
+        IERC20(tokenIn).forceApprove(router, amountIn);
+        uint256 out = SwapLibrary.executeSwap(router, swapType, swapData, tokenIn, tokenOut, amountIn, minOut);
+        IERC20(tokenIn).forceApprove(router, 0);
+        accountedBalance[tokenOut] += out;
+    }
+
+    /// @notice Finalize depeg after grace period: mark LP as unused (anyone can call after 7 days)
+    /// @param lpTokenStorage LP token storage structure
+    /// @param lpToken V2 LP token address; address(0) for V3
+    /// @param tokenId V3 position id; 0 for V2
+    /// @param lpType V2 or V3
+    function executeFinalizeDepegAfterGracePeriod(
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        address lpToken,
+        uint256 tokenId,
+        DataTypes.LPTokenType lpType
+    ) external {
+        if (lpType == DataTypes.LPTokenType.V2) {
+            require(lpToken != address(0), InvalidAddress());
+            DataTypes.DepegInfo storage info = lpTokenStorage.depegInfoV2[lpToken];
+            require(info.timestamp != 0, NotInDepeg());
+            require(block.timestamp >= info.timestamp + Constants.DEPEG_GRACE_PERIOD, DepegGracePeriodNotPassed());
+            require(!info.lpUnused, InvalidAddress());
+            info.lpUnused = true;
+        } else {
+            require(lpToken == address(0) && tokenId != 0, InvalidAddress());
+            DataTypes.DepegInfo storage info = lpTokenStorage.depegInfoV3[tokenId];
+            require(info.timestamp != 0, NotInDepeg());
+            require(block.timestamp >= info.timestamp + Constants.DEPEG_GRACE_PERIOD, DepegGracePeriodNotPassed());
+            require(!info.lpUnused, InvalidAddress());
+            info.lpUnused = true;
+        }
+    }
+
     /// @notice Check if there are any LP tokens (V2 or V3) that need to be dissolved
     /// @param lpTokenStorage LP token storage structure
     /// @param accountedBalance Accounted balance mapping
@@ -184,6 +500,7 @@ library LPTokenLibrary {
         address lpToken
     ) internal returns (uint256 toDistribute) {
         require(lpTokenStorage.isV2LPToken[lpToken], NotLPToken());
+        require(!lpTokenStorage.depegInfoV2[lpToken].lpUnused, NotLPToken());
         require(
             block.timestamp >= lpTokenStorage.lastLPDistribution[lpToken] + Constants.LP_DISTRIBUTION_PERIOD,
             LPDistributionTooSoon()
@@ -210,6 +527,7 @@ library LPTokenLibrary {
         returns (uint256 collected0, uint256 collected1)
     {
         require(lpTokenStorage.v3TokenIdToIndex[tokenId] > 0, NotLPToken());
+        require(!lpTokenStorage.depegInfoV3[tokenId].lpUnused, NotLPToken());
         require(
             block.timestamp >= lpTokenStorage.v3LastLPDistribution[tokenId] + Constants.LP_DISTRIBUTION_PERIOD,
             LPDistributionTooSoon()
@@ -240,55 +558,51 @@ library LPTokenLibrary {
     /// @param daoState DAO state storage
     /// @param pricePathsStorage Price paths storage structure
     /// @param accountedBalance Accounted balance mapping
-    /// @param v2LPTokenAddresses Array of V2 LP token addresses
-    /// @param v2LPAmounts Array of V2 LP token amounts to deposit
-    /// @param v3TokenIds Array of V3 LP position token IDs
-    /// @param newV2PricePaths Array of new V2 price paths to add
-    /// @param newV3PricePaths Array of new V3 price paths to add
-    /// @param primaryLPTokenType Primary LP token type
+    /// @param params ProvideLPTokensParams (arrays and scalars in memory to avoid stack too deep)
     /// @param pocContracts Array of POC contracts
-    /// @param daoAddress Address of the DAO contract
     function executeProvideLPTokens(
         DataTypes.LPTokenStorage storage lpTokenStorage,
         DataTypes.RewardsStorage storage rewardsStorage,
         DataTypes.DAOState storage daoState,
         DataTypes.PricePathsStorage storage pricePathsStorage,
         mapping(address => uint256) storage accountedBalance,
-        address[] calldata v2LPTokenAddresses,
-        uint256[] calldata v2LPAmounts,
-        uint256[] calldata v3TokenIds,
-        DataTypes.PricePathV2Params[] calldata newV2PricePaths,
-        DataTypes.PricePathV3Params[] calldata newV3PricePaths,
-        DataTypes.LPTokenType primaryLPTokenType,
-        DataTypes.POCInfo[] storage pocContracts,
-        address daoAddress
+        DataTypes.ProvideLPTokensParams memory params,
+        DataTypes.POCInfo[] storage pocContracts
     ) external {
-        require(v2LPTokenAddresses.length == v2LPAmounts.length, InvalidAddresses());
-        require(v2LPTokenAddresses.length > 0 || v3TokenIds.length > 0, InvalidAddress());
+        require(params.v2LPTokenAddresses.length == params.v2LPAmounts.length, InvalidAddresses());
+        require(params.v2LPTokenAddresses.length > 0 || params.v3TokenIds.length > 0, InvalidAddress());
 
-        for (uint256 i = 0; i < newV2PricePaths.length; ++i) {
-            if (newV2PricePaths[i].router != address(0) && newV2PricePaths[i].path.length >= 2) {
+        for (uint256 i = 0; i < params.newV2PricePaths.length; ++i) {
+            if (params.newV2PricePaths[i].router != address(0) && params.newV2PricePaths[i].path.length >= 2) {
                 pricePathsStorage.v2Paths
-                    .push(DataTypes.PricePathV2({router: newV2PricePaths[i].router, path: newV2PricePaths[i].path}));
+                    .push(
+                        DataTypes.PricePathV2({
+                            router: params.newV2PricePaths[i].router, path: params.newV2PricePaths[i].path
+                        })
+                    );
             }
         }
 
-        for (uint256 i = 0; i < newV3PricePaths.length; ++i) {
-            if (newV3PricePaths[i].quoter != address(0) && newV3PricePaths[i].path.length >= 43) {
+        for (uint256 i = 0; i < params.newV3PricePaths.length; ++i) {
+            if (params.newV3PricePaths[i].quoter != address(0) && params.newV3PricePaths[i].path.length >= 43) {
                 pricePathsStorage.v3Paths
-                    .push(DataTypes.PricePathV3({quoter: newV3PricePaths[i].quoter, path: newV3PricePaths[i].path}));
+                    .push(
+                        DataTypes.PricePathV3({
+                            quoter: params.newV3PricePaths[i].quoter, path: params.newV3PricePaths[i].path
+                        })
+                    );
             }
         }
 
-        if (primaryLPTokenType == DataTypes.LPTokenType.V2) {
-            require(v2LPTokenAddresses.length > 0, InvalidAddress());
-        } else if (primaryLPTokenType == DataTypes.LPTokenType.V3) {
-            require(v3TokenIds.length > 0, InvalidAddress());
+        if (params.primaryLPTokenType == DataTypes.LPTokenType.V2) {
+            require(params.v2LPTokenAddresses.length > 0, InvalidAddress());
+        } else if (params.primaryLPTokenType == DataTypes.LPTokenType.V3) {
+            require(params.v3TokenIds.length > 0, InvalidAddress());
         }
 
-        for (uint256 i = 0; i < v2LPTokenAddresses.length; ++i) {
-            address lpToken = v2LPTokenAddresses[i];
-            uint256 lpAmount = v2LPAmounts[i];
+        for (uint256 i = 0; i < params.v2LPTokenAddresses.length; ++i) {
+            address lpToken = params.v2LPTokenAddresses[i];
+            uint256 lpAmount = params.v2LPAmounts[i];
 
             require(lpToken != address(0), InvalidAddress());
             require(lpAmount > 0, AmountMustBeGreaterThanZero());
@@ -306,11 +620,11 @@ library LPTokenLibrary {
             emit LPTokensProvided(lpToken, lpAmount);
         }
 
-        if (v3TokenIds.length > 0) {
+        if (params.v3TokenIds.length > 0) {
             require(lpTokenStorage.v3PositionManager != address(0), InvalidAddress());
 
-            for (uint256 i = 0; i < v3TokenIds.length; ++i) {
-                uint256 tokenId = v3TokenIds[i];
+            for (uint256 i = 0; i < params.v3TokenIds.length; ++i) {
+                uint256 tokenId = params.v3TokenIds[i];
                 require(lpTokenStorage.v3TokenIdToIndex[tokenId] == 0, TokenAlreadyAdded());
 
                 INonfungiblePositionManager positionManager =
@@ -347,7 +661,7 @@ library LPTokenLibrary {
         uint256 pocContractsCount = pocContracts.length;
         for (uint256 i = 0; i < pocContractsCount; ++i) {
             if (pocContracts[i].active) {
-                IProofOfCapital(pocContracts[i].pocContract).setMarketMaker(daoAddress, false);
+                IProofOfCapital(pocContracts[i].pocContract).setMarketMaker(params.daoAddress, false);
                 if (daoState.marketMaker != address(0)) {
                     IProofOfCapital(pocContracts[i].pocContract).setMarketMaker(daoState.marketMaker, true);
                 }
