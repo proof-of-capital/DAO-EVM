@@ -1,41 +1,28 @@
 // SPDX-License-Identifier: UNLICENSED
 // All rights reserved.
 
-// This source code is provided for reference purposes only.
-// You may not copy, reproduce, distribute, modify, deploy, or otherwise use this code in whole or in part without explicit written permission from the author.
-
 // (c) 2025 https://proofofcapital.org/
-
 // https://github.com/proof-of-capital/DAO-EVM
 
 pragma solidity ^0.8.33;
 
 import "./interfaces/IPriceOracle.sol";
+import "./interfaces/IWhitelistOracles.sol";
 import "./interfaces/IAggregatorV3.sol";
-import "./interfaces/IDAO.sol";
 import "./libraries/Constants.sol";
 import "./libraries/DataTypes.sol";
 
 /// @title PriceOracle
-/// @notice Contract to get asset prices, manage price sources
-/// - Use of Chainlink Aggregators as source of price
-/// - Owned by DAO and Creator (multisig for adding new sources)
+/// @notice Contract to get asset prices; sources are set at deploy or added from WhitelistOracles by DAO + Creator (2-of-2)
 contract PriceOracle is IPriceOracle {
-    struct PendingSourceUpdate {
-        bool daoApproved;
-        bool creatorApproved;
-        address asset;
-        address source;
-        uint8 decimals;
-        uint256 timestamp;
-    }
-
     address public immutable dao;
     address public immutable creator;
+    IWhitelistOracles public whitelist;
 
     mapping(address => IAggregatorV3) private assetSources;
     mapping(address => uint8) private assetDecimals;
-    mapping(bytes32 => PendingSourceUpdate) private pendingUpdates;
+    mapping(bytes32 => DataTypes.PendingWhitelistAdd) private pendingWhitelistAdds;
+    mapping(bytes32 => DataTypes.PendingWhitelistUpdate) private pendingWhitelistUpdates;
 
     error Unauthorized();
     error InvalidAddress();
@@ -43,28 +30,26 @@ contract PriceOracle is IPriceOracle {
     error UpdateNotFound();
     error UpdateAlreadyApproved();
     error UpdateNotReady();
-
-    modifier onlyDAO() {
-        require(msg.sender == address(dao) || msg.sender == dao, Unauthorized());
-        _;
-    }
-
-    modifier onlyCreator() {
-        require(msg.sender == creator, Unauthorized());
-        _;
-    }
+    error WhitelistNotSet();
+    error AssetNotInWhitelist(address asset);
+    error EmptyAssets();
 
     modifier onlyDAOOrCreator() {
         require(msg.sender == address(dao) || msg.sender == dao || msg.sender == creator, Unauthorized());
         _;
     }
 
-    constructor(address _dao, address _creator, DataTypes.SourceConfig[] memory sourceConfigs) {
+    /// @param _dao DAO contract or admin address
+    /// @param _creator Creator (e.g. multisig) address
+    /// @param _whitelist WhitelistOracles address (can be address(0), set later via 2-of-2 if needed)
+    /// @param sourceConfigs Initial sources for bootstrap
+    constructor(address _dao, address _creator, address _whitelist, DataTypes.SourceConfig[] memory sourceConfigs) {
         require(_dao != address(0), InvalidAddress());
         require(_creator != address(0), InvalidAddress());
 
         dao = _dao;
         creator = _creator;
+        whitelist = IWhitelistOracles(_whitelist);
 
         _initializeSources(sourceConfigs);
     }
@@ -89,71 +74,137 @@ contract PriceOracle is IPriceOracle {
         return uint256(price);
     }
 
-    /// @inheritdoc IPriceOracle
-    function proposeSourceUpdate(address asset, address source, uint8 decimals) external onlyDAOOrCreator {
-        require(asset != address(0), InvalidAddress());
-        require(source != address(0), InvalidAddress());
-        require(address(assetSources[asset]) == address(0), TokenAlreadyAdded(asset));
+    /// @notice Propose adding price sources from whitelist for one or more assets (DAO or Creator)
+    /// @param assets Array of asset addresses to add from whitelist
+    function proposeAddSourcesFromWhitelist(address[] calldata assets) external onlyDAOOrCreator {
+        require(address(whitelist) != address(0), WhitelistNotSet());
+        require(assets.length > 0, EmptyAssets());
 
-        bytes32 updateId = keccak256(abi.encodePacked(asset, source, decimals, block.timestamp));
+        for (uint256 i = 0; i < assets.length; i++) {
+            require(assets[i] != address(0), InvalidAddress());
+            require(address(assetSources[assets[i]]) == address(0), TokenAlreadyAdded(assets[i]));
+            (address feed,) = whitelist.getFeedInfo(assets[i]);
+            require(feed != address(0), AssetNotInWhitelist(assets[i]));
+        }
+
+        bytes32 updateId = keccak256(abi.encode(assets, block.timestamp));
 
         bool isDAO = msg.sender == address(dao) || msg.sender == dao;
         bool isCreator = msg.sender == creator;
 
-        pendingUpdates[updateId] = PendingSourceUpdate({
-            daoApproved: isDAO,
-            creatorApproved: isCreator,
-            asset: asset,
-            source: source,
-            decimals: decimals,
-            timestamp: block.timestamp
-        });
+        DataTypes.PendingWhitelistAdd storage pending = pendingWhitelistAdds[updateId];
+        pending.assets = new address[](assets.length);
+        for (uint256 i = 0; i < assets.length; i++) {
+            pending.assets[i] = assets[i];
+        }
+        pending.daoApproved = isDAO;
+        pending.creatorApproved = isCreator;
 
-        emit SourceUpdateProposed(updateId, asset, source, decimals, msg.sender);
+        emit SourcesFromWhitelistProposed(updateId, assets, msg.sender);
 
         if (isDAO && isCreator) {
-            _executeSourceUpdate(updateId);
-        } else if (isDAO) {
-            emit SourceUpdateApproved(updateId, msg.sender);
-        } else if (isCreator) {
-            emit SourceUpdateApproved(updateId, msg.sender);
+            _executeAddSourcesFromWhitelist(updateId);
+        } else {
+            emit SourcesFromWhitelistApproved(updateId, msg.sender);
         }
     }
 
-    /// @inheritdoc IPriceOracle
-    function approveSourceUpdate(bytes32 updateId) external onlyDAOOrCreator {
-        PendingSourceUpdate storage update = pendingUpdates[updateId];
-        require(update.asset != address(0), UpdateNotFound());
+    /// @notice Approve pending add-sources-from-whitelist (second of DAO/Creator)
+    /// @param updateId Update ID from proposeAddSourcesFromWhitelist
+    function approveAddSourcesFromWhitelist(bytes32 updateId) external onlyDAOOrCreator {
+        DataTypes.PendingWhitelistAdd storage pending = pendingWhitelistAdds[updateId];
+        require(pending.assets.length > 0, UpdateNotFound());
 
         bool isDAO = msg.sender == address(dao) || msg.sender == dao;
         bool isCreator = msg.sender == creator;
 
         if (isDAO) {
-            require(!update.daoApproved, UpdateAlreadyApproved());
-            update.daoApproved = true;
+            require(!pending.daoApproved, UpdateAlreadyApproved());
+            pending.daoApproved = true;
         }
 
         if (isCreator) {
-            require(!update.creatorApproved, UpdateAlreadyApproved());
-            update.creatorApproved = true;
+            require(!pending.creatorApproved, UpdateAlreadyApproved());
+            pending.creatorApproved = true;
         }
 
-        emit SourceUpdateApproved(updateId, msg.sender);
+        emit SourcesFromWhitelistApproved(updateId, msg.sender);
 
-        if (update.daoApproved && update.creatorApproved) {
-            _executeSourceUpdate(updateId);
+        if (pending.daoApproved && pending.creatorApproved) {
+            _executeAddSourcesFromWhitelist(updateId);
         }
     }
 
-    /// @inheritdoc IPriceOracle
-    function cancelSourceUpdate(bytes32 updateId) external onlyDAOOrCreator {
-        PendingSourceUpdate storage update = pendingUpdates[updateId];
-        require(update.asset != address(0), UpdateNotFound());
-        require(!(update.daoApproved && update.creatorApproved), UpdateNotReady());
+    /// @notice Cancel pending add-sources-from-whitelist
+    /// @param updateId Update ID
+    function cancelAddSourcesFromWhitelist(bytes32 updateId) external onlyDAOOrCreator {
+        DataTypes.PendingWhitelistAdd storage pending = pendingWhitelistAdds[updateId];
+        require(pending.assets.length > 0, UpdateNotFound());
+        require(!(pending.daoApproved && pending.creatorApproved), UpdateNotReady());
 
-        delete pendingUpdates[updateId];
+        delete pendingWhitelistAdds[updateId];
 
-        emit SourceUpdateCancelled(updateId, msg.sender);
+        emit SourcesFromWhitelistCancelled(updateId, msg.sender);
+    }
+
+    /// @notice Propose setting or changing whitelist address (DAO or Creator)
+    /// @param _whitelist New WhitelistOracles address (use address(0) to clear)
+    function proposeWhitelistUpdate(address _whitelist) external onlyDAOOrCreator {
+        bytes32 updateId = keccak256(abi.encodePacked(_whitelist, block.timestamp, msg.sender));
+
+        bool isDAO = msg.sender == address(dao) || msg.sender == dao;
+        bool isCreator = msg.sender == creator;
+
+        DataTypes.PendingWhitelistUpdate storage pending = pendingWhitelistUpdates[updateId];
+        pending.newWhitelist = _whitelist;
+        pending.daoApproved = isDAO;
+        pending.creatorApproved = isCreator;
+        pending.timestamp = block.timestamp;
+
+        emit WhitelistUpdateProposed(updateId, _whitelist, msg.sender);
+
+        if (isDAO && isCreator) {
+            _executeWhitelistUpdate(updateId);
+        } else {
+            emit WhitelistUpdateApproved(updateId, msg.sender);
+        }
+    }
+
+    /// @notice Approve pending whitelist update
+    /// @param updateId Update ID from proposeWhitelistUpdate
+    function approveWhitelistUpdate(bytes32 updateId) external onlyDAOOrCreator {
+        DataTypes.PendingWhitelistUpdate storage pending = pendingWhitelistUpdates[updateId];
+        require(pending.timestamp != 0, UpdateNotFound());
+
+        bool isDAO = msg.sender == address(dao) || msg.sender == dao;
+        bool isCreator = msg.sender == creator;
+
+        if (isDAO) {
+            require(!pending.daoApproved, UpdateAlreadyApproved());
+            pending.daoApproved = true;
+        }
+
+        if (isCreator) {
+            require(!pending.creatorApproved, UpdateAlreadyApproved());
+            pending.creatorApproved = true;
+        }
+
+        emit WhitelistUpdateApproved(updateId, msg.sender);
+
+        if (pending.daoApproved && pending.creatorApproved) {
+            _executeWhitelistUpdate(updateId);
+        }
+    }
+
+    /// @notice Cancel pending whitelist update
+    function cancelWhitelistUpdate(bytes32 updateId) external onlyDAOOrCreator {
+        DataTypes.PendingWhitelistUpdate storage pending = pendingWhitelistUpdates[updateId];
+        require(pending.timestamp != 0, UpdateNotFound());
+        require(!(pending.daoApproved && pending.creatorApproved), UpdateNotReady());
+
+        delete pendingWhitelistUpdates[updateId];
+
+        emit WhitelistUpdateCancelled(updateId, msg.sender);
     }
 
     /// @inheritdoc IPriceOracle
@@ -176,16 +227,33 @@ contract PriceOracle is IPriceOracle {
         }
     }
 
-    function _executeSourceUpdate(bytes32 updateId) internal {
-        PendingSourceUpdate memory update = pendingUpdates[updateId];
-        require(update.daoApproved && update.creatorApproved, UpdateNotReady());
-        require(address(assetSources[update.asset]) == address(0), TokenAlreadyAdded(update.asset));
+    function _executeAddSourcesFromWhitelist(bytes32 updateId) internal {
+        DataTypes.PendingWhitelistAdd storage pending = pendingWhitelistAdds[updateId];
+        require(pending.daoApproved && pending.creatorApproved, UpdateNotReady());
 
-        assetSources[update.asset] = IAggregatorV3(update.source);
-        assetDecimals[update.asset] = update.decimals;
+        address[] memory assets = pending.assets;
+        for (uint256 i = 0; i < assets.length; i++) {
+            (address source, uint8 decimals) = whitelist.getFeedInfo(assets[i]);
+            require(source != address(0), AssetNotInWhitelist(assets[i]));
+            require(whitelist.isAllowedFeed(assets[i], source), AssetNotInWhitelist(assets[i]));
+            require(address(assetSources[assets[i]]) == address(0), TokenAlreadyAdded(assets[i]));
 
-        delete pendingUpdates[updateId];
+            assetSources[assets[i]] = IAggregatorV3(source);
+            assetDecimals[assets[i]] = decimals;
 
-        emit SourceAdded(update.asset, update.source, update.decimals);
+            emit SourceAdded(assets[i], source, decimals);
+        }
+
+        delete pendingWhitelistAdds[updateId];
+    }
+
+    function _executeWhitelistUpdate(bytes32 updateId) internal {
+        DataTypes.PendingWhitelistUpdate memory pending = pendingWhitelistUpdates[updateId];
+        require(pending.timestamp != 0, UpdateNotFound());
+        require(pending.daoApproved && pending.creatorApproved, UpdateNotReady());
+
+        whitelist = IWhitelistOracles(pending.newWhitelist);
+
+        delete pendingWhitelistUpdates[updateId];
     }
 }

@@ -319,6 +319,31 @@ library DataTypes {
         uint8 decimals; // Decimals for price normalization
     }
 
+    /// @notice Pending feed update in WhitelistOracles (2-of-2)
+    struct PendingFeedUpdate {
+        bool daoApproved;
+        bool creatorApproved;
+        address asset;
+        address source;
+        uint8 decimals;
+        uint256 timestamp;
+    }
+
+    /// @notice Pending add-sources-from-whitelist in PriceOracle (2-of-2)
+    struct PendingWhitelistAdd {
+        address[] assets;
+        bool daoApproved;
+        bool creatorApproved;
+    }
+
+    /// @notice Pending whitelist address update in PriceOracle (2-of-2)
+    struct PendingWhitelistUpdate {
+        address newWhitelist;
+        bool daoApproved;
+        bool creatorApproved;
+        uint256 timestamp;
+    }
+
     // ============================================
     // CONSTRUCTOR PARAMETERS STRUCTURES
     // ============================================
