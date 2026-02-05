@@ -130,7 +130,7 @@ contract Voting is IVoting {
         require(msg.sender == deployer, NotAdmin());
         require(_dao != address(0), InvalidDAOAddress());
         require(address(dao) == address(0), InvalidAddress());
-        
+
         dao = IDAO(_dao);
     }
 

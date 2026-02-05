@@ -54,20 +54,11 @@ contract SetCreatorScript is Script {
             addressesJson = "{";
         }
 
-        addressesJson = string(
-            abi.encodePacked(
-                addressesJson,
-                '"creator":"',
-                vm.toString(multisig),
-                '"}'
-            )
-        );
+        addressesJson = string(abi.encodePacked(addressesJson, '"creator":"', vm.toString(multisig), '"}'));
         vm.writeFile(DEPLOYMENT_ADDRESSES_FILE, addressesJson);
         console.log("Deployment addresses saved to", DEPLOYMENT_ADDRESSES_FILE);
 
-        string memory envContent = string(
-            abi.encodePacked(existingContent, "CREATOR=", vm.toString(multisig), "\n")
-        );
+        string memory envContent = string(abi.encodePacked(existingContent, "CREATOR=", vm.toString(multisig), "\n"));
 
         vm.writeFile(ENV_FILE, envContent);
         console.log("Environment variables saved to", ENV_FILE);

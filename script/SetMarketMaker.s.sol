@@ -54,20 +54,12 @@ contract SetMarketMakerScript is Script {
             addressesJson = "{";
         }
 
-        addressesJson = string(
-            abi.encodePacked(
-                addressesJson,
-                '"marketMaker":"',
-                vm.toString(returnWallet),
-                '"}'
-            )
-        );
+        addressesJson = string(abi.encodePacked(addressesJson, '"marketMaker":"', vm.toString(returnWallet), '"}'));
         vm.writeFile(DEPLOYMENT_ADDRESSES_FILE, addressesJson);
         console.log("Deployment addresses saved to", DEPLOYMENT_ADDRESSES_FILE);
 
-        string memory envContent = string(
-            abi.encodePacked(existingContent, "MARKET_MAKER=", vm.toString(returnWallet), "\n")
-        );
+        string memory envContent =
+            string(abi.encodePacked(existingContent, "MARKET_MAKER=", vm.toString(returnWallet), "\n"));
 
         vm.writeFile(ENV_FILE, envContent);
         console.log("Environment variables saved to", ENV_FILE);

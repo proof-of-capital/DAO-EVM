@@ -59,17 +59,13 @@ contract PriceOracle is IPriceOracle {
         _;
     }
 
-    constructor(
-        address _dao,
-        address _creator,
-        DataTypes.SourceConfig[] memory sourceConfigs
-    ) {
+    constructor(address _dao, address _creator, DataTypes.SourceConfig[] memory sourceConfigs) {
         require(_dao != address(0), InvalidAddress());
         require(_creator != address(0), InvalidAddress());
-        
+
         dao = _dao;
         creator = _creator;
-        
+
         _initializeSources(sourceConfigs);
     }
 
@@ -169,7 +165,9 @@ contract PriceOracle is IPriceOracle {
         for (uint256 i = 0; i < sourceConfigs.length; i++) {
             require(sourceConfigs[i].asset != address(0), InvalidAddress());
             require(sourceConfigs[i].source != address(0), InvalidAddress());
-            require(address(assetSources[sourceConfigs[i].asset]) == address(0), TokenAlreadyAdded(sourceConfigs[i].asset));
+            require(
+                address(assetSources[sourceConfigs[i].asset]) == address(0), TokenAlreadyAdded(sourceConfigs[i].asset)
+            );
 
             assetSources[sourceConfigs[i].asset] = IAggregatorV3(sourceConfigs[i].source);
             assetDecimals[sourceConfigs[i].asset] = sourceConfigs[i].decimals;

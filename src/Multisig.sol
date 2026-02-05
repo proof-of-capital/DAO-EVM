@@ -49,7 +49,7 @@ contract Multisig is IMultisig {
     uint256 public currentCollateralAmount;
     address public uniswapV3Router;
     address public uniswapV3PositionManager;
-    LPPoolParams public lpPoolParams;
+    LPPoolConfig[] private lpPools;
     mapping(address => CollateralInfo) public collaterals;
 
     modifier onlyPrimaryOwner() {
@@ -113,7 +113,7 @@ contract Multisig is IMultisig {
         uint256 _targetCollateralAmount,
         address _uniswapV3Router,
         address _uniswapV3PositionManager,
-        LPPoolParams memory _lpPoolParams,
+        LPPoolConfig[] memory _lpPoolConfigs,
         CollateralConstructorParams[] memory _collateralParams,
         address _newMarketMaker
     ) {
@@ -164,15 +164,22 @@ contract Multisig is IMultisig {
         require(_targetCollateralAmount > 0, InvalidAddress());
         require(_uniswapV3Router != address(0), InvalidAddress());
         require(_uniswapV3PositionManager != address(0), InvalidAddress());
-        require(_lpPoolParams.fee > 0, InvalidLPPoolParams());
-        require(_lpPoolParams.amount0Min > 0, InvalidLPPoolParams());
-        require(_lpPoolParams.amount1Min > 0, InvalidLPPoolParams());
+        require(_lpPoolConfigs.length > 0, InvalidLPPoolConfigs());
+        uint256 totalShareBps;
+        for (uint256 i = 0; i < _lpPoolConfigs.length; ++i) {
+            require(_lpPoolConfigs[i].params.fee > 0, InvalidLPPoolParams());
+            require(_lpPoolConfigs[i].params.amount0Min > 0, InvalidLPPoolParams());
+            require(_lpPoolConfigs[i].params.amount1Min > 0, InvalidLPPoolParams());
+            require(_lpPoolConfigs[i].shareBps > 0, InvalidLPPoolConfigs());
+            totalShareBps += _lpPoolConfigs[i].shareBps;
+            lpPools.push(_lpPoolConfigs[i]);
+        }
+        require(totalShareBps == 10_000, InvalidLPPoolConfigs());
         require(_newMarketMaker != address(0), InvalidAddress());
 
         targetCollateralAmount = _targetCollateralAmount;
         uniswapV3Router = _uniswapV3Router;
         uniswapV3PositionManager = _uniswapV3PositionManager;
-        lpPoolParams = _lpPoolParams;
         multisigStage = MultisigStage.Inactive;
         newMarketMaker = _newMarketMaker;
 
@@ -572,6 +579,15 @@ contract Multisig is IMultisig {
         return (owner.primaryAddr, owner.backupAddr, owner.emergencyAddr, owner.share);
     }
 
+    function getLPPoolsCount() external view returns (uint256) {
+        return lpPools.length;
+    }
+
+    function getLPPoolConfig(uint256 index) external view returns (LPPoolConfig memory) {
+        require(index < lpPools.length, OwnerIndexOutOfBounds());
+        return lpPools[index];
+    }
+
     /// @inheritdoc IMultisig
     function getTransaction(uint256 txId) external view returns (Transaction memory) {
         require(txId < transactions.length, TransactionDoesNotExist());
@@ -827,32 +843,49 @@ contract Multisig is IMultisig {
         IERC20(token0).approve(uniswapV3PositionManager, amount0Desired);
         IERC20(token1).approve(uniswapV3PositionManager, amount1Desired);
 
-        INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
-            token0: token0,
-            token1: token1,
-            fee: lpPoolParams.fee,
-            tickLower: lpPoolParams.tickLower,
-            tickUpper: lpPoolParams.tickUpper,
-            amount0Desired: amount0Desired,
-            amount1Desired: amount1Desired,
-            amount0Min: lpPoolParams.amount0Min,
-            amount1Min: lpPoolParams.amount1Min,
-            recipient: address(this),
-            deadline: block.timestamp + 1 hours
-        });
+        uint256 poolsCount = lpPools.length;
+        uint256[] memory v3TokenIds = new uint256[](poolsCount);
+        uint256 amount0Used;
+        uint256 amount1Used;
 
-        (uint256 tokenId,, uint256 amount0, uint256 amount1) =
-            INonfungiblePositionManager(uniswapV3PositionManager).mint(params);
+        for (uint256 i = 0; i < poolsCount; ++i) {
+            LPPoolConfig memory config = lpPools[i];
+            uint256 amount0;
+            uint256 amount1;
+            if (i == poolsCount - 1) {
+                amount0 = amount0Desired - amount0Used;
+                amount1 = amount1Desired - amount1Used;
+            } else {
+                amount0 = (amount0Desired * config.shareBps) / 10_000;
+                amount1 = (amount1Desired * config.shareBps) / 10_000;
+                amount0Used += amount0;
+                amount1Used += amount1;
+            }
 
-        emit LPCreated(tokenId, amount0, amount1);
+            INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
+                token0: token0,
+                token1: token1,
+                fee: config.params.fee,
+                tickLower: config.params.tickLower,
+                tickUpper: config.params.tickUpper,
+                amount0Desired: amount0,
+                amount1Desired: amount1,
+                amount0Min: config.params.amount0Min,
+                amount1Min: config.params.amount1Min,
+                recipient: address(this),
+                deadline: block.timestamp + 1 hours
+            });
 
-        IERC721(uniswapV3PositionManager).safeTransferFrom(address(this), address(dao), tokenId);
+            (uint256 tokenId,, uint256 amount0Minted, uint256 amount1Minted) =
+                INonfungiblePositionManager(uniswapV3PositionManager).mint(params);
+
+            emit LPCreated(tokenId, amount0Minted, amount1Minted);
+            IERC721(uniswapV3PositionManager).safeTransferFrom(address(this), address(dao), tokenId);
+            v3TokenIds[i] = tokenId;
+        }
 
         address[] memory emptyV2Addresses = new address[](0);
         uint256[] memory emptyV2Amounts = new uint256[](0);
-        uint256[] memory v3TokenIds = new uint256[](1);
-        v3TokenIds[0] = tokenId;
-
         DataTypes.PricePathV2Params[] memory emptyV2Paths = new DataTypes.PricePathV2Params[](0);
         DataTypes.PricePathV3Params[] memory emptyV3Paths = new DataTypes.PricePathV3Params[](0);
 

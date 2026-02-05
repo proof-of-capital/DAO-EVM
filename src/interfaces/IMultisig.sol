@@ -94,6 +94,12 @@ interface IMultisig {
         uint256 amount1Min;
     }
 
+    /// @notice LP pool config: params and share in basis points (10000 = 100%)
+    struct LPPoolConfig {
+        LPPoolParams params;
+        uint256 shareBps;
+    }
+
     /// @notice Collateral information
     struct CollateralInfo {
         address token;
@@ -154,6 +160,7 @@ interface IMultisig {
     error InvalidMultisigStage();
     error MultisigStageNotActive();
     error InvalidLPPoolParams();
+    error InvalidLPPoolConfigs();
     error InvalidCollateralAddress();
     error InvalidRouterAddress();
     error InsufficientCollateralAmount();

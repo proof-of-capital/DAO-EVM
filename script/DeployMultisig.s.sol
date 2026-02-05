@@ -36,12 +36,16 @@ contract DeployMultisigScript is Script {
         address uniswapV3Router = vm.envAddress("UNISWAP_V3_ROUTER");
         address uniswapV3PositionManager = vm.envAddress("UNISWAP_V3_POSITION_MANAGER");
 
-        IMultisig.LPPoolParams memory lpPoolParams = IMultisig.LPPoolParams({
-            fee: uint24(vm.envUint("LP_POOL_FEE")),
-            tickLower: int24(vm.envInt("LP_POOL_TICK_LOWER")),
-            tickUpper: int24(vm.envInt("LP_POOL_TICK_UPPER")),
-            amount0Min: vm.envUint("LP_POOL_AMOUNT0_MIN"),
-            amount1Min: vm.envUint("LP_POOL_AMOUNT1_MIN")
+        IMultisig.LPPoolConfig[] memory lpPoolConfigs = new IMultisig.LPPoolConfig[](1);
+        lpPoolConfigs[0] = IMultisig.LPPoolConfig({
+            params: IMultisig.LPPoolParams({
+                fee: uint24(vm.envUint("LP_POOL_FEE")),
+                tickLower: int24(vm.envInt("LP_POOL_TICK_LOWER")),
+                tickUpper: int24(vm.envInt("LP_POOL_TICK_UPPER")),
+                amount0Min: vm.envUint("LP_POOL_AMOUNT0_MIN"),
+                amount1Min: vm.envUint("LP_POOL_AMOUNT1_MIN")
+            }),
+            shareBps: 10_000
         });
 
         address newMarketMaker = vm.envAddress("NEW_MARKET_MAKER");
@@ -54,18 +58,15 @@ contract DeployMultisigScript is Script {
             bytes[] memory swapPaths = vm.envBytes("COLLATERAL_SWAP_PATHS", ",");
 
             require(
-                collateralTokens.length == priceFeeds.length
-                    && priceFeeds.length == routers.length && routers.length == swapPaths.length,
+                collateralTokens.length == priceFeeds.length && priceFeeds.length == routers.length
+                    && routers.length == swapPaths.length,
                 "Collateral params length mismatch"
             );
 
             collateralParams = new IMultisig.CollateralConstructorParams[](collateralTokens.length);
             for (uint256 i = 0; i < collateralTokens.length; i++) {
                 collateralParams[i] = IMultisig.CollateralConstructorParams({
-                    token: collateralTokens[i],
-                    priceFeed: priceFeeds[i],
-                    router: routers[i],
-                    swapPath: swapPaths[i]
+                    token: collateralTokens[i], priceFeed: priceFeeds[i], router: routers[i], swapPath: swapPaths[i]
                 });
             }
         }
@@ -81,7 +82,7 @@ contract DeployMultisigScript is Script {
             targetCollateralAmount,
             uniswapV3Router,
             uniswapV3PositionManager,
-            lpPoolParams,
+            lpPoolConfigs,
             collateralParams,
             newMarketMaker
         );
@@ -113,15 +114,11 @@ contract DeployMultisigScript is Script {
             addressesJson = "{";
         }
 
-        addressesJson = string(
-            abi.encodePacked(addressesJson, '"multisig":"', vm.toString(multisig), '"}')
-        );
+        addressesJson = string(abi.encodePacked(addressesJson, '"multisig":"', vm.toString(multisig), '"}'));
         vm.writeFile(DEPLOYMENT_ADDRESSES_FILE, addressesJson);
         console.log("Deployment addresses saved to", DEPLOYMENT_ADDRESSES_FILE);
 
-        string memory envContent = string(
-            abi.encodePacked(existingContent, "MULTISIG=", vm.toString(multisig), "\n")
-        );
+        string memory envContent = string(abi.encodePacked(existingContent, "MULTISIG=", vm.toString(multisig), "\n"));
 
         vm.writeFile(ENV_FILE, envContent);
         console.log("Environment variables saved to", ENV_FILE);

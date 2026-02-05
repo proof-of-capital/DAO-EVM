@@ -33,14 +33,8 @@ contract DeployPrivateSaleScript is Script {
 
         vm.startBroadcast();
 
-        PrivateSale privateSale = new PrivateSale(
-            dao,
-            mainCollateral,
-            pocContracts,
-            cliffDuration,
-            vestingPeriods,
-            vestingPeriodDuration
-        );
+        PrivateSale privateSale =
+            new PrivateSale(dao, mainCollateral, pocContracts, cliffDuration, vestingPeriods, vestingPeriodDuration);
 
         console.log("PrivateSale deployed at:", address(privateSale));
 
@@ -72,15 +66,12 @@ contract DeployPrivateSaleScript is Script {
             addressesJson = "{";
         }
 
-        addressesJson = string(
-            abi.encodePacked(addressesJson, '"privateSale":"', vm.toString(privateSale), '"}')
-        );
+        addressesJson = string(abi.encodePacked(addressesJson, '"privateSale":"', vm.toString(privateSale), '"}'));
         vm.writeFile(DEPLOYMENT_ADDRESSES_FILE, addressesJson);
         console.log("Deployment addresses saved to", DEPLOYMENT_ADDRESSES_FILE);
 
-        string memory envContent = string(
-            abi.encodePacked(existingContent, "PRIVATE_SALE=", vm.toString(privateSale), "\n")
-        );
+        string memory envContent =
+            string(abi.encodePacked(existingContent, "PRIVATE_SALE=", vm.toString(privateSale), "\n"));
 
         vm.writeFile(ENV_FILE, envContent);
         console.log("Environment variables saved to", ENV_FILE);

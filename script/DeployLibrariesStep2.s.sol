@@ -26,7 +26,8 @@ contract DeployLibrariesStep2Script is Script {
         address fundraisingLibrary = deployCode("src/libraries/external/FundraisingLibrary.sol:FundraisingLibrary");
         address exitQueueLibrary = deployCode("src/libraries/external/ExitQueueLibrary.sol:ExitQueueLibrary");
         address lpTokenLibrary = deployCode("src/libraries/external/LPTokenLibrary.sol:LPTokenLibrary");
-        address profitDistributionLibrary = deployCode("src/libraries/external/ProfitDistributionLibrary.sol:ProfitDistributionLibrary");
+        address profitDistributionLibrary =
+            deployCode("src/libraries/external/ProfitDistributionLibrary.sol:ProfitDistributionLibrary");
         address rewardsLibrary = deployCode("src/libraries/external/RewardsLibrary.sol:RewardsLibrary");
         address dissolutionLibrary = deployCode("src/libraries/external/DissolutionLibrary.sol:DissolutionLibrary");
         address creatorLibrary = deployCode("src/libraries/external/CreatorLibrary.sol:CreatorLibrary");

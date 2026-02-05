@@ -32,11 +32,7 @@ contract DeployPriceOracleScript is Script {
 
         vm.startBroadcast();
 
-        PriceOracle priceOracle = new PriceOracle(
-            dao,
-            creator,
-            configs
-        );
+        PriceOracle priceOracle = new PriceOracle(dao, creator, configs);
 
         console.log("PriceOracle deployed at:", address(priceOracle));
         console.log("Initialized sources count:", configs.length);
@@ -66,15 +62,12 @@ contract DeployPriceOracleScript is Script {
             addressesJson = "{";
         }
 
-        addressesJson = string(
-            abi.encodePacked(addressesJson, '"priceOracle":"', vm.toString(priceOracle), '"}')
-        );
+        addressesJson = string(abi.encodePacked(addressesJson, '"priceOracle":"', vm.toString(priceOracle), '"}'));
         vm.writeFile(DEPLOYMENT_ADDRESSES_FILE, addressesJson);
         console.log("Deployment addresses saved to", DEPLOYMENT_ADDRESSES_FILE);
 
-        string memory envContent = string(
-            abi.encodePacked(existingContent, "PRICE_ORACLE=", vm.toString(priceOracle), "\n")
-        );
+        string memory envContent =
+            string(abi.encodePacked(existingContent, "PRICE_ORACLE=", vm.toString(priceOracle), "\n"));
 
         vm.writeFile(ENV_FILE, envContent);
         console.log("Environment variables saved to", ENV_FILE);
