@@ -195,7 +195,7 @@ contract DeployDAO is Script {
             address(voting),
             launchTokenAddress,
             mainCollateralAddress,
-            dao.admin()
+            dao.coreConfig().admin
         );
 
         console.log("\n=== Deployment Summary ===");
@@ -205,7 +205,7 @@ contract DeployDAO is Script {
         console.log("Launch Token:", launchTokenAddress);
         console.log("Main Collateral (USDT):", mainCollateralAddress);
         console.log("Creator:", creatorAddress);
-        console.log("Admin:", dao.admin());
+        console.log("Admin:", dao.coreConfig().admin);
         console.log("\n=== Fundraising Config ===");
         console.log("Min Deposit:", minDeposit);
         console.log("Share Price:", sharePrice);

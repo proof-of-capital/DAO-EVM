@@ -56,20 +56,18 @@ library Orderbook {
     /// @notice Execute sell operation
     /// @dev Directly works with contract storage, updates orderbookParams.totalSold and current level
     /// @param params Sell operation parameters
-    /// @param launchToken Launch token reference from storage
+    /// @param coreConfig DAO core config (launchToken, priceOracle)
     /// @param orderbookParams Orderbook parameters from storage (totalSold will be updated)
     /// @param sellableCollaterals Collaterals mapping from storage
-    /// @param priceOracle Price oracle for asset prices
     /// @param accountedBalance Accounted balance mapping from storage
     /// @param availableRouterByAdmin Router whitelist mapping from storage
     /// @param totalShares Total shares supply
     /// @param sharePrice Share price in USD (18 decimals)
     function executeSell(
         DataTypes.SellParams memory params,
-        IERC20 launchToken,
+        DataTypes.CoreConfig storage coreConfig,
         DataTypes.OrderbookParams storage orderbookParams,
         mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
-        IPriceOracle priceOracle,
         mapping(address => uint256) storage accountedBalance,
         mapping(address => bool) storage availableRouterByAdmin,
         uint256 totalShares,
@@ -79,7 +77,7 @@ library Orderbook {
 
         require(collateralInfo.active, CollateralNotSellable());
         require(orderbookParams.initialPrice > 0, OrderbookNotInitialized());
-        uint256 collateralPriceUSD = priceOracle.getAssetPrice(params.collateral);
+        uint256 collateralPriceUSD = IPriceOracle(coreConfig.priceOracle).getAssetPrice(params.collateral);
         require(collateralPriceUSD > 0, InvalidCollateralPrice());
 
         require(availableRouterByAdmin[params.router], SwapLibrary.RouterNotAvailable());
@@ -88,7 +86,7 @@ library Orderbook {
             params.router,
             params.swapType,
             params.swapData,
-            address(launchToken),
+            coreConfig.launchToken,
             params.collateral,
             params.launchTokenAmount,
             params.minCollateralAmount
@@ -102,7 +100,7 @@ library Orderbook {
 
         orderbookParams.totalSold += params.launchTokenAmount;
 
-        accountedBalance[address(launchToken)] -= params.launchTokenAmount;
+        accountedBalance[coreConfig.launchToken] -= params.launchTokenAmount;
 
         updateCurrentLevel(orderbookParams, receivedCollateralInUsd, params.launchTokenAmount, totalShares, sharePrice);
 

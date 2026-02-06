@@ -41,7 +41,7 @@ contract PrivateSale is IPrivateSale, ReentrancyGuard {
     mapping(address => uint256) public pocPurchasedAmount;
 
     modifier onlyAdmin() {
-        require(msg.sender == admin || msg.sender == IDAO(dao).admin(), Unauthorized());
+        require(msg.sender == admin || msg.sender == IDAO(dao).coreConfig().admin, Unauthorized());
         _;
     }
 
@@ -71,8 +71,8 @@ contract PrivateSale is IPrivateSale, ReentrancyGuard {
 
         dao = _dao;
         mainCollateral = _mainCollateral;
-        launchToken = address(IDAO(_dao).launchToken());
-        admin = IDAO(_dao).admin();
+        launchToken = IDAO(_dao).coreConfig().launchToken;
+        admin = IDAO(_dao).coreConfig().admin;
 
         for (uint256 i = 0; i < _pocContracts.length; ++i) {
             require(_pocContracts[i] != address(0), InvalidAddress());

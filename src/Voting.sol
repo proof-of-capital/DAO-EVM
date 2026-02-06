@@ -145,8 +145,8 @@ contract Voting is IVoting {
         DataTypes.DAOState memory daoState = dao.getDaoState();
         require(daoState.currentStage == DataTypes.Stage.Active, DAONotInActiveStage());
 
-        bool isAdminUser = msg.sender == dao.admin();
-        bool isCreator = msg.sender == dao.creator();
+        bool isAdminUser = msg.sender == dao.coreConfig().admin;
+        bool isCreator = msg.sender == dao.coreConfig().creator;
         uint256 vaultId = dao.addressToVaultId(msg.sender);
 
         if (vaultId > 0) {
@@ -719,7 +719,7 @@ contract Voting is IVoting {
     }
 
     function _onlyAdmin() internal view {
-        require(msg.sender == dao.admin(), NotAdmin());
+        require(msg.sender == dao.coreConfig().admin, NotAdmin());
     }
 
     function _onlyDAO() internal view {
@@ -731,8 +731,8 @@ contract Voting is IVoting {
     }
 
     function _onlyAdminOrCreatorOrParticipant() internal view {
-        bool isAdminUser = msg.sender == dao.admin();
-        bool isCreator = msg.sender == dao.creator();
+        bool isAdminUser = msg.sender == dao.coreConfig().admin;
+        bool isCreator = msg.sender == dao.coreConfig().creator;
         uint256 vaultId = dao.addressToVaultId(msg.sender);
         bool isParticipant = vaultId > 0;
 

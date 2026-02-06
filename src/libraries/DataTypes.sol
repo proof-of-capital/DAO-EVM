@@ -441,6 +441,22 @@ library DataTypes {
     // STORAGE STRUCTURES FOR LIBRARIES
     // ============================================
 
+    /// @notice Core config fields (value types) so libraries can write via storage ref
+    struct CoreConfig {
+        address admin;
+        address votingContract;
+        address launchToken;
+        address mainCollateral;
+        address priceOracle;
+        address creator;
+        uint256 creatorInfraPercent;
+        LPTokenType primaryLPTokenType;
+        address pendingUpgradeFromVoting;
+        uint256 pendingUpgradeFromVotingTimestamp;
+        address pendingUpgradeFromCreator;
+        bool isVetoToCreator;
+    }
+
     /// @notice Storage structure for Vault management
     struct VaultStorage {
         mapping(uint256 => Vault) vaults;

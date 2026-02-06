@@ -76,9 +76,7 @@ library POCLibrary {
     /// @param accountedBalance Mapping of accounted balances
     /// @param availableRouterByAdmin Mapping of available routers
     /// @param sellableCollaterals Mapping of sellable collaterals
-    /// @param priceOracle Price oracle for asset prices
-    /// @param mainCollateral Main collateral token address
-    /// @param launchToken Launch token address
+    /// @param coreConfig DAO core config (mainCollateral, launchToken, priceOracle)
     /// @param totalCollectedMainCollateral Total collected main collateral
     /// @param params POC exchange parameters (pocIdx, amount, router, swapType)
     /// @param swapData Encoded swap parameters
@@ -89,9 +87,7 @@ library POCLibrary {
         mapping(address => uint256) storage accountedBalance,
         mapping(address => bool) storage availableRouterByAdmin,
         mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
-        IPriceOracle priceOracle,
-        address mainCollateral,
-        address launchToken,
+        DataTypes.CoreConfig storage coreConfig,
         uint256 totalCollectedMainCollateral,
         DataTypes.POCExchangeParams memory params,
         bytes calldata swapData
@@ -114,23 +110,31 @@ library POCLibrary {
 
         uint256 collateralAmount;
 
-        if (poc.collateralToken == mainCollateral) {
+        if (poc.collateralToken == coreConfig.mainCollateral) {
             collateralAmount = collateralAmountForPOC;
         } else {
             require(params.router != address(0), InvalidAddress());
             require(availableRouterByAdmin[params.router], RouterNotAvailable());
 
-            uint256 mainCollateralPrice = OracleLibrary.getOraclePrice(priceOracle, sellableCollaterals, mainCollateral);
-            uint256 collateralPrice = priceOracle.getAssetPrice(poc.collateralToken);
+            uint256 mainCollateralPrice = OracleLibrary.getOraclePrice(
+                IPriceOracle(coreConfig.priceOracle), sellableCollaterals, coreConfig.mainCollateral
+            );
+            uint256 collateralPrice = IPriceOracle(coreConfig.priceOracle).getAssetPrice(poc.collateralToken);
 
             uint256 expectedCollateral = (collateralAmountForPOC * mainCollateralPrice) / collateralPrice;
 
-            IERC20(mainCollateral).safeIncreaseAllowance(params.router, collateralAmountForPOC);
+            IERC20(coreConfig.mainCollateral).safeIncreaseAllowance(params.router, collateralAmountForPOC);
 
             uint256 balanceBefore = IERC20(poc.collateralToken).balanceOf(address(this));
 
             SwapLibrary.executeSwap(
-                params.router, params.swapType, swapData, mainCollateral, poc.collateralToken, collateralAmountForPOC, 0
+                params.router,
+                params.swapType,
+                swapData,
+                coreConfig.mainCollateral,
+                poc.collateralToken,
+                collateralAmountForPOC,
+                0
             );
 
             uint256 balanceAfter = IERC20(poc.collateralToken).balanceOf(address(this));
@@ -142,11 +146,11 @@ library POCLibrary {
 
         IERC20(poc.collateralToken).safeIncreaseAllowance(poc.pocContract, collateralAmount);
 
-        uint256 launchBalanceBefore = IERC20(launchToken).balanceOf(address(this));
+        uint256 launchBalanceBefore = IERC20(coreConfig.launchToken).balanceOf(address(this));
 
         IProofOfCapital(poc.pocContract).buyLaunchTokens(collateralAmount);
 
-        uint256 launchBalanceAfter = IERC20(launchToken).balanceOf(address(this));
+        uint256 launchBalanceAfter = IERC20(coreConfig.launchToken).balanceOf(address(this));
         launchReceived = launchBalanceAfter - launchBalanceBefore;
 
         poc.exchangedAmount += collateralAmountForPOC;
@@ -157,7 +161,7 @@ library POCLibrary {
 
         pocContracts[params.pocIdx] = poc;
 
-        accountedBalance[launchToken] += launchReceived;
+        accountedBalance[coreConfig.launchToken] += launchReceived;
 
         emit POCExchangeCompleted(
             params.pocIdx, poc.pocContract, collateralAmountForPOC, collateralAmount, launchReceived

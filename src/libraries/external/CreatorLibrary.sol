@@ -37,8 +37,7 @@ library CreatorLibrary {
     /// @param exitQueueStorage Exit queue storage structure
     /// @param fundraisingConfig Fundraising configuration
     /// @param accountedBalance Accounted balance mapping
-    /// @param launchToken Launch token address
-    /// @param creator Creator address
+    /// @param coreConfig DAO core config (launchToken, creator)
     /// @param totalSharesSupply Total shares supply
     /// @param launchAmount Amount of launch tokens to allocate
     function executeAllocateLaunchesToCreator(
@@ -46,19 +45,20 @@ library CreatorLibrary {
         DataTypes.ExitQueueStorage storage exitQueueStorage,
         DataTypes.FundraisingConfig storage fundraisingConfig,
         mapping(address => uint256) storage accountedBalance,
-        address launchToken,
-        address creator,
+        DataTypes.CoreConfig storage coreConfig,
         uint256 totalSharesSupply,
         uint256 launchAmount
     ) external {
         require(block.timestamp >= daoState.lastCreatorAllocation + Constants.ALLOCATION_PERIOD, AllocationTooSoon());
         require(launchAmount > 0, AmountMustBeGreaterThanZero());
 
-        uint256 maxAllocation =
-            (accountedBalance[launchToken] * Constants.MAX_CREATOR_ALLOCATION_PERCENT) / Constants.BASIS_POINTS;
+        uint256 maxAllocation = (accountedBalance[coreConfig.launchToken] * Constants.MAX_CREATOR_ALLOCATION_PERCENT)
+            / Constants.BASIS_POINTS;
         require(launchAmount <= maxAllocation, ExceedsMaxAllocation());
 
         require(fundraisingConfig.sharePrice > 0, InvalidSharePrice());
+        address launchToken = coreConfig.launchToken;
+        address creator = coreConfig.creator;
         uint256 sharesEquivalent = (launchAmount * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
 
         require(totalSharesSupply > 0, NoShares());
@@ -90,8 +90,8 @@ library CreatorLibrary {
         bool isQueueEmpty = ExitQueueValidationLibrary.isExitQueueEmpty(exitQueueStorage);
 
         if (isQueueEmpty) {
-            IERC20(launchToken).safeTransfer(creator, launchAmount);
-            accountedBalance[launchToken] -= launchAmount;
+            IERC20(coreConfig.launchToken).safeTransfer(coreConfig.creator, launchAmount);
+            accountedBalance[coreConfig.launchToken] -= launchAmount;
         } else {
             daoState.pendingExitQueuePayment += launchAmount;
         }

@@ -357,13 +357,7 @@ interface IDAO {
     // These are declared here for interface compatibility
 
     // Core state
-    function admin() external view returns (address);
-    function votingContract() external view returns (address);
-    function launchToken() external view returns (IERC20);
-    function mainCollateral() external view returns (address);
-    function creator() external view returns (address);
-    function creatorInfraPercent() external view returns (uint256);
-    function isVetoToCreator() external view returns (bool);
+    function coreConfig() external view returns (DataTypes.CoreConfig memory);
     function getDaoState() external view returns (DataTypes.DAOState memory);
     function waitingForLPStartedAt() external view returns (uint256);
 
@@ -415,7 +409,6 @@ interface IDAO {
     function v3LPPositions(uint256) external view returns (DataTypes.V3LPPositionInfo memory);
     function v3TokenIdToIndex(uint256) external view returns (uint256);
     function v3PositionManager() external view returns (address);
-    function primaryLPTokenType() external view returns (DataTypes.LPTokenType);
     function v3LastLPDistribution(uint256) external view returns (uint256);
     function v3LPTokenAddedAt(uint256) external view returns (uint256);
 

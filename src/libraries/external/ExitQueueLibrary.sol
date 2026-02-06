@@ -473,8 +473,7 @@ library ExitQueueLibrary {
     /// @param allowedExitTokens Global mapping of allowed exit tokens
     /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
     /// @param amount Amount of launch tokens to use for processing exit queue
-    /// @param launchTokenAddress Address of launch token
-    /// @param creator Address of creator to receive remaining funds
+    /// @param coreConfig DAO core config (launchToken, creator)
     /// @param getOraclePrice Function to get token price in USD
     /// @return newTotalSharesSupply Updated total shares supply
     function processPendingExitQueuePayment(
@@ -486,8 +485,7 @@ library ExitQueueLibrary {
         mapping(address => bool) storage allowedExitTokens,
         mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens,
         uint256 amount,
-        address launchTokenAddress,
-        address creator,
+        DataTypes.CoreConfig storage coreConfig,
         function(address) external returns (uint256) getOraclePrice
     ) external returns (uint256 newTotalSharesSupply) {
         uint256 amountToUse = amount;
@@ -504,8 +502,8 @@ library ExitQueueLibrary {
             fundraisingConfig,
             vaultStorage.totalSharesSupply,
             amountToUse,
-            launchTokenAddress,
-            launchTokenAddress,
+            coreConfig.launchToken,
+            coreConfig.launchToken,
             getOraclePrice,
             allowedExitTokens,
             vaultAllowedExitTokens
@@ -522,7 +520,7 @@ library ExitQueueLibrary {
         if (queueEmpty && daoState.pendingExitQueuePayment > 0) {
             uint256 remainingForCreator = daoState.pendingExitQueuePayment;
             daoState.pendingExitQueuePayment = 0;
-            IERC20(launchTokenAddress).safeTransfer(creator, remainingForCreator);
+            IERC20(coreConfig.launchToken).safeTransfer(coreConfig.creator, remainingForCreator);
         }
     }
 

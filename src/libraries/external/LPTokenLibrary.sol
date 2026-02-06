@@ -67,8 +67,6 @@ library LPTokenLibrary {
         uint256 amount1;
         uint256 amount0Min;
         uint256 amount1Min;
-        IPriceOracle priceOracle;
-        address launchToken;
     }
 
     /// @notice Provide V2 LP tokens
@@ -272,6 +270,7 @@ library LPTokenLibrary {
         mapping(address => uint256) storage accountedBalance,
         address lpToken,
         AddLiquidityBackParams memory p,
+        DataTypes.CoreConfig storage coreConfig,
         mapping(address => bool) storage availableRouterByAdmin,
         DataTypes.PricePathsStorage storage pricePathsStorage
     ) external {
@@ -308,7 +307,10 @@ library LPTokenLibrary {
         info.returnedToken1 += used1;
         _clearDepegIfRestored(lpTokenStorage, lpToken, 0, DataTypes.LPTokenType.V2);
         OracleLibrary.validatePoolPriceWithOracle(
-            p.priceOracle, pricePathsStorage, p.launchToken, p.priceOracle.getAssetPrice(p.launchToken)
+            IPriceOracle(coreConfig.priceOracle),
+            pricePathsStorage,
+            coreConfig.launchToken,
+            IPriceOracle(coreConfig.priceOracle).getAssetPrice(coreConfig.launchToken)
         );
     }
 
@@ -318,6 +320,7 @@ library LPTokenLibrary {
         mapping(address => uint256) storage accountedBalance,
         uint256 tokenId,
         AddLiquidityBackParams memory p,
+        DataTypes.CoreConfig storage coreConfig,
         DataTypes.PricePathsStorage storage pricePathsStorage
     ) external {
         require(tokenId != 0, InvalidAddress());
@@ -358,7 +361,10 @@ library LPTokenLibrary {
         info.returnedToken1 += used1;
         _clearDepegIfRestored(lpTokenStorage, address(0), tokenId, DataTypes.LPTokenType.V3);
         OracleLibrary.validatePoolPriceWithOracle(
-            p.priceOracle, pricePathsStorage, p.launchToken, p.priceOracle.getAssetPrice(p.launchToken)
+            IPriceOracle(coreConfig.priceOracle),
+            pricePathsStorage,
+            coreConfig.launchToken,
+            IPriceOracle(coreConfig.priceOracle).getAssetPrice(coreConfig.launchToken)
         );
     }
 

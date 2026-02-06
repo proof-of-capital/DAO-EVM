@@ -194,6 +194,8 @@ library VaultLibrary {
         address delegate,
         address votingContract
     ) external {
+        require(msg.sender == votingContract, OnlyVotingContract());
+        require(votingContract != address(0), InvalidAddress());
         require(userAddress != address(0), InvalidAddress());
 
         uint256 vaultId = vaultStorage.addressToVaultId[userAddress];

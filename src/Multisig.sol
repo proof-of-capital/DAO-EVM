@@ -769,7 +769,7 @@ contract Multisig is IMultisig {
         }
 
         if (hasVetoContract) {
-            require(!dao.isVetoToCreator(), InvalidDAOStage());
+            require(!dao.coreConfig().isVetoToCreator, InvalidDAOStage());
             DataTypes.DAOState memory daoState = dao.getDaoState();
             require(
                 daoState.currentStage == DataTypes.Stage.Active || daoState.currentStage == DataTypes.Stage.Dissolved,
@@ -795,7 +795,7 @@ contract Multisig is IMultisig {
         IERC20 collateralToken = IERC20(collateral);
         require(collateralToken.balanceOf(address(this)) >= collateralBalance, InsufficientBalance());
 
-        address mainCollateral = dao.mainCollateral();
+        address mainCollateral = dao.coreConfig().mainCollateral;
 
         uint256 collateralPrice = _getChainlinkPrice(collateralInfo.priceFeed);
 
@@ -830,15 +830,15 @@ contract Multisig is IMultisig {
         uint256 mainCollateralBalance = IERC20(mainCollateral).balanceOf(address(this));
 
         if (mainCollateralBalance >= targetCollateralAmount) {
-            address launchToken = address(dao.launchToken());
+            address launchToken = dao.coreConfig().launchToken;
             uint256 launchBalance = IERC20(launchToken).balanceOf(address(this));
             _createUniswapV3LPInternal(launchBalance, targetCollateralAmount);
         }
     }
 
     function _createUniswapV3LPInternal(uint256 amount0Desired, uint256 amount1Desired) internal {
-        address token0 = address(dao.launchToken());
-        address token1 = dao.mainCollateral();
+        address token0 = dao.coreConfig().launchToken;
+        address token1 = dao.coreConfig().mainCollateral;
 
         IERC20(token0).approve(uniswapV3PositionManager, amount0Desired);
         IERC20(token1).approve(uniswapV3PositionManager, amount1Desired);
