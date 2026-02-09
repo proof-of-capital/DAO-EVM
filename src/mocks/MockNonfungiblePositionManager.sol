@@ -38,25 +38,17 @@ contract MockNonfungiblePositionManager is ERC721Enumerable, INonfungiblePositio
         external
         pure
         override
-        returns (
-            uint96,
-            address,
-            address,
-            address,
-            uint24,
-            int24,
-            int24,
-            uint128,
-            uint256,
-            uint256,
-            uint128,
-            uint128
-        )
+        returns (uint96, address, address, address, uint24, int24, int24, uint128, uint256, uint256, uint128, uint128)
     {
         revert("MockNFT: not implemented");
     }
 
-    function increaseLiquidity(IncreaseLiquidityParams calldata) external payable override returns (uint128, uint256, uint256) {
+    function increaseLiquidity(IncreaseLiquidityParams calldata)
+        external
+        payable
+        override
+        returns (uint128, uint256, uint256)
+    {
         revert("MockNFT: not implemented");
     }
 
@@ -72,12 +64,12 @@ contract MockNonfungiblePositionManager is ERC721Enumerable, INonfungiblePositio
         revert("MockNFT: not implemented");
     }
 
-    function createAndInitializePoolIfNecessary(
-        address,
-        address,
-        uint24,
-        uint160
-    ) external payable override returns (address) {
+    function createAndInitializePoolIfNecessary(address, address, uint24, uint160)
+        external
+        payable
+        override
+        returns (address)
+    {
         revert("MockNFT: not implemented");
     }
 

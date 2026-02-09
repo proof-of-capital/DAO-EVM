@@ -29,29 +29,16 @@ contract MockReturnWallet is IReturnWallet {
 
     function returnLaunches(uint256) external override {}
 
-    function exchangeCollateralForLaunch(
-        uint256,
-        address,
-        uint256,
-        uint256
-    ) external override {}
+    function exchangeCollateralForLaunch(uint256, address, uint256, uint256) external override {}
 
-    function exchange(
-        address,
-        uint256,
-        uint256,
-        address,
-        DataTypes.SwapType,
-        bytes calldata
-    ) external override {}
+    function exchange(address, uint256, uint256, address, DataTypes.SwapType, bytes calldata) external override {}
 
-    function getExpectedLaunchAmount(
-        address,
-        uint256,
-        address,
-        DataTypes.SwapType,
-        bytes calldata
-    ) external view override returns (uint256) {
+    function getExpectedLaunchAmount(address, uint256, address, DataTypes.SwapType, bytes calldata)
+        external
+        view
+        override
+        returns (uint256)
+    {
         return _expectedLaunchAmount;
     }
 

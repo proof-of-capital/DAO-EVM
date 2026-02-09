@@ -69,13 +69,7 @@ contract MockPrivateSale is IPrivateSale {
 
     function depositForVesting(uint256) external override {}
 
-    function purchaseTokens(
-        uint256,
-        uint256,
-        address,
-        DataTypes.SwapType,
-        bytes calldata
-    ) external override {}
+    function purchaseTokens(uint256, uint256, address, DataTypes.SwapType, bytes calldata) external override {}
 
     function claimVested() external override {}
 

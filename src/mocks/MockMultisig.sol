@@ -23,14 +23,7 @@ contract MockMultisig is IMultisig {
         dao = IDAO(_dao);
         admin = msg.sender;
         _owner = owner_;
-        _owners.push(
-            IMultisig.Owner({
-                primaryAddr: owner_,
-                backupAddr: owner_,
-                emergencyAddr: owner_,
-                share: 100
-            })
-        );
+        _owners.push(IMultisig.Owner({primaryAddr: owner_, backupAddr: owner_, emergencyAddr: owner_, share: 100}));
         _isPrimaryOwner[owner_] = true;
         _ownerIndex[owner_] = 0;
         multisigStage = MultisigStage.Inactive;

@@ -78,10 +78,7 @@ contract MockDAO is IDAO {
         uint256 depegThresholdMinPrice
     ) external {
         _sellableCollaterals[token] = DataTypes.CollateralInfo({
-            token: tokenAddr,
-            active: active,
-            ratioBps: ratioBps,
-            depegThresholdMinPrice: depegThresholdMinPrice
+            token: tokenAddr, active: active, ratioBps: ratioBps, depegThresholdMinPrice: depegThresholdMinPrice
         });
     }
 
@@ -146,12 +143,7 @@ contract MockDAO is IDAO {
         return p == 0 ? 1e18 : p;
     }
 
-    function sellableCollaterals(address token)
-        external
-        view
-        override
-        returns (address, bool, uint256, uint256)
-    {
+    function sellableCollaterals(address token) external view override returns (address, bool, uint256, uint256) {
         DataTypes.CollateralInfo storage c = _sellableCollaterals[token];
         return (c.token, c.active, c.ratioBps, c.depegThresholdMinPrice);
     }
@@ -227,12 +219,10 @@ contract MockDAO is IDAO {
     }
 
     function v3LPPositions(uint256) external pure override returns (DataTypes.V3LPPositionInfo memory) {
-        return DataTypes.V3LPPositionInfo({
-            positionManager: address(0),
-            tokenId: 0,
-            token0: address(0),
-            token1: address(0)
-        });
+        return
+            DataTypes.V3LPPositionInfo({
+                positionManager: address(0), tokenId: 0, token0: address(0), token1: address(0)
+            });
     }
 
     function v3TokenIdToIndex(uint256) external pure override returns (uint256) {
@@ -323,14 +313,7 @@ contract MockDAO is IDAO {
         revert("MockDAO: not implemented");
     }
 
-    function sell(
-        address,
-        uint256,
-        uint256,
-        address,
-        DataTypes.SwapType,
-        bytes calldata
-    ) external pure override {
+    function sell(address, uint256, uint256, address, DataTypes.SwapType, bytes calldata) external pure override {
         revert("MockDAO: not implemented");
     }
 
@@ -358,13 +341,7 @@ contract MockDAO is IDAO {
         revert("MockDAO: not implemented");
     }
 
-    function exchangeForPOC(
-        uint256,
-        uint256,
-        address,
-        DataTypes.SwapType,
-        bytes calldata
-    ) external pure override {
+    function exchangeForPOC(uint256, uint256, address, DataTypes.SwapType, bytes calldata) external pure override {
         revert("MockDAO: not implemented");
     }
 
@@ -388,24 +365,11 @@ contract MockDAO is IDAO {
         revert("MockDAO: not implemented");
     }
 
-    function addLiquidityBackV2(
-        address,
-        address,
-        uint256,
-        uint256,
-        uint256,
-        uint256
-    ) external pure override {
+    function addLiquidityBackV2(address, address, uint256, uint256, uint256, uint256) external pure override {
         revert("MockDAO: not implemented");
     }
 
-    function addLiquidityBackV3(
-        uint256,
-        uint256,
-        uint256,
-        uint256,
-        uint256
-    ) external pure override {
+    function addLiquidityBackV3(uint256, uint256, uint256, uint256, uint256) external pure override {
         revert("MockDAO: not implemented");
     }
 
