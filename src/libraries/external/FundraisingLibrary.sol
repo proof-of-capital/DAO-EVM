@@ -247,6 +247,30 @@ library FundraisingLibrary {
         emit StageChanged(oldStage, daoState.currentStage);
     }
 
+    /// @notice Apply shares and USD deposit to vault and update delegate voting; caller must have already updated vault fields specific to deposit type.
+    function _applyDepositToVault(
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.DAOState storage daoState,
+        DataTypes.CoreConfig storage coreConfig,
+        uint256 vaultId,
+        DataTypes.Vault memory vault,
+        uint256 shares,
+        uint256 usdDeposit
+    ) internal {
+        vault.shares += shares;
+        vaultStorage.totalSharesSupply += shares;
+        vault.depositedUSD += usdDeposit;
+        daoState.totalDepositedUSD += usdDeposit;
+
+        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares), coreConfig.votingContract);
+
+        uint256 delegateId = vault.delegateId;
+        if (delegateId == 0 || delegateId == vaultId) {
+            vault.votingShares += shares;
+        }
+        vaultStorage.vaults[vaultId] = vault;
+    }
+
     /// @notice Deposit mainCollateral during fundraising stage
     /// @param vaultStorage Vault storage structure
     /// @param daoState DAO state storage
@@ -298,20 +322,9 @@ library FundraisingLibrary {
         entry.depositedMainCollateral += amount;
         participantEntries[vaultId] = entry;
 
-        vault.shares += shares;
-        vaultStorage.totalSharesSupply += shares;
         daoState.totalCollectedMainCollateral += amount;
-        vault.depositedUSD += usdDeposit;
-        daoState.totalDepositedUSD += usdDeposit;
-
-        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares), coreConfig.votingContract);
-
-        uint256 delegateId = vault.delegateId;
-        if (delegateId == 0 || delegateId == vaultId) {
-            vault.votingShares += shares;
-        }
         vault.mainCollateralDeposit += amount;
-        vaultStorage.vaults[vaultId] = vault;
+        _applyDepositToVault(vaultStorage, daoState, coreConfig, vaultId, vault, shares, usdDeposit);
 
         emit FundraisingDeposit(vaultId, msg.sender, amount, shares);
     }
@@ -386,18 +399,7 @@ library FundraisingLibrary {
 
         RewardsCalculationLibrary.updateVaultRewards(vaultStorage, rewardsStorage, lpTokenStorage, vaultId);
 
-        vault.shares += shares;
-        vaultStorage.totalSharesSupply += shares;
-        vault.depositedUSD += usdDeposit;
-        daoState.totalDepositedUSD += usdDeposit;
-
-        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares), coreConfig.votingContract);
-
-        uint256 delegateId = vault.delegateId;
-        if (delegateId == 0 || delegateId == vaultId) {
-            vault.votingShares += shares;
-        }
-        vaultStorage.vaults[vaultId] = vault;
+        _applyDepositToVault(vaultStorage, daoState, coreConfig, vaultId, vault, shares, usdDeposit);
 
         accountedBalance[coreConfig.launchToken] += launchAmount;
 
