@@ -8,91 +8,10 @@ import "forge-std/Test.sol";
 import "../src/ReturnWallet.sol";
 import "../src/RoyaltyWallet.sol";
 import "../src/interfaces/IReturnWallet.sol";
-import "../src/libraries/DataTypes.sol";
 import "../src/libraries/Constants.sol";
 import "../src/mocks/MockERC20.sol";
-
-contract MockDAOForReturnWallet {
-    address public caller;
-    uint256 public launchPrice = 1e18;
-    uint256 public pocCount;
-    mapping(uint256 => DataTypes.POCInfo) public pocContracts;
-
-    function setLaunchPrice(uint256 p) external {
-        launchPrice = p;
-    }
-
-    function setPocCount(uint256 n) external {
-        pocCount = n;
-    }
-
-    function getLaunchPriceFromDAO() external view returns (uint256) {
-        return launchPrice;
-    }
-
-    function getPOCContractsCount() external view returns (uint256) {
-        return pocCount;
-    }
-
-    function getPOCContract(uint256 i) external view returns (DataTypes.POCInfo memory) {
-        return pocContracts[i];
-    }
-
-    function coreConfig() external pure returns (DataTypes.CoreConfig memory) {
-        return DataTypes.CoreConfig({
-            admin: address(0),
-            votingContract: address(0),
-            launchToken: address(0),
-            mainCollateral: address(0),
-            priceOracle: address(0),
-            creator: address(0),
-            creatorInfraPercent: 0,
-            primaryLPTokenType: DataTypes.LPTokenType.V2,
-            pendingUpgradeFromVoting: address(0),
-            pendingUpgradeFromVotingTimestamp: 0,
-            pendingUpgradeFromCreator: address(0),
-            isVetoToCreator: false
-        });
-    }
-
-    function getDaoState() external pure returns (DataTypes.DAOState memory) {
-        return DataTypes.DAOState({
-            currentStage: DataTypes.Stage.Active,
-            royaltyRecipient: address(0),
-            royaltyPercent: 0,
-            creator: address(0),
-            creatorProfitPercent: 0,
-            totalCollectedMainCollateral: 0,
-            lastCreatorAllocation: 0,
-            totalExitQueueShares: 0,
-            totalDepositedUSD: 0,
-            lastPOCReturn: 0,
-            pendingExitQueuePayment: 0,
-            marketMaker: address(0),
-            privateSaleContract: address(0)
-        });
-    }
-
-    function sellableCollaterals(address) external pure returns (address, bool, uint256, uint256) {
-        return (address(0), false, 0, 0);
-    }
-
-    function pocIndex(address) external pure returns (uint256) {
-        return 0;
-    }
-}
-
-contract MockOracle {
-    mapping(address => uint256) public prices;
-
-    function setPrice(address asset, uint256 price) external {
-        prices[asset] = price;
-    }
-
-    function getAssetPrice(address asset) external view returns (uint256) {
-        return prices[asset];
-    }
-}
+import "../src/mocks/MockDAO.sol";
+import "../src/mocks/MockPriceOracle.sol";
 
 contract RoyaltyHolder {
     IERC20 public token;
@@ -113,8 +32,8 @@ contract RoyaltyHolder {
 contract ReturnWalletRoyaltyTest is Test {
     ReturnWallet public returnWallet;
     RoyaltyWallet public royaltyWallet;
-    MockDAOForReturnWallet public dao;
-    MockOracle public oracle;
+    MockDAO public dao;
+    MockPriceOracle public oracle;
     MockERC20 public launchToken;
     RoyaltyHolder public royaltyHolder;
 
@@ -124,16 +43,16 @@ contract ReturnWalletRoyaltyTest is Test {
 
     function setUp() public {
         admin = makeAddr("admin");
-        daoAddress = address(new MockDAOForReturnWallet());
-        dao = MockDAOForReturnWallet(daoAddress);
+        dao = new MockDAO();
+        daoAddress = address(dao);
         dao.setLaunchPrice(1e18);
         dao.setPocCount(0);
 
         launchToken = new MockERC20("Launch", "LAUNCH", 18);
         launchToken.mint(address(this), 1000e18);
 
-        oracle = new MockOracle();
-        oracle.setPrice(address(launchToken), 1e18);
+        oracle = new MockPriceOracle();
+        oracle.setAssetPrice(address(launchToken), 1e18);
         priceOracle = address(oracle);
 
         returnWallet = new ReturnWallet(daoAddress, address(launchToken), admin, priceOracle);
@@ -214,8 +133,8 @@ contract TargetThatSendsToken {
 
 contract RoyaltyWalletPriceCheckTest is Test {
     RoyaltyWallet public royaltyWallet;
-    MockDAOForReturnWallet public dao;
-    MockOracle public oracle;
+    MockDAO public dao;
+    MockPriceOracle public oracle;
     MockERC20 public launchToken;
     MockERC20 public tokenIn;
     TargetThatSendsToken public target;
@@ -227,16 +146,16 @@ contract RoyaltyWalletPriceCheckTest is Test {
     function setUp() public {
         adminDAO = makeAddr("adminDAO");
         admin = makeAddr("admin");
-        dao = new MockDAOForReturnWallet();
+        dao = new MockDAO();
         dao.setLaunchPrice(1e18);
-        oracle = new MockOracle();
+        oracle = new MockPriceOracle();
         priceOracleAddr = address(oracle);
         launchToken = new MockERC20("Launch", "LAUNCH", 18);
         tokenIn = new MockERC20("TokenIn", "TIN", 18);
         tokenIn.mint(address(this), 1000e18);
         launchToken.mint(address(this), 1000e18);
-        oracle.setPrice(address(tokenIn), 2e18);
-        oracle.setPrice(address(launchToken), 1e18);
+        oracle.setAssetPrice(address(tokenIn), 2e18);
+        oracle.setAssetPrice(address(launchToken), 1e18);
 
         royaltyWallet = new RoyaltyWallet(adminDAO, admin, address(dao), priceOracleAddr, address(launchToken));
 

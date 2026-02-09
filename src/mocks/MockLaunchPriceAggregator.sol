@@ -3,9 +3,9 @@ pragma solidity ^0.8.33;
 
 import "../interfaces/IAggregatorV3.sol";
 
-/// @title MockChainlinkAggregator
-/// @notice Mock Chainlink price feed for testing
-contract MockChainlinkAggregator is IAggregatorV3 {
+/// @title MockLaunchPriceAggregator
+/// @notice IAggregatorV3 with configurable price for testing (no DAO dependency)
+contract MockLaunchPriceAggregator is IAggregatorV3 {
     uint8 private _decimals;
     int256 private _price;
 
@@ -14,20 +14,20 @@ contract MockChainlinkAggregator is IAggregatorV3 {
         _price = initialPrice;
     }
 
-    function decimals() external view returns (uint8) {
+    function setPrice(int256 newPrice) external {
+        _price = newPrice;
+    }
+
+    function decimals() external view override returns (uint8) {
         return _decimals;
     }
 
     function latestRoundData()
         external
         view
+        override
         returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
     {
         return (1, _price, block.timestamp, block.timestamp, 1);
     }
-
-    function setPrice(int256 newPrice) external {
-        _price = newPrice;
-    }
 }
-
