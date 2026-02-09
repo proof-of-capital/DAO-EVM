@@ -240,7 +240,7 @@ library VaultLibrary {
         emit DelegateUpdated(vaultId, oldDelegateId, newDelegateId, block.timestamp);
     }
 
-    /// @notice Update voting shares for delegate when vault shares change
+    /// @notice Update voting shares for delegate when vault shares change; updates vault in storage
     /// @param vaultStorage Vault storage structure
     /// @param vaultId Vault ID whose shares changed
     /// @param sharesDelta Change in shares (positive for increase, negative for decrease)

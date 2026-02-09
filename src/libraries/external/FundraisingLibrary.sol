@@ -306,6 +306,10 @@ library FundraisingLibrary {
 
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares), coreConfig.votingContract);
 
+        uint256 delegateId = vault.delegateId;
+        if (delegateId == 0 || delegateId == vaultId) {
+            vault.votingShares += shares;
+        }
         vault.mainCollateralDeposit += amount;
         vaultStorage.vaults[vaultId] = vault;
 
@@ -388,6 +392,11 @@ library FundraisingLibrary {
         daoState.totalDepositedUSD += usdDeposit;
 
         VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(shares), coreConfig.votingContract);
+
+        uint256 delegateId = vault.delegateId;
+        if (delegateId == 0 || delegateId == vaultId) {
+            vault.votingShares += shares;
+        }
         vaultStorage.vaults[vaultId] = vault;
 
         accountedBalance[coreConfig.launchToken] += launchAmount;

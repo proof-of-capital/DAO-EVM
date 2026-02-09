@@ -11,6 +11,7 @@ contract MockProofOfCapital is IProofOfCapital {
     IERC20 private _launchToken;
     bool private _active;
     uint256 private _launchBalance;
+    uint256 private _currentPrice;
 
     constructor(address collateralToken_, address launchToken_) {
         _collateralToken = IERC20(collateralToken_);
@@ -24,6 +25,10 @@ contract MockProofOfCapital is IProofOfCapital {
 
     function setLaunchBalance(uint256 amount) external {
         _launchBalance = amount;
+    }
+
+    function setCurrentPrice(uint256 price) external {
+        _currentPrice = price;
     }
 
     function extendLock(uint256) external override {}
@@ -98,8 +103,8 @@ contract MockProofOfCapital is IProofOfCapital {
         return 0;
     }
 
-    function currentPrice() external pure override returns (uint256) {
-        return 0;
+    function currentPrice() external view override returns (uint256) {
+        return _currentPrice;
     }
 
     function quantityLaunchPerLevel() external pure override returns (uint256) {
