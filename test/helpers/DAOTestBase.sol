@@ -76,7 +76,7 @@ abstract contract DAOTestBase is Test {
         poc.setCurrentPrice(LAUNCH_PRICE);
     }
 
-    function _deployDAO() internal {
+    function _deployDAO() internal virtual {
         Voting _voting = new Voting();
 
         DataTypes.POCConstructorParams[] memory pocParams = new DataTypes.POCConstructorParams[](1);
