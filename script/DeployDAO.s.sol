@@ -32,6 +32,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Script.sol";
 import "../src/DAO.sol";
 import "../src/Voting.sol";
+import "../src/RoyaltyWallet.sol";
 import "../src/libraries/DataTypes.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
@@ -49,7 +50,10 @@ contract DeployDAO is Script {
         // Fundraising parameters (with defaults)
         uint256 creatorProfitPercent = vm.envOr("CREATOR_PROFIT_PERCENT", uint256(4000)); // 40%
         uint256 creatorInfraPercent = vm.envOr("CREATOR_INFRA_PERCENT", uint256(1000)); // 10%
-        address royaltyRecipient = vm.envOr("ROYALTY_RECIPIENT", address(0)); // Royalty recipient (e.g., POC1)
+        address royaltyRecipient = vm.envOr("ROYALTY_RECIPIENT", address(0)); // Royalty recipient (e.g., POC1); if DEPLOY_ROYALTY_WALLET and zero, deployer is used so they can set RoyaltyWallet later
+        if (vm.envOr("DEPLOY_ROYALTY_WALLET", false) && royaltyRecipient == address(0)) {
+            royaltyRecipient = vm.addr(deployerPrivateKey);
+        }
         uint256 royaltyPercent = vm.envOr("ROYALTY_PERCENT", uint256(1000)); // 10% royalty
         uint256 minDeposit = vm.envOr("MIN_DEPOSIT_USD", uint256(1000e18)); // $1000
         uint256 minLaunchDeposit = vm.envOr("MIN_LAUNCH_DEPOSIT", uint256(10000e18)); // 10k launches minimum
@@ -175,6 +179,15 @@ contract DeployDAO is Script {
         // Set DAO in Voting contract (only deployer, only once)
         voting.setDAO(address(dao));
         console.log("DAO set in Voting contract");
+
+        if (vm.envOr("DEPLOY_ROYALTY_WALLET", false)) {
+            address royaltyAdminDAO = vm.envAddress("ROYALTY_ADMIN_DAO");
+            address royaltyAdmin = vm.envOr("ROYALTY_ADMIN", address(0));
+            RoyaltyWallet royaltyWallet =
+                new RoyaltyWallet(royaltyAdminDAO, royaltyAdmin, address(dao), priceOracleAddress, launchTokenAddress);
+            console.log("RoyaltyWallet deployed at:", address(royaltyWallet));
+            dao.setRoyaltyRecipient(address(royaltyWallet));
+        }
 
         // Log configuration
         if (collateralTokens.length > 0) {

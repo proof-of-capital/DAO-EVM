@@ -13,6 +13,7 @@ pragma solidity ^0.8.33;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IReturnWallet.sol";
+import "./interfaces/IERC20Burnable.sol";
 import "./interfaces/IPriceOracle.sol";
 import "./interfaces/IDAO.sol";
 import "./interfaces/IProofOfCapital.sol";
@@ -33,6 +34,7 @@ contract ReturnWallet is IReturnWallet {
     address public priceOracle;
 
     mapping(address => bool) public trustedRouters;
+    mapping(address => bool) public blacklistedRoyalty;
 
     modifier onlyDAO() {
         require(msg.sender == address(dao), Unauthorized());
@@ -57,12 +59,47 @@ contract ReturnWallet is IReturnWallet {
     /// @inheritdoc IReturnWallet
     function returnLaunches(uint256 amount) external {
         require(amount > 0, InvalidAddress());
+        (uint256 distributed, uint256 activePocCount) = _returnLaunches(amount);
+        emit LaunchesReturned(distributed, activePocCount);
+    }
 
+    function setRoyaltyBlacklisted(address royalty, bool value) external onlyDAO {
+        require(royalty != address(0), InvalidAddress());
+        blacklistedRoyalty[royalty] = value;
+        emit RoyaltyBlacklistSet(royalty, value);
+    }
+
+    /// @notice Pull launch tokens from a royalty contract and return them to POC in shares
+    /// @param royalty Royalty contract address (must have approved this contract; must not be blacklisted)
+    /// @param amount Amount of launch tokens to pull and return
+    function pullLaunchFromRoyaltyAndReturn(address royalty, uint256 amount) external onlyAdmin {
+        require(royalty != address(0), InvalidAddress());
+        require(amount > 0, InvalidAddress());
+        require(!blacklistedRoyalty[royalty], RoyaltyBlacklisted());
+        launchToken.safeTransferFrom(royalty, address(this), amount);
+        (uint256 distributed, uint256 activePocCount) = _returnLaunches(amount);
+        emit LaunchesReturned(distributed, activePocCount);
+        emit LaunchPulledFromRoyalty(royalty, amount);
+    }
+
+    /// @notice Burn launch tokens held by a blacklisted royalty contract (anyone may call)
+    /// @param royalty Blacklisted royalty contract address
+    /// @param amount Amount of launch tokens to pull and burn
+    function burnBlacklistedRoyaltyLaunch(address royalty, uint256 amount) external {
+        require(royalty != address(0), InvalidAddress());
+        require(amount > 0, InvalidAddress());
+        require(blacklistedRoyalty[royalty], RoyaltyNotBlacklisted());
+        launchToken.safeTransferFrom(royalty, address(this), amount);
+        IERC20Burnable(address(launchToken)).burn(amount);
+        emit RoyaltyLaunchBurned(royalty, amount, msg.sender);
+    }
+
+    function _returnLaunches(uint256 amount) internal returns (uint256 distributed, uint256 activePocCount) {
         uint256 pocCount = dao.getPOCContractsCount();
         require(pocCount > 0, InvalidAddress());
 
         uint256 totalActiveSharePercent = 0;
-        uint256 activePocCount = 0;
+        activePocCount = 0;
 
         for (uint256 i = 0; i < pocCount; ++i) {
             DataTypes.POCInfo memory poc = dao.getPOCContract(i);
@@ -74,7 +111,7 @@ contract ReturnWallet is IReturnWallet {
 
         require(activePocCount > 0, InvalidAddress());
 
-        uint256 distributed = 0;
+        distributed = 0;
 
         for (uint256 i = 0; i < pocCount; ++i) {
             DataTypes.POCInfo memory poc = dao.getPOCContract(i);
@@ -108,8 +145,6 @@ contract ReturnWallet is IReturnWallet {
 
             distributed += pocAmount;
         }
-
-        emit LaunchesReturned(distributed, activePocCount);
     }
 
     /// @inheritdoc IReturnWallet

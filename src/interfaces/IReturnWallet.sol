@@ -25,8 +25,13 @@ interface IReturnWallet {
     error TokenIsCollateral();
     error InvalidPath();
     error InvalidSwapType();
+    error RoyaltyBlacklisted();
+    error RoyaltyNotBlacklisted();
 
     event LaunchesReturned(uint256 amount, uint256 pocCount);
+    event RoyaltyBlacklistSet(address indexed royalty, bool value);
+    event LaunchPulledFromRoyalty(address indexed royalty, uint256 amount);
+    event RoyaltyLaunchBurned(address indexed royalty, uint256 amount, address indexed caller);
     event CollateralExchangedForLaunch(
         uint256 indexed pocIndex, address indexed collateral, uint256 collateralAmount, uint256 launchAmount
     );
@@ -81,4 +86,19 @@ interface IReturnWallet {
         DataTypes.SwapType swapType,
         bytes calldata swapData
     ) external view returns (uint256);
+
+    /// @notice Set royalty blacklist status (only DAO)
+    /// @param royalty Royalty contract address
+    /// @param value True to blacklist, false to remove
+    function setRoyaltyBlacklisted(address royalty, bool value) external;
+
+    /// @notice Pull launch from royalty and return to POC in shares (only admin)
+    /// @param royalty Royalty contract address
+    /// @param amount Amount of launch tokens
+    function pullLaunchFromRoyaltyAndReturn(address royalty, uint256 amount) external;
+
+    /// @notice Burn launch tokens held by blacklisted royalty (anyone)
+    /// @param royalty Blacklisted royalty contract address
+    /// @param amount Amount to burn
+    function burnBlacklistedRoyaltyLaunch(address royalty, uint256 amount) external;
 }
