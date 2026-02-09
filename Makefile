@@ -1,4 +1,4 @@
-.PHONY: all build test clean anvil-local anvil-stop deploy-libraries-step1-local deploy-libraries-step2-local deploy-libraries-local deploy-dao-local deploy-multisig-local deploy-price-oracle-local set-creator-local deploy-private-sale-local deploy-return-wallet-local set-market-maker-local deploy-all-local deploy-libraries-step1-polygon deploy-libraries-step2-polygon deploy-libraries-polygon deploy-dao-polygon deploy-multisig-polygon deploy-price-oracle-polygon set-creator-polygon deploy-private-sale-polygon deploy-return-wallet-polygon set-market-maker-polygon deploy-all-polygon deploy-libraries-step1-bsc deploy-libraries-step2-bsc deploy-libraries-bsc deploy-dao-bsc deploy-multisig-bsc deploy-price-oracle-bsc set-creator-bsc deploy-private-sale-bsc deploy-return-wallet-bsc set-market-maker-bsc deploy-all-bsc deploy-libraries-step1-bsc-testnet deploy-libraries-step2-bsc-testnet deploy-libraries-bsc-testnet deploy-dao-bsc-testnet deploy-multisig-bsc-testnet deploy-price-oracle-bsc-testnet set-creator-bsc-testnet deploy-private-sale-bsc-testnet deploy-return-wallet-bsc-testnet set-market-maker-bsc-testnet deploy-all-bsc-testnet help
+.PHONY: all build test clean anvil-local anvil-stop deploy-libraries-step1-local deploy-libraries-step2-local deploy-libraries-local deploy-dao-local deploy-multisig-local deploy-price-oracle-local set-creator-local set-price-oracle-local deploy-whitelist-oracles-local deploy-private-sale-local deploy-return-wallet-local set-market-maker-local deploy-all-local deploy-libraries-step1-polygon deploy-libraries-step2-polygon deploy-libraries-polygon deploy-dao-polygon deploy-multisig-polygon deploy-price-oracle-polygon set-creator-polygon set-price-oracle-polygon deploy-whitelist-oracles-polygon deploy-private-sale-polygon deploy-return-wallet-polygon set-market-maker-polygon deploy-all-polygon deploy-libraries-step1-bsc deploy-libraries-step2-bsc deploy-libraries-bsc deploy-dao-bsc deploy-multisig-bsc deploy-price-oracle-bsc set-creator-bsc set-price-oracle-bsc deploy-whitelist-oracles-bsc deploy-private-sale-bsc deploy-return-wallet-bsc set-market-maker-bsc deploy-all-bsc deploy-libraries-step1-bsc-testnet deploy-libraries-step2-bsc-testnet deploy-libraries-bsc-testnet deploy-dao-bsc-testnet deploy-multisig-bsc-testnet deploy-price-oracle-bsc-testnet set-creator-bsc-testnet set-price-oracle-bsc-testnet deploy-whitelist-oracles-bsc-testnet deploy-private-sale-bsc-testnet deploy-return-wallet-bsc-testnet set-market-maker-bsc-testnet deploy-all-bsc-testnet help
 
 -include .env
 
@@ -17,6 +17,8 @@ SET_CREATOR_SCRIPT := script/SetCreator.s.sol
 PRIVATE_SALE_SCRIPT := script/DeployPrivateSale.s.sol
 RETURN_WALLET_SCRIPT := script/DeployReturnWallet.s.sol
 SET_MARKET_MAKER_SCRIPT := script/SetMarketMaker.s.sol
+SET_PRICE_ORACLE_SCRIPT := script/SetPriceOracle.s.sol
+WHITELIST_ORACLES_SCRIPT := script/DeployWhitelistOracles.s.sol
 
 # Проверяем наличие файла с адресами библиотек
 ifneq ("$(wildcard ./.library_addresses.env)","")
@@ -58,6 +60,8 @@ help:
 	@echo "  make deploy-multisig-local        - Deploy Multisig"
 	@echo "  make deploy-price-oracle-local    - Deploy PriceOracle"
 	@echo "  make set-creator-local            - Set creator in DAO"
+	@echo "  make set-price-oracle-local       - Set price oracle in DAO"
+	@echo "  make deploy-whitelist-oracles-local - Deploy WhitelistOracles"
 	@echo "  make deploy-private-sale-local   - Deploy PrivateSale"
 	@echo "  make deploy-return-wallet-local   - Deploy ReturnWallet"
 	@echo "  make set-market-maker-local       - Set market maker in DAO"
@@ -71,6 +75,8 @@ help:
 	@echo "  make deploy-multisig-polygon        - Deploy Multisig"
 	@echo "  make deploy-price-oracle-polygon    - Deploy PriceOracle"
 	@echo "  make set-creator-polygon            - Set creator in DAO"
+	@echo "  make set-price-oracle-polygon       - Set price oracle in DAO"
+	@echo "  make deploy-whitelist-oracles-polygon - Deploy WhitelistOracles"
 	@echo "  make deploy-private-sale-polygon   - Deploy PrivateSale"
 	@echo "  make deploy-return-wallet-polygon   - Deploy ReturnWallet"
 	@echo "  make set-market-maker-polygon      - Set market maker in DAO"
@@ -84,6 +90,8 @@ help:
 	@echo "  make deploy-multisig-bsc        - Deploy Multisig"
 	@echo "  make deploy-price-oracle-bsc    - Deploy PriceOracle"
 	@echo "  make set-creator-bsc            - Set creator in DAO"
+	@echo "  make set-price-oracle-bsc       - Set price oracle in DAO"
+	@echo "  make deploy-whitelist-oracles-bsc - Deploy WhitelistOracles"
 	@echo "  make deploy-private-sale-bsc   - Deploy PrivateSale"
 	@echo "  make deploy-return-wallet-bsc   - Deploy ReturnWallet"
 	@echo "  make set-market-maker-bsc      - Set market maker in DAO"
@@ -97,6 +105,8 @@ help:
 	@echo "  make deploy-multisig-bsc-testnet        - Deploy Multisig"
 	@echo "  make deploy-price-oracle-bsc-testnet    - Deploy PriceOracle"
 	@echo "  make set-creator-bsc-testnet            - Set creator in DAO"
+	@echo "  make set-price-oracle-bsc-testnet       - Set price oracle in DAO"
+	@echo "  make deploy-whitelist-oracles-bsc-testnet - Deploy WhitelistOracles"
 	@echo "  make deploy-private-sale-bsc-testnet   - Deploy PrivateSale"
 	@echo "  make deploy-return-wallet-bsc-testnet   - Deploy ReturnWallet"
 	@echo "  make set-market-maker-bsc-testnet      - Set market maker in DAO"
@@ -338,6 +348,44 @@ set-market-maker-local:
 		cat ./.deployment_addresses.env; \
 	fi
 
+set-price-oracle-local:
+	@echo "Setting price oracle in DAO on local network..."
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+		forge script ${SET_PRICE_ORACLE_SCRIPT} \
+			--rpc-url ${LOCAL_RPC_URL} \
+			--private-key ${PRIVATE_KEY} \
+			--broadcast \
+			--ffi \
+			-vvv; \
+	else \
+		echo "Error: ./.deployment_addresses.env not found. Run deploy-dao-local first."; \
+		exit 1; \
+	fi
+
+deploy-whitelist-oracles-local:
+	@echo "Deploying WhitelistOracles to local network..."
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+		forge script ${WHITELIST_ORACLES_SCRIPT} \
+			--rpc-url ${LOCAL_RPC_URL} \
+			--private-key ${PRIVATE_KEY} \
+			--broadcast \
+			--ffi \
+			-vvv; \
+	else \
+		echo "Error: ./.deployment_addresses.env not found. Run deploy-dao-local first."; \
+		exit 1; \
+	fi
+	@if [ -f ./.deployment_addresses.env ]; then \
+		echo "Deployment addresses successfully saved. Contents:"; \
+		cat ./.deployment_addresses.env; \
+	fi
+
 deploy-all-local: deploy-libraries-local
 	@if [ -f ./.library_addresses.env ]; then \
 		set -a; \
@@ -356,13 +404,25 @@ deploy-all-local: deploy-libraries-local
 		. ./.deployment_addresses.env; \
 		set +a; \
 	fi
+	$(MAKE) set-creator-local
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
+	$(MAKE) deploy-whitelist-oracles-local
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
 	$(MAKE) deploy-price-oracle-local
 	@if [ -f ./.deployment_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \
 		set +a; \
 	fi
-	$(MAKE) set-creator-local
+	$(MAKE) set-price-oracle-local
 	@if [ -f ./.deployment_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \
@@ -523,6 +583,44 @@ set-creator-polygon:
 		cat ./.deployment_addresses.env; \
 	fi
 
+set-price-oracle-polygon:
+	@echo "Setting price oracle in DAO on Polygon network..."
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
+	forge script ${SET_PRICE_ORACLE_SCRIPT} \
+		--rpc-url ${POLYGON_RPC} \
+		--private-key ${PRIVATE_KEY} \
+		--broadcast \
+		--verify \
+		--etherscan-api-key ${POLYGONSCAN_API_KEY} \
+		--verifier etherscan \
+		--legacy \
+		-vvv
+
+deploy-whitelist-oracles-polygon:
+	@echo "Deploying WhitelistOracles to Polygon network..."
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
+	forge script ${WHITELIST_ORACLES_SCRIPT} \
+		--rpc-url ${POLYGON_RPC} \
+		--private-key ${PRIVATE_KEY} \
+		--broadcast \
+		--verify \
+		--etherscan-api-key ${POLYGONSCAN_API_KEY} \
+		--verifier etherscan \
+		--legacy \
+		-vvv
+	@if [ -f ./.deployment_addresses.env ]; then \
+		echo "Deployment addresses successfully saved. Contents:"; \
+		cat ./.deployment_addresses.env; \
+	fi
+
 deploy-private-sale-polygon:
 	@echo "Deploying PrivateSale to Polygon network..."
 	@if [ -f ./.deployment_addresses.env ]; then \
@@ -604,13 +702,25 @@ deploy-all-polygon: deploy-libraries-polygon
 		. ./.deployment_addresses.env; \
 		set +a; \
 	fi
+	$(MAKE) set-creator-polygon
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
+	$(MAKE) deploy-whitelist-oracles-polygon
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
 	$(MAKE) deploy-price-oracle-polygon
 	@if [ -f ./.deployment_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \
 		set +a; \
 	fi
-	$(MAKE) set-creator-polygon
+	$(MAKE) set-price-oracle-polygon
 	@if [ -f ./.deployment_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \
@@ -771,6 +881,44 @@ set-creator-bsc:
 		cat ./.deployment_addresses.env; \
 	fi
 
+set-price-oracle-bsc:
+	@echo "Setting price oracle in DAO on BSC network..."
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
+	forge script ${SET_PRICE_ORACLE_SCRIPT} \
+		--rpc-url ${BSC_RPC} \
+		--private-key ${PRIVATE_KEY} \
+		--broadcast \
+		--verify \
+		--etherscan-api-key ${BSCSCAN_API_KEY} \
+		--verifier etherscan \
+		--legacy \
+		-vvv
+
+deploy-whitelist-oracles-bsc:
+	@echo "Deploying WhitelistOracles to BSC network..."
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
+	forge script ${WHITELIST_ORACLES_SCRIPT} \
+		--rpc-url ${BSC_RPC} \
+		--private-key ${PRIVATE_KEY} \
+		--broadcast \
+		--verify \
+		--etherscan-api-key ${BSCSCAN_API_KEY} \
+		--verifier etherscan \
+		--legacy \
+		-vvv
+	@if [ -f ./.deployment_addresses.env ]; then \
+		echo "Deployment addresses successfully saved. Contents:"; \
+		cat ./.deployment_addresses.env; \
+	fi
+
 deploy-private-sale-bsc:
 	@echo "Deploying PrivateSale to BSC network..."
 	@if [ -f ./.deployment_addresses.env ]; then \
@@ -852,13 +1000,25 @@ deploy-all-bsc: deploy-libraries-bsc
 		. ./.deployment_addresses.env; \
 		set +a; \
 	fi
+	$(MAKE) set-creator-bsc
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
+	$(MAKE) deploy-whitelist-oracles-bsc
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
 	$(MAKE) deploy-price-oracle-bsc
 	@if [ -f ./.deployment_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \
 		set +a; \
 	fi
-	$(MAKE) set-creator-bsc
+	$(MAKE) set-price-oracle-bsc
 	@if [ -f ./.deployment_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \
@@ -1019,6 +1179,44 @@ set-creator-bsc-testnet:
 		cat ./.deployment_addresses.env; \
 	fi
 
+set-price-oracle-bsc-testnet:
+	@echo "Setting price oracle in DAO on BSC testnet..."
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
+	forge script ${SET_PRICE_ORACLE_SCRIPT} \
+		--rpc-url ${BSC_TESTNET_RPC} \
+		--private-key ${PRIVATE_KEY} \
+		--broadcast \
+		--verify \
+		--etherscan-api-key ${BSCSCAN_API_KEY} \
+		--verifier etherscan \
+		--legacy \
+		-vvv
+
+deploy-whitelist-oracles-bsc-testnet:
+	@echo "Deploying WhitelistOracles to BSC testnet..."
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
+	forge script ${WHITELIST_ORACLES_SCRIPT} \
+		--rpc-url ${BSC_TESTNET_RPC} \
+		--private-key ${PRIVATE_KEY} \
+		--broadcast \
+		--verify \
+		--etherscan-api-key ${BSCSCAN_API_KEY} \
+		--verifier etherscan \
+		--legacy \
+		-vvv
+	@if [ -f ./.deployment_addresses.env ]; then \
+		echo "Deployment addresses successfully saved. Contents:"; \
+		cat ./.deployment_addresses.env; \
+	fi
+
 deploy-private-sale-bsc-testnet:
 	@echo "Deploying PrivateSale to BSC testnet..."
 	@if [ -f ./.deployment_addresses.env ]; then \
@@ -1100,13 +1298,25 @@ deploy-all-bsc-testnet: deploy-libraries-bsc-testnet
 		. ./.deployment_addresses.env; \
 		set +a; \
 	fi
+	$(MAKE) set-creator-bsc-testnet
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
+	$(MAKE) deploy-whitelist-oracles-bsc-testnet
+	@if [ -f ./.deployment_addresses.env ]; then \
+		set -a; \
+		. ./.deployment_addresses.env; \
+		set +a; \
+	fi
 	$(MAKE) deploy-price-oracle-bsc-testnet
 	@if [ -f ./.deployment_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \
 		set +a; \
 	fi
-	$(MAKE) set-creator-bsc-testnet
+	$(MAKE) set-price-oracle-bsc-testnet
 	@if [ -f ./.deployment_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \

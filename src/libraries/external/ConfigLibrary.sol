@@ -33,6 +33,7 @@ library ConfigLibrary {
     error RouterAlreadyAdded();
     error TokenAlreadyAdded();
     error Unauthorized();
+    error PriceOracleAlreadySet();
 
     event RouterAvailabilityChanged(address indexed router, bool isAvailable);
     event VotingContractSet(address indexed votingContract);
@@ -53,6 +54,7 @@ library ConfigLibrary {
     event PendingUpgradeSetFromCreator(address indexed newImplementation);
     event MarketMakerSet(address indexed marketMaker);
     event PrivateSaleRegistered(address indexed privateSaleContract);
+    event PriceOracleSet(address indexed priceOracle);
 
     function executeInitialize(
         DataTypes.CoreConfig storage _coreConfig,
@@ -81,7 +83,6 @@ library ConfigLibrary {
         require(params.orderbookParams.initialPrice > 0, InvalidInitialPrice());
         require(params.orderbookParams.initialVolume > 0, InvalidVolume());
         require(params.orderbookParams.totalSupply > 0, InvalidVolume());
-        require(params.priceOracle != address(0), InvalidAddress());
 
         _coreConfig.launchToken = params.launchToken;
         _coreConfig.mainCollateral = params.mainCollateral;
@@ -281,5 +282,12 @@ library ConfigLibrary {
         require(_daoState.privateSaleContract == address(0), TokenAlreadyAdded());
         _daoState.privateSaleContract = _privateSaleContract;
         emit PrivateSaleRegistered(_privateSaleContract);
+    }
+
+    function executeSetPriceOracle(DataTypes.CoreConfig storage _coreConfig, address newPriceOracle) external {
+        require(newPriceOracle != address(0), InvalidAddress());
+        require(_coreConfig.priceOracle == address(0), PriceOracleAlreadySet());
+        _coreConfig.priceOracle = newPriceOracle;
+        emit PriceOracleSet(newPriceOracle);
     }
 }

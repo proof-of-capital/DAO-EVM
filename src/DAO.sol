@@ -432,6 +432,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param collateral Collateral token address
     /// @return Price in USD (18 decimals)
     function getCollateralPrice(address collateral) public view returns (uint256) {
+        _requirePriceOracleSet();
         require(sellableCollaterals[collateral].active, CollateralNotActive());
         return IPriceOracle(_coreConfig.priceOracle).getAssetPrice(collateral);
     }
@@ -601,6 +602,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         onlyParticipantOrAdmin
         atActiveOrClosingStage
     {
+        _requirePriceOracleSet();
         LPTokenLibrary.executeDeclareDepegWithCheck(
             lpTokenStorage,
             accountedBalance,
@@ -627,6 +629,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         uint256 amount0Min,
         uint256 amount1Min
     ) external nonReentrant atActiveOrClosingStage {
+        _requirePriceOracleSet();
         LPTokenLibrary.AddLiquidityBackParams memory p = LPTokenLibrary.AddLiquidityBackParams({
             router: router, amount0: amount0, amount1: amount1, amount0Min: amount0Min, amount1Min: amount1Min
         });
@@ -648,6 +651,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         uint256 amount0Min,
         uint256 amount1Min
     ) external nonReentrant atActiveOrClosingStage {
+        _requirePriceOracleSet();
         LPTokenLibrary.AddLiquidityBackParams memory p = LPTokenLibrary.AddLiquidityBackParams({
             router: address(0), amount0: amount0, amount1: amount1, amount0Min: amount0Min, amount1Min: amount1Min
         });
@@ -788,6 +792,10 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         );
     }
 
+    function setPriceOracle(address newPriceOracle) external onlyAdmin {
+        ConfigLibrary.executeSetPriceOracle(_coreConfig, newPriceOracle);
+    }
+
     /// @notice Set market maker address and update all active POC contracts (only admin can call)
     /// @param newMarketMaker New market maker address
     function setMarketMaker(address newMarketMaker) external onlyAdmin {
@@ -853,6 +861,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param token Token address
     /// @return Price in USD (18 decimals)
     function getOraclePrice(address token) external returns (uint256) {
+        _requirePriceOracleSet();
         return OracleLibrary.getPrice(
             IPriceOracle(_coreConfig.priceOracle),
             sellableCollaterals,
@@ -867,12 +876,14 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
     /// @param pocIdx POC index
     /// @return Price in USD (18 decimals)
     function getPOCCollateralPrice(uint256 pocIdx) external view returns (uint256) {
+        _requirePriceOracleSet();
         return POCLibrary.getPOCCollateralPrice(IPriceOracle(_coreConfig.priceOracle), pocContracts, pocIdx);
     }
 
     /// @notice Get weighted average launch token price in USD from active POC contracts (view)
     /// @return Launch price in USD (18 decimals)
     function getLaunchPriceFromDAO() external view returns (uint256) {
+        _requirePriceOracleSet();
         return OracleLibrary.getLaunchPriceView(IPriceOracle(_coreConfig.priceOracle), pocContracts);
     }
 
@@ -1036,6 +1047,10 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     function _onlyAdmin() internal view {
         require(msg.sender == _coreConfig.admin, Unauthorized());
+    }
+
+    function _requirePriceOracleSet() internal view {
+        require(_coreConfig.priceOracle != address(0), PriceOracleNotSet());
     }
 
     function _onlyViaGovernanceExecution() internal view {

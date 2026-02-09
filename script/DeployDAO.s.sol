@@ -107,7 +107,7 @@ contract DeployDAO is Script {
         Voting voting = new Voting();
         console.log("Voting deployed at:", address(voting));
 
-        address priceOracleAddress = vm.envAddress("PRICE_ORACLE_ADDRESS");
+        address priceOracleAddress = vm.envOr("PRICE_ORACLE_ADDRESS", address(0));
 
         DataTypes.LPTokenDepegParams[] memory lpDepegParams;
         if (vm.envOr("ADD_LP_DEPEG_PARAMS", false)) {

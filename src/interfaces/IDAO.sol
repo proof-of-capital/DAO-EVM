@@ -139,6 +139,9 @@ interface IDAO {
     error NoPOCContractsActive();
     error NoDepegCondition();
 
+    error PriceOracleNotSet();
+    error PriceOracleAlreadySet();
+
     // ============================================
     // EVENTS
     // ============================================
@@ -340,6 +343,7 @@ interface IDAO {
     function setAdmin(address newAdmin) external;
     function setIsVetoToCreator(bool value) external;
     function setRoyaltyRecipient(address newRoyaltyRecipient) external;
+    function setPriceOracle(address newPriceOracle) external;
     function setPendingUpgradeFromVoting(address newImplementation) external;
     function pushMultisigExecution(uint256 proposalId, IMultisig.ProposalCall[] calldata calls) external;
 
