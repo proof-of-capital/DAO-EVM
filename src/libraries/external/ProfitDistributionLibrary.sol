@@ -30,6 +30,13 @@ library ProfitDistributionLibrary {
     event CreatorProfitDistributed(address indexed token, address indexed creator, uint256 amount);
     event ProfitDistributed(address indexed token, uint256 amount);
 
+    struct DistributeProfitParams {
+        uint256 totalSharesSupply;
+        address token;
+        address launchToken;
+        uint256 amount;
+    }
+
     /// @notice Distribute unaccounted balance of a token as profit
     /// @param daoState DAO state storage structure
     /// @param rewardsStorage Rewards storage structure
@@ -39,13 +46,10 @@ library ProfitDistributionLibrary {
     /// @param participantEntries Participant entries mapping
     /// @param fundraisingConfig Fundraising config
     /// @param accountedBalance Accounted balance mapping
-    /// @param totalSharesSupply Total shares supply (will be updated)
-    /// @param token Token address to distribute
-    /// @param launchToken Launch token address
+    /// @param params totalSharesSupply, token, launchToken, amount (0 = distribute all unaccounted)
     /// @param getOraclePrice Function to get token price in USD
     /// @param allowedExitTokens Global mapping of allowed exit tokens
     /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
-    /// @param amount Amount to distribute (0 means distribute all unaccounted)
     /// @return newTotalSharesSupply Updated total shares supply
     function executeDistributeProfit(
         DataTypes.DAOState storage daoState,
@@ -56,24 +60,24 @@ library ProfitDistributionLibrary {
         mapping(uint256 => DataTypes.ParticipantEntry) storage participantEntries,
         DataTypes.FundraisingConfig storage fundraisingConfig,
         mapping(address => uint256) storage accountedBalance,
-        uint256 totalSharesSupply,
-        address token,
-        address launchToken,
+        DistributeProfitParams memory params,
         function(address) external returns (uint256) getOraclePrice,
         mapping(address => bool) storage allowedExitTokens,
-        mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens,
-        uint256 amount
+        mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
     ) external returns (uint256 newTotalSharesSupply) {
         require(vaultStorage.totalSharesSupply > 0, NoShares());
-        require(rewardsStorage.rewardTokenInfo[token].active || lpTokenStorage.isV2LPToken[token], TokenNotAdded());
+        require(
+            rewardsStorage.rewardTokenInfo[params.token].active || lpTokenStorage.isV2LPToken[params.token],
+            TokenNotAdded()
+        );
 
-        newTotalSharesSupply = totalSharesSupply;
-        uint256 unaccounted = IERC20(token).balanceOf(address(this)) - accountedBalance[token];
+        newTotalSharesSupply = params.totalSharesSupply;
+        uint256 unaccounted = IERC20(params.token).balanceOf(address(this)) - accountedBalance[params.token];
         if (unaccounted == 0) {
             return newTotalSharesSupply;
         }
 
-        uint256 amountToDistribute = amount == 0 ? unaccounted : amount;
+        uint256 amountToDistribute = params.amount == 0 ? unaccounted : params.amount;
         if (amountToDistribute > unaccounted) {
             amountToDistribute = unaccounted;
         }
@@ -82,8 +86,8 @@ library ProfitDistributionLibrary {
             return newTotalSharesSupply;
         }
 
-        uint256 royaltyShare = distributeRoyaltyShare(daoState, token, amountToDistribute);
-        uint256 creatorShare = distributeCreatorShare(daoState, token, amountToDistribute);
+        uint256 royaltyShare = distributeRoyaltyShare(daoState, params.token, amountToDistribute);
+        uint256 creatorShare = distributeCreatorShare(daoState, params.token, amountToDistribute);
 
         uint256 participantsShare = amountToDistribute - royaltyShare - creatorShare;
         uint256 remainingForParticipants;
@@ -95,19 +99,19 @@ library ProfitDistributionLibrary {
             vaultStorage,
             participantEntries,
             fundraisingConfig,
-            totalSharesSupply,
-            token,
+            params.totalSharesSupply,
+            params.token,
             participantsShare,
-            launchToken,
+            params.launchToken,
             getOraclePrice,
             allowedExitTokens,
             vaultAllowedExitTokens
         );
 
-        accountedBalance[token] += remainingForParticipants;
+        accountedBalance[params.token] += remainingForParticipants;
         vaultStorage.totalSharesSupply = newTotalSharesSupply;
 
-        emit ProfitDistributed(token, amountToDistribute);
+        emit ProfitDistributed(params.token, amountToDistribute);
     }
 
     /// @notice Distribute royalty share

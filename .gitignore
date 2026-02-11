@@ -21,3 +21,5 @@ docs/
 .library_addresses.env
 .deployment_addresses
 .deployment_addresses.env
+coverage/
+lcov.info

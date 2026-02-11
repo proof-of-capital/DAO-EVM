@@ -832,13 +832,15 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             participantEntries,
             fundraisingConfig,
             accountedBalance,
-            vaultStorage.totalSharesSupply,
-            token,
-            _coreConfig.launchToken,
+            ProfitDistributionLibrary.DistributeProfitParams({
+                totalSharesSupply: vaultStorage.totalSharesSupply,
+                token: token,
+                launchToken: _coreConfig.launchToken,
+                amount: amount
+            }),
             this.getOraclePrice,
             allowedExitTokens,
-            vaultStorage.vaultAllowedExitTokens,
-            amount
+            vaultStorage.vaultAllowedExitTokens
         );
     }
 

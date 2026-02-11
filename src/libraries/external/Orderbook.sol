@@ -107,6 +107,15 @@ library Orderbook {
         emit LaunchTokenSold(msg.sender, params.collateral, params.launchTokenAmount, receivedCollateral);
     }
 
+    struct LevelUpdateState {
+        uint256 currentLevel;
+        uint256 currentPrice;
+        uint256 currentBaseVolume;
+        uint256 expectedUsd;
+        uint256 remainingTokens;
+        uint256 soldOnCurrentLevel;
+    }
+
     /// @notice Update current level after selling launch tokens
     /// @dev Calculates expected USD from selling tokens across levels and validates received amount
     /// @param orderbookParams Orderbook parameters from storage (will be updated)
@@ -121,71 +130,65 @@ library Orderbook {
         uint256 totalShares,
         uint256 sharePrice
     ) internal {
-        uint256 proportionalityCoefficient = orderbookParams.proportionalityCoefficient; // in basis points (7500 = 0.75)
-        uint256 totalSupply = orderbookParams.totalSupply; // total supply
-        uint256 priceStepPercent = orderbookParams.priceStepPercent; // in basis points (500 = 5%)
-        int256 volumeStepPercent = orderbookParams.volumeStepPercent; // in basis points (-100 = -1%)
+        uint256 proportionalityCoefficient = orderbookParams.proportionalityCoefficient;
+        uint256 totalSupply = orderbookParams.totalSupply;
+        uint256 priceStepPercent = orderbookParams.priceStepPercent;
+        int256 volumeStepPercent = orderbookParams.volumeStepPercent;
 
-        // Current level state
-        uint256 currentLevel = orderbookParams.currentLevel;
-        uint256 currentPrice = orderbookParams.cachedPriceAtLevel; // price at current level
-        uint256 currentBaseVolume = orderbookParams.cachedBaseVolumeAtLevel; // base volume at current level
+        LevelUpdateState memory state = LevelUpdateState({
+            currentLevel: orderbookParams.currentLevel,
+            currentPrice: orderbookParams.cachedPriceAtLevel,
+            currentBaseVolume: orderbookParams.cachedBaseVolumeAtLevel,
+            expectedUsd: 0,
+            remainingTokens: launchTokenAmount,
+            soldOnCurrentLevel: orderbookParams.currentCumulativeVolume
+        });
 
-        // Track expected USD and remaining tokens to process
-        uint256 expectedUsd = 0;
-        uint256 remainingTokens = launchTokenAmount;
-
-        uint256 soldOnCurrentLevel = orderbookParams.currentCumulativeVolume;
-        while (remainingTokens > 0) {
-            // Calculate adjusted level volume
-            // All values need to be scaled properly:
-            // - currentBaseVolume is in token units (18 decimals)
-            // - proportionalityCoefficient is in basis points (10000 = 100%)
-            // - sharePrice is in USD (18 decimals)
-            // - totalSupply is in token units (18 decimals)
-            uint256 adjustedLevelVolume = currentBaseVolume * proportionalityCoefficient * totalShares
+        while (state.remainingTokens > 0) {
+            uint256 adjustedLevelVolume = state.currentBaseVolume * proportionalityCoefficient * totalShares
                 / (totalSupply * Constants.BASIS_POINTS) * sharePrice / Constants.PRICE_DECIMALS_MULTIPLIER;
 
             uint256 tokensRemainingOnLevel =
-                adjustedLevelVolume > soldOnCurrentLevel ? adjustedLevelVolume - soldOnCurrentLevel : 0;
+                adjustedLevelVolume > state.soldOnCurrentLevel ? adjustedLevelVolume - state.soldOnCurrentLevel : 0;
 
-            if (remainingTokens <= tokensRemainingOnLevel) {
-                expectedUsd += (remainingTokens * currentPrice) / Constants.PRICE_DECIMALS_MULTIPLIER;
-                soldOnCurrentLevel += remainingTokens;
-                remainingTokens = 0;
+            if (state.remainingTokens <= tokensRemainingOnLevel) {
+                state.expectedUsd += (state.remainingTokens * state.currentPrice) / Constants.PRICE_DECIMALS_MULTIPLIER;
+                state.soldOnCurrentLevel += state.remainingTokens;
+                state.remainingTokens = 0;
             } else {
                 if (tokensRemainingOnLevel > 0) {
-                    expectedUsd += (tokensRemainingOnLevel * currentPrice) / Constants.PRICE_DECIMALS_MULTIPLIER;
-                    remainingTokens -= tokensRemainingOnLevel;
+                    state.expectedUsd += (tokensRemainingOnLevel * state.currentPrice)
+                        / Constants.PRICE_DECIMALS_MULTIPLIER;
+                    state.remainingTokens -= tokensRemainingOnLevel;
                 }
 
-                currentLevel += 1;
-                soldOnCurrentLevel = 0;
+                state.currentLevel += 1;
+                state.soldOnCurrentLevel = 0;
 
-                // Update price: price1 = price0 * (1 + priceStepPercent) = price0 * (10000 + priceStepPercent) / 10000
-                currentPrice = (currentPrice * (Constants.BASIS_POINTS + priceStepPercent)) / Constants.BASIS_POINTS;
+                state.currentPrice =
+                    (state.currentPrice * (Constants.BASIS_POINTS + priceStepPercent)) / Constants.BASIS_POINTS;
 
-                // Update base volume: volume1 = volume0 * (1 + volumeStepPercent)
-                // Note: volumeStepPercent can be negative
                 if (volumeStepPercent >= 0) {
-                    currentBaseVolume = (currentBaseVolume * (Constants.BASIS_POINTS + uint256(volumeStepPercent)))
-                        / Constants.BASIS_POINTS;
+                    state.currentBaseVolume =
+                        (state.currentBaseVolume * (Constants.BASIS_POINTS + uint256(volumeStepPercent)))
+                            / Constants.BASIS_POINTS;
                 } else {
                     uint256 absVolumeStep = uint256(-volumeStepPercent);
-                    currentBaseVolume =
-                        (currentBaseVolume * (Constants.BASIS_POINTS - absVolumeStep)) / Constants.BASIS_POINTS;
+                    state.currentBaseVolume =
+                        (state.currentBaseVolume * (Constants.BASIS_POINTS - absVolumeStep)) / Constants.BASIS_POINTS;
                 }
             }
         }
 
         require(
-            receivedCollateralInUsd >= expectedUsd, InsufficientCollateralReceived(expectedUsd, receivedCollateralInUsd)
+            receivedCollateralInUsd >= state.expectedUsd,
+            InsufficientCollateralReceived(state.expectedUsd, receivedCollateralInUsd)
         );
 
-        orderbookParams.currentLevel = currentLevel;
-        orderbookParams.currentCumulativeVolume = soldOnCurrentLevel;
-        orderbookParams.cachedPriceAtLevel = currentPrice;
-        orderbookParams.cachedBaseVolumeAtLevel = currentBaseVolume;
+        orderbookParams.currentLevel = state.currentLevel;
+        orderbookParams.currentCumulativeVolume = state.soldOnCurrentLevel;
+        orderbookParams.cachedPriceAtLevel = state.currentPrice;
+        orderbookParams.cachedBaseVolumeAtLevel = state.currentBaseVolume;
         orderbookParams.currentTotalSold = orderbookParams.totalSold;
     }
 }

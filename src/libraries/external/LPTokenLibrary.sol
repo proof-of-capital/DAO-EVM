@@ -69,6 +69,14 @@ library LPTokenLibrary {
         uint256 amount1Min;
     }
 
+    struct AddLiquidityResult {
+        address token0;
+        address token1;
+        uint256 used0;
+        uint256 used1;
+        uint256 liquidity;
+    }
+
     /// @notice Provide V2 LP tokens
     /// @param lpTokenStorage LP token storage structure
     /// @param accountedBalance Accounted balance mapping
@@ -298,13 +306,12 @@ library LPTokenLibrary {
         IERC20(token0).forceApprove(p.router, 0);
         IERC20(token1).forceApprove(p.router, 0);
 
-        if (p.amount0 - used0 > 0) accountedBalance[token0] += (p.amount0 - used0);
-        if (p.amount1 - used1 > 0) accountedBalance[token1] += (p.amount1 - used1);
+        AddLiquidityResult memory res =
+            AddLiquidityResult({token0: token0, token1: token1, used0: used0, used1: used1, liquidity: liquidity});
+        _applyAddLiquidityResult(accountedBalance, lpToken, p, res);
 
-        accountedBalance[lpToken] += liquidity;
-
-        info.returnedToken0 += used0;
-        info.returnedToken1 += used1;
+        info.returnedToken0 += res.used0;
+        info.returnedToken1 += res.used1;
         _clearDepegIfRestored(lpTokenStorage, lpToken, 0, DataTypes.LPTokenType.V2);
         OracleLibrary.validatePoolPriceWithOracle(
             IPriceOracle(coreConfig.priceOracle),
@@ -328,19 +335,36 @@ library LPTokenLibrary {
         require(info.timestamp != 0, NotInDepeg());
 
         DataTypes.V3LPPositionInfo memory positionInfo = LPProcessingLibrary.getV3PositionInfo(lpTokenStorage, tokenId);
-        address token0 = positionInfo.token0;
-        address token1 = positionInfo.token1;
         require(
-            accountedBalance[token0] >= p.amount0 && accountedBalance[token1] >= p.amount1,
+            accountedBalance[positionInfo.token0] >= p.amount0 && accountedBalance[positionInfo.token1] >= p.amount1,
             InsufficientAccountedBalance()
         );
 
-        accountedBalance[token0] -= p.amount0;
-        accountedBalance[token1] -= p.amount1;
+        accountedBalance[positionInfo.token0] -= p.amount0;
+        accountedBalance[positionInfo.token1] -= p.amount1;
 
+        AddLiquidityResult memory res = _increaseLiquidityV3(positionInfo, tokenId, p);
+        _applyAddLiquidityResultV3(accountedBalance, p, res);
+
+        info.returnedToken0 += res.used0;
+        info.returnedToken1 += res.used1;
+        _clearDepegIfRestored(lpTokenStorage, address(0), tokenId, DataTypes.LPTokenType.V3);
+        OracleLibrary.validatePoolPriceWithOracle(
+            IPriceOracle(coreConfig.priceOracle),
+            pricePathsStorage,
+            coreConfig.launchToken,
+            IPriceOracle(coreConfig.priceOracle).getAssetPrice(coreConfig.launchToken)
+        );
+    }
+
+    function _increaseLiquidityV3(
+        DataTypes.V3LPPositionInfo memory positionInfo,
+        uint256 tokenId,
+        AddLiquidityBackParams memory p
+    ) private returns (AddLiquidityResult memory res) {
         INonfungiblePositionManager pm = INonfungiblePositionManager(positionInfo.positionManager);
-        IERC20(token0).forceApprove(address(pm), p.amount0);
-        IERC20(token1).forceApprove(address(pm), p.amount1);
+        IERC20(positionInfo.token0).forceApprove(address(pm), p.amount0);
+        IERC20(positionInfo.token1).forceApprove(address(pm), p.amount1);
         INonfungiblePositionManager.IncreaseLiquidityParams memory params =
             INonfungiblePositionManager.IncreaseLiquidityParams({
                 tokenId: tokenId,
@@ -351,21 +375,33 @@ library LPTokenLibrary {
                 deadline: block.timestamp
             });
         (, uint256 used0, uint256 used1) = pm.increaseLiquidity(params);
-        IERC20(token0).forceApprove(address(pm), 0);
-        IERC20(token1).forceApprove(address(pm), 0);
+        IERC20(positionInfo.token0).forceApprove(address(pm), 0);
+        IERC20(positionInfo.token1).forceApprove(address(pm), 0);
+        res = AddLiquidityResult({
+            token0: positionInfo.token0, token1: positionInfo.token1, used0: used0, used1: used1, liquidity: 0
+        });
+    }
 
-        if (p.amount0 - used0 > 0) accountedBalance[token0] += (p.amount0 - used0);
-        if (p.amount1 - used1 > 0) accountedBalance[token1] += (p.amount1 - used1);
+    function _applyAddLiquidityResult(
+        mapping(address => uint256) storage accountedBalance,
+        address lpToken,
+        AddLiquidityBackParams memory p,
+        AddLiquidityResult memory res
+    ) private {
+        if (p.amount0 - res.used0 > 0) accountedBalance[res.token0] += (p.amount0 - res.used0);
+        if (p.amount1 - res.used1 > 0) accountedBalance[res.token1] += (p.amount1 - res.used1);
+        if (lpToken != address(0)) accountedBalance[lpToken] += res.liquidity;
+    }
 
-        info.returnedToken0 += used0;
-        info.returnedToken1 += used1;
-        _clearDepegIfRestored(lpTokenStorage, address(0), tokenId, DataTypes.LPTokenType.V3);
-        OracleLibrary.validatePoolPriceWithOracle(
-            IPriceOracle(coreConfig.priceOracle),
-            pricePathsStorage,
-            coreConfig.launchToken,
-            IPriceOracle(coreConfig.priceOracle).getAssetPrice(coreConfig.launchToken)
-        );
+    function _applyAddLiquidityResultV3(
+        mapping(address => uint256) storage accountedBalance,
+        AddLiquidityBackParams memory p,
+        AddLiquidityResult memory res
+    ) private {
+        if (p.amount0 - res.used0 > 0) {
+            accountedBalance[res.token0] += (p.amount0 - res.used0);
+        }
+        if (p.amount1 - res.used1 > 0) accountedBalance[res.token1] += (p.amount1 - res.used1);
     }
 
     /// @notice Clear depeg record if returned amounts >= 99% of withdrawn
