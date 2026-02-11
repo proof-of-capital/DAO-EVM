@@ -21,16 +21,6 @@ contract WhitelistOracles is IWhitelistOracles {
     mapping(address => mapping(address => uint8)) private _feedDecimals;
     mapping(bytes32 => DataTypes.PendingFeedUpdate) private _pendingUpdates;
 
-    modifier onlyDAO() {
-        require(msg.sender == address(dao) || msg.sender == dao, Unauthorized());
-        _;
-    }
-
-    modifier onlyCreator() {
-        require(msg.sender == creator, Unauthorized());
-        _;
-    }
-
     modifier onlyDAOOrCreator() {
         require(msg.sender == address(dao) || msg.sender == dao || msg.sender == creator, Unauthorized());
         _;

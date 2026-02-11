@@ -8,10 +8,12 @@ import "../interfaces/IAggregatorV3.sol";
 contract MockChainlinkAggregator is IAggregatorV3 {
     uint8 private _decimals;
     int256 private _price;
+    uint256 private _updatedAt;
 
     constructor(uint8 decimals_, int256 initialPrice) {
         _decimals = decimals_;
         _price = initialPrice;
+        _updatedAt = block.timestamp;
     }
 
     function decimals() external view returns (uint8) {
@@ -23,11 +25,15 @@ contract MockChainlinkAggregator is IAggregatorV3 {
         view
         returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
     {
-        return (1, _price, block.timestamp, block.timestamp, 1);
+        return (1, _price, _updatedAt, _updatedAt, 1);
     }
 
     function setPrice(int256 newPrice) external {
         _price = newPrice;
+    }
+
+    function setUpdatedAt(uint256 updatedAt_) external {
+        _updatedAt = updatedAt_;
     }
 }
 
