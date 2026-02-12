@@ -81,7 +81,7 @@ library CreatorLibrary {
         if (newCreatorProfitPercent < minCreatorProfitPercent) {
             newCreatorProfitPercent = minCreatorProfitPercent;
             newDaoProfitPercent = Constants.MIN_DAO_PROFIT_SHARE;
-            profitPercentEquivalent = newDaoProfitPercent - daoProfitPercent;
+            profitPercentEquivalent = daoProfitPercent - newDaoProfitPercent;
         }
 
         require(daoState.creatorProfitPercent >= newCreatorProfitPercent, CreatorShareTooLow());
