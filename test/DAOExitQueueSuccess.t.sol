@@ -227,6 +227,77 @@ contract DAOExitQueueSuccessTest is DAOTestBase {
         assertTrue(dao.totalSharesSupply() < totalSharesBefore);
     }
 
+    function test_twoParticipants_requestExit_bothExit_inOneDistributeProfit_success() external {
+        _reachActiveStageTwoInQueue();
+        assertEq(uint256(dao.getDaoState().currentStage), uint256(DataTypes.Stage.Active));
+
+        (, bool mainActive,,) = dao.sellableCollaterals(address(mainCollateral));
+        assertTrue(mainActive, "mainCollateral should be sellable");
+
+        uint256 vaultId1 = dao.addressToVaultId(user1);
+        uint256 vaultId2 = dao.addressToVaultId(user2);
+        DataTypes.Vault memory v1 = dao.vaults(vaultId1);
+        DataTypes.Vault memory v2 = dao.vaults(vaultId2);
+        uint256 totalSharesBefore = dao.totalSharesSupply();
+        uint256 user1CollateralBefore = mainCollateral.balanceOf(user1);
+        uint256 user2CollateralBefore = mainCollateral.balanceOf(user2);
+
+        vm.prank(user1);
+        dao.requestExit();
+        vm.prank(user2);
+        dao.requestExit();
+
+        assertEq(dao.getDaoState().totalExitQueueShares, v1.shares + v2.shares);
+
+        uint256 amountToDistribute = 500_000e18;
+        mainCollateral.mint(address(dao), amountToDistribute);
+
+        vm.prank(admin);
+        dao.distributeProfit(address(mainCollateral), amountToDistribute);
+
+        assertEq(dao.getDaoState().totalExitQueueShares, 0);
+        assertTrue(mainCollateral.balanceOf(user1) > user1CollateralBefore);
+        assertTrue(mainCollateral.balanceOf(user2) > user2CollateralBefore);
+        assertEq(dao.totalSharesSupply(), totalSharesBefore - v1.shares - v2.shares);
+        assertEq(dao.vaults(vaultId1).shares, 0);
+        assertEq(dao.vaults(vaultId2).shares, 0);
+    }
+
+    function test_twoParticipants_exitInTwoDistributeProfitCalls_success() external {
+        _reachActiveStageTwoInQueue();
+        assertEq(uint256(dao.getDaoState().currentStage), uint256(DataTypes.Stage.Active));
+
+        (, bool mainActive,,) = dao.sellableCollaterals(address(mainCollateral));
+        assertTrue(mainActive, "mainCollateral should be sellable");
+
+        uint256 vaultId1 = dao.addressToVaultId(user1);
+        uint256 vaultId2 = dao.addressToVaultId(user2);
+        DataTypes.Vault memory v1 = dao.vaults(vaultId1);
+        DataTypes.Vault memory v2 = dao.vaults(vaultId2);
+        uint256 totalSharesBefore = dao.totalSharesSupply();
+
+        vm.prank(user1);
+        dao.requestExit();
+        vm.prank(user2);
+        dao.requestExit();
+
+        uint256 amount1 = 100_000e18;
+        mainCollateral.mint(address(dao), amount1);
+        vm.prank(admin);
+        dao.distributeProfit(address(mainCollateral), amount1);
+
+        assertTrue(dao.totalSharesSupply() < totalSharesBefore);
+        assertTrue(dao.vaults(vaultId1).shares < v1.shares || dao.vaults(vaultId2).shares < v2.shares);
+
+        uint256 amount2 = 500_000e18;
+        mainCollateral.mint(address(dao), amount2);
+        vm.prank(admin);
+        dao.distributeProfit(address(mainCollateral), amount2);
+
+        assertEq(dao.getDaoState().totalExitQueueShares, 0);
+        assertTrue(dao.totalSharesSupply() < totalSharesBefore);
+    }
+
     function test_twoParticipants_exitInTwoProcessPendingExitQueueCalls_success() external {
         _reachActiveStageTwoInQueue();
 
