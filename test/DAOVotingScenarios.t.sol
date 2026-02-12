@@ -83,20 +83,28 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(admin);
         vm.expectRevert(Voting.ProposalCreationCooldown.selector);
-        voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x2)));
+        voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x2))
+        );
     }
 
     function test_createProposal_cooldownCreator_reverts() public {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(creator);
-        voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(creator);
         vm.expectRevert(Voting.ProposalCreationCooldown.selector);
-        voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x2)));
+        voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x2))
+        );
     }
 
     function test_createProposal_notAuthorizedNoVault_reverts() public {
@@ -105,7 +113,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         vm.warp(block.timestamp + 1 days);
         vm.prank(noVault);
         vm.expectRevert(Voting.NotAuthorizedToCreateProposal.selector);
-        voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
     }
 
     function test_createProposal_invalidTarget_reverts() public {
@@ -113,7 +123,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
         vm.expectRevert(Voting.InvalidTarget.selector);
-        voting.createProposal(address(0), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        voting.createProposal(
+            address(0), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
     }
 
     function test_createProposal_tokenContract_reverts() public {
@@ -128,10 +140,12 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         assertEq(id, 0);
-        (, address proposer,,, , , , , , ) = voting.proposals(0);
-        (,, DataTypes.ProposalType ptype, , , , , , , ) = voting.proposals(0);
+        (, address proposer,,,,,,,,) = voting.proposals(0);
+        (,, DataTypes.ProposalType ptype,,,,,,,) = voting.proposals(0);
         assertEq(proposer, admin);
         assertEq(uint256(ptype), uint256(DataTypes.ProposalType.Unanimous));
     }
@@ -140,9 +154,11 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(creator);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         assertEq(id, 0);
-        (, address proposer,,, , , , , , ) = voting.proposals(0);
+        (, address proposer,,,,,,,,) = voting.proposals(0);
         assertEq(proposer, creator);
     }
 
@@ -150,9 +166,11 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(user1);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         assertEq(id, 0);
-        (, address proposer,,, , , , , , ) = voting.proposals(0);
+        (, address proposer,,,,,,,,) = voting.proposals(0);
         assertEq(proposer, user1);
     }
 
@@ -167,7 +185,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.warp(block.timestamp - 1);
         vm.prank(user1);
         vm.expectRevert(Voting.VotingNotStarted.selector);
@@ -178,7 +198,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.warp(block.timestamp + 8 days);
         vm.prank(user1);
         vm.expectRevert(Voting.VotingEnded.selector);
@@ -209,7 +231,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         dao.requestExit();
         vm.prank(user2);
@@ -225,7 +249,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(admin);
         vm.expectRevert(Voting.NoVaultFound.selector);
         voting.vote(id, true);
@@ -235,7 +261,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         (address backup,) = _vaultRecoveryAddresses(user1);
         vm.expectRevert(Voting.NoVaultFound.selector);
         vm.prank(backup);
@@ -246,7 +274,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         voting.vote(id, true);
         vm.prank(user1);
@@ -258,7 +288,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         dao.requestExit();
         assertGt(dao.getDaoState().totalExitQueueShares, 0);
@@ -272,10 +304,12 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         voting.vote(id, true);
-        (,,,,, uint256 forVotes, uint256 againstVotes, , , ) = voting.proposals(id);
+        (,,,,, uint256 forVotes, uint256 againstVotes,,,) = voting.proposals(id);
         assertEq(forVotes, dao.vaults(dao.addressToVaultId(user1)).votingShares);
         assertEq(againstVotes, 0);
     }
@@ -284,10 +318,12 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         voting.vote(id, false);
-        (,,,,, uint256 forVotes, uint256 againstVotes, , , ) = voting.proposals(id);
+        (,,,,, uint256 forVotes, uint256 againstVotes,,,) = voting.proposals(id);
         assertEq(againstVotes, dao.vaults(dao.addressToVaultId(user1)).votingShares);
         assertEq(forVotes, 0);
     }
@@ -309,13 +345,15 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         voting.vote(id, true);
-        (,,,,, uint256 forBefore, , , , ) = voting.proposals(id);
+        (,,,,, uint256 forBefore,,,,) = voting.proposals(id);
         vm.prank(user1);
         dao.requestExit();
-        (,,,,, uint256 forAfter, , , , ) = voting.proposals(id);
+        (,,,,, uint256 forAfter,,,,) = voting.proposals(id);
         assertTrue(forAfter < forBefore || forBefore == 0);
     }
 
@@ -376,12 +414,14 @@ contract DAOVotingScenariosTest is DAOTestBase {
         voting.setDelegate(user2);
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user2);
         voting.vote(id, true);
         vm.prank(user1);
         voting.setDelegate(address(0));
-        (,,,,, uint256 forVotes, , , , ) = voting.proposals(id);
+        (,,,,, uint256 forVotes,,,,) = voting.proposals(id);
         assertTrue(forVotes >= 0);
         assertEq(dao.vaults(dao.addressToVaultId(user1)).delegateId, 0);
     }
@@ -392,14 +432,16 @@ contract DAOVotingScenariosTest is DAOTestBase {
         voting.setDelegate(user2);
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user2);
         voting.vote(id, true);
         vm.prank(user3);
         voting.vote(id, false);
         vm.prank(user1);
         voting.setDelegate(user3);
-        (,,,,, uint256 forVotes, uint256 againstVotes, , , ) = voting.proposals(id);
+        (,,,,, uint256 forVotes, uint256 againstVotes,,,) = voting.proposals(id);
         assertTrue(forVotes >= 0);
         assertTrue(againstVotes >= 0);
     }
@@ -408,7 +450,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         voting.vote(id, true);
         vm.prank(user2);
@@ -444,7 +488,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.warp(block.timestamp + 8 days);
         vm.prank(admin);
         vm.expectRevert(Voting.ProposalNotSuccessful.selector);
@@ -473,7 +519,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         voting.vote(id, true);
         vm.prank(user2);
@@ -558,7 +606,8 @@ contract DAOVotingScenariosTest is DAOTestBase {
 
     function test_determineCategory_unanimous_addPOCContract() public {
         address newPoc = makeAddr("newPoc");
-        bytes memory callData = abi.encodeWithSelector(DAO.addPOCContract.selector, newPoc, address(mainCollateral), 5000);
+        bytes memory callData =
+            abi.encodeWithSelector(DAO.addPOCContract.selector, newPoc, address(mainCollateral), 5000);
         assertEq(uint256(voting.determineCategory(address(dao), callData)), uint256(DataTypes.ProposalType.Unanimous));
     }
 
@@ -619,7 +668,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         voting.setDelegate(user2);
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user2);
         voting.vote(id, true);
         vm.prank(user1);
@@ -646,7 +697,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         voting.vote(id, true);
         vm.prank(user2);
@@ -702,7 +755,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         voting.vote(id, true);
         vm.prank(user2);
@@ -717,7 +772,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.warp(block.timestamp + 8 days);
         assertEq(uint256(voting.getProposalStatus(id)), uint256(DataTypes.ProposalStatus.Defeated));
     }
@@ -736,7 +793,7 @@ contract DAOVotingScenariosTest is DAOTestBase {
         bytes memory callData = abi.encodeWithSelector(DAO.setIsVetoToCreator.selector, true);
         vm.prank(admin);
         uint256 id = voting.createProposal(address(dao), callData);
-        (,, DataTypes.ProposalType ptype, , , , , , , ) = voting.proposals(id);
+        (,, DataTypes.ProposalType ptype,,,,,,,) = voting.proposals(id);
         assertEq(uint256(ptype), uint256(DataTypes.ProposalType.VetoFor));
         vm.prank(user1);
         voting.vote(id, true);
@@ -757,7 +814,7 @@ contract DAOVotingScenariosTest is DAOTestBase {
         bytes memory callData = abi.encodeWithSelector(DAO.returnLaunchesToPOC.selector, amount);
         vm.prank(admin);
         uint256 id = voting.createProposal(address(dao), callData);
-        (,, DataTypes.ProposalType ptype, , , , , , , ) = voting.proposals(id);
+        (,, DataTypes.ProposalType ptype,,,,,,,) = voting.proposals(id);
         assertEq(uint256(ptype), uint256(DataTypes.ProposalType.Financial));
         vm.prank(user1);
         voting.vote(id, true);
@@ -788,7 +845,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         voting.vote(id, false);
         vm.prank(user2);
@@ -830,7 +889,9 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         voting.vote(id, true);
         vm.prank(user2);
@@ -845,16 +906,18 @@ contract DAOVotingScenariosTest is DAOTestBase {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
-        uint256 id = voting.createProposal(address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1)));
+        uint256 id = voting.createProposal(
+            address(dao), abi.encodeWithSelector(DAO.setPendingUpgradeFromVoting.selector, address(0x1))
+        );
         vm.prank(user1);
         voting.vote(id, true);
-        (,,,,, uint256 forBefore, , , , ) = voting.proposals(id);
+        (,,,,, uint256 forBefore,,,,) = voting.proposals(id);
         launchToken.mint(user1, 100_000e18);
         vm.prank(user1);
         launchToken.approve(address(dao), 100_000e18);
         vm.prank(user1);
         dao.depositLaunches(100_000e18, 0);
-        (,,,,, uint256 forAfter, , , , ) = voting.proposals(id);
+        (,,,,, uint256 forAfter,,,,) = voting.proposals(id);
         assertTrue(forAfter >= forBefore);
     }
 
