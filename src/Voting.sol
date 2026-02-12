@@ -50,7 +50,6 @@ contract Voting is IVoting {
     error ProposalAlreadyExecuted();
     error NoVaultFound();
     error NoVotingPower();
-    error OnlyPrimaryCanVote();
     error VotingIsPaused();
     error AlreadyVoted();
     error OnlyAdminOrCreatorCanExecute();
@@ -228,7 +227,6 @@ contract Voting is IVoting {
         require(vaultId > 0, NoVaultFound());
         DataTypes.Vault memory vault = dao.vaults(vaultId);
         require(vault.shares > 0, NoVotingPower());
-        require(vault.primary == msg.sender, OnlyPrimaryCanVote());
         require(!hasVotedMapping[proposalId][vaultId], AlreadyVoted());
 
         require(!dao.isVaultInExitQueue(vaultId), VaultInExitQueue());
@@ -339,7 +337,6 @@ contract Voting is IVoting {
         require(vaultId > 0, NoVaultFound());
 
         DataTypes.Vault memory vault = dao.vaults(vaultId);
-        require(vault.primary == msg.sender, OnlyPrimaryCanVote());
         require(vault.shares > 0, NoVotingPower());
         require(!dao.isVaultInExitQueue(vaultId), VaultInExitQueue());
 
