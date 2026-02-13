@@ -294,7 +294,6 @@ contract DAOVotingScenariosTest is DAOTestBase {
         vm.prank(user1);
         dao.requestExit();
         assertGt(dao.getDaoState().totalExitQueueShares, 0);
-        vm.skip(true);
         vm.prank(user1);
         vm.expectRevert(Voting.VaultInExitQueue.selector);
         voting.vote(id, true);
@@ -402,7 +401,6 @@ contract DAOVotingScenariosTest is DAOTestBase {
         vm.prank(user1);
         dao.requestExit();
         assertGt(dao.getDaoState().totalExitQueueShares, 0);
-        vm.skip(true);
         vm.prank(user1);
         vm.expectRevert(Voting.VaultInExitQueue.selector);
         voting.setDelegate(user2);

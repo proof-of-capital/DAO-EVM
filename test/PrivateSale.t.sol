@@ -8,6 +8,7 @@ import "./helpers/PrivateSaleTestBase.sol";
 import "../src/PrivateSale.sol";
 import "../src/interfaces/IPrivateSale.sol";
 import "../src/libraries/DataTypes.sol";
+import "../src/mocks/MockSellRouter.sol";
 
 contract PrivateSaleTest is PrivateSaleTestBase {
     function test_constructor_success() public view {
@@ -552,5 +553,108 @@ contract PrivateSaleTest is PrivateSaleTestBase {
         vm.prank(admin);
         vm.expectRevert(IPrivateSale.NoTokensAvailable.selector);
         privateSale.purchaseTokens(0, 1, address(0), DataTypes.SwapType.None, "");
+    }
+}
+
+contract PrivateSaleSwapTest is PrivateSaleTestBase {
+    MockERC20 public altCollateral;
+    MockProofOfCapital public poc1;
+    MockSellRouterLowOutput public mockRouter;
+
+    function setUp() public override {
+        super.setUp();
+        altCollateral = new MockERC20("DAI", "DAI", 18);
+        poc1 = new MockProofOfCapital(address(altCollateral), address(launchToken));
+        poc1.setActive(true);
+        launchToken.mint(address(poc1), POC_LAUNCH_SUPPLY);
+        poc1.setLaunchBalance(POC_LAUNCH_SUPPLY);
+
+        dao.setPocCount(2);
+        dao.setPOCContract(
+            1,
+            DataTypes.POCInfo({
+                pocContract: address(poc1),
+                collateralToken: address(altCollateral),
+                sharePercent: 5000,
+                active: true,
+                exchanged: false,
+                exchangedAmount: 0
+            })
+        );
+        dao.setCollateralPrice(address(mainCollateral), 1e18);
+        dao.setCollateralPrice(address(altCollateral), 1e18);
+
+        mockRouter = new MockSellRouterLowOutput();
+        altCollateral.mint(address(mockRouter), 500_000e18);
+        dao.setAvailableRouterByAdmin(address(mockRouter), true);
+
+        address[] memory pocContracts = new address[](2);
+        pocContracts[0] = address(poc);
+        pocContracts[1] = address(poc1);
+        privateSale = new PrivateSale(
+            address(dao),
+            address(mainCollateral),
+            pocContracts,
+            CLIFF_DURATION,
+            VESTING_PERIODS,
+            VESTING_PERIOD_DURATION
+        );
+    }
+
+    function _purchaseTokensWithSwap(
+        uint256 pocIdx,
+        uint256 collateralAmount,
+        address router,
+        DataTypes.SwapType swapType,
+        bytes memory swapData
+    ) internal {
+        vm.prank(admin);
+        privateSale.purchaseTokens(pocIdx, collateralAmount, router, swapType, swapData);
+    }
+
+    function test_swapToCollateral_success() public {
+        _deposit(user1, 80_000e18);
+        uint256 amount = 40_000e18;
+        mockRouter.setOutputAmount(amount);
+        bytes memory swapData = abi.encode(uint24(3000), block.timestamp + 3600, uint160(0));
+        _purchaseTokensWithSwap(1, amount, address(mockRouter), DataTypes.SwapType.UniswapV3ExactInputSingle, swapData);
+        assertEq(privateSale.totalCollateralSpent(), amount);
+        assertGt(privateSale.totalTokensPurchased(), 0);
+    }
+
+    function test_swapToCollateral_revert_routerZero() public {
+        _deposit(user1, 80_000e18);
+        uint256 amount = 40_000e18;
+        bytes memory swapData = abi.encode(uint24(3000), block.timestamp + 3600, uint160(0));
+        vm.prank(admin);
+        vm.expectRevert(IPrivateSale.InvalidAddress.selector);
+        privateSale.purchaseTokens(1, amount, address(0), DataTypes.SwapType.UniswapV3ExactInputSingle, swapData);
+    }
+
+    function test_swapToCollateral_revert_routerNotAvailable() public {
+        _deposit(user1, 80_000e18);
+        dao.setAvailableRouterByAdmin(address(mockRouter), false);
+        uint256 amount = 40_000e18;
+        mockRouter.setOutputAmount(amount);
+        bytes memory swapData = abi.encode(uint24(3000), block.timestamp + 3600, uint160(0));
+        vm.prank(admin);
+        vm.expectRevert(IPrivateSale.RouterNotAvailable.selector);
+        privateSale.purchaseTokens(
+            1, amount, address(mockRouter), DataTypes.SwapType.UniswapV3ExactInputSingle, swapData
+        );
+    }
+
+    function test_swapToCollateral_revert_priceDeviationTooHigh() public {
+        _deposit(user1, 80_000e18);
+        uint256 amount = 40_000e18;
+        uint256 expectedCollateral = amount;
+        uint256 lowOutput = (expectedCollateral * 96) / 100;
+        mockRouter.setOutputAmount(lowOutput);
+        bytes memory swapData = abi.encode(uint24(3000), block.timestamp + 3600, uint160(0));
+        vm.prank(admin);
+        vm.expectRevert(IPrivateSale.PriceDeviationTooHigh.selector);
+        privateSale.purchaseTokens(
+            1, amount, address(mockRouter), DataTypes.SwapType.UniswapV3ExactInputSingle, swapData
+        );
     }
 }

@@ -165,7 +165,7 @@ library ExitQueueProcessingLibrary {
 
         uint256 exitRequestIndex = exitQueueStorage.vaultExitRequestIndex[vaultId];
         if (exitRequestIndex > 0) {
-            DataTypes.ExitRequest memory request = exitQueueStorage.exitQueue[exitRequestIndex];
+            DataTypes.ExitRequest memory request = exitQueueStorage.exitQueue[exitRequestIndex - 1];
             uint256 launchPriceNow = getOraclePrice(launchToken);
             if (launchPriceNow < request.fixedLaunchPriceAtRequest) {
                 exitValueUSD = (exitValueUSD * launchPriceNow) / request.fixedLaunchPriceAtRequest;
