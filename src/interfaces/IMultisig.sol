@@ -67,7 +67,8 @@ interface IMultisig {
     /// @notice Voting type
     enum VotingType {
         GENERAL,
-        TRANSFER_OWNERSHIP
+        TRANSFER_OWNERSHIP,
+        EXTEND_LOCK
     }
 
     /// @notice Transaction status
@@ -169,6 +170,7 @@ interface IMultisig {
     error InvalidTokenAddress();
     error InsufficientBalance();
     error TransferOwnershipNotAllowedForVetoContract();
+    error ExtendLockNotAllowedWhenVeto();
     error PriceDeviationTooHigh();
     error InvalidPrice();
     error StalePrice();

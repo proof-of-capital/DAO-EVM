@@ -287,6 +287,18 @@ contract Multisig is IMultisig {
                     return;
                 }
             }
+        } else if (transactions[txId].votingType == VotingType.EXTEND_LOCK) {
+            if (voteOption == VoteOption.FOR) {
+                transactions[txId].confirmationsFor += share;
+            } else {
+                transactions[txId].confirmationsAgainst += share;
+
+                if (transactions[txId].confirmationsAgainst > 20) {
+                    transactions[txId].status = TransactionStatus.CANCELLED;
+                    emit TransactionCancelled(txId, "More than 20% voted against");
+                    return;
+                }
+            }
         }
 
         emit VoteCast(txId, msg.sender, voteOption, share);
@@ -325,6 +337,9 @@ contract Multisig is IMultisig {
                 }
             }
         }
+        if (txn.votingType == VotingType.EXTEND_LOCK) {
+            require(!dao.coreConfig().isVetoToCreator, ExtendLockNotAllowedWhenVeto());
+        }
 
         bytes32 computedHash = _computeCallDataHash(calls, txId);
         require(txn.callDataHash == computedHash, CallDataHashMismatch());
@@ -354,6 +369,23 @@ contract Multisig is IMultisig {
             if (!canExecute) {
                 txn.status = TransactionStatus.CANCELLED;
                 emit TransactionFailed(txId, "Less than 7 out of 8 owners confirmed");
+                return;
+            }
+        } else if (txn.votingType == VotingType.EXTEND_LOCK) {
+            uint256 totalParticipation = txn.confirmationsFor + txn.confirmationsAgainst;
+
+            if (totalParticipation < Constants.MULTISIG_GENERAL_PARTICIPATION_THRESHOLD) {
+                txn.status = TransactionStatus.CANCELLED;
+                emit TransactionFailed(txId, "Less than 60% participation");
+                return;
+            }
+
+            uint256 approvalPercentage = (txn.confirmationsFor * Constants.PERCENTAGE_MULTIPLIER) / totalParticipation;
+            canExecute = approvalPercentage >= Constants.MULTISIG_GENERAL_APPROVAL_THRESHOLD;
+
+            if (!canExecute) {
+                txn.status = TransactionStatus.CANCELLED;
+                emit TransactionFailed(txId, "Less than 80% approval among participants");
                 return;
             }
         }
@@ -396,6 +428,12 @@ contract Multisig is IMultisig {
                 transactions[txId].confirmationsFor -= 1;
             } else {
                 transactions[txId].confirmationsAgainst -= 1;
+            }
+        } else if (transactions[txId].votingType == VotingType.EXTEND_LOCK) {
+            if (previousVote == VoteOption.FOR) {
+                transactions[txId].confirmationsFor -= share;
+            } else {
+                transactions[txId].confirmationsAgainst -= share;
             }
         }
 
@@ -624,6 +662,15 @@ contract Multisig is IMultisig {
             totalParticipation = votesFor;
             participationPercentage = (votesFor * Constants.PERCENTAGE_MULTIPLIER) / owners.length;
             approvalPercentage = Constants.PERCENTAGE_MULTIPLIER;
+        } else if (txn.votingType == VotingType.EXTEND_LOCK) {
+            votesFor = txn.confirmationsFor;
+            votesAgainst = txn.confirmationsAgainst;
+            totalParticipation = votesFor + votesAgainst;
+
+            if (totalParticipation > 0) {
+                participationPercentage = totalParticipation;
+                approvalPercentage = (votesFor * Constants.PERCENTAGE_MULTIPLIER) / totalParticipation;
+            }
         }
     }
 
@@ -732,6 +779,10 @@ contract Multisig is IMultisig {
             || selector == Constants.SET_MAX_COUNT_VOTE_PER_PERIOD_SELECTOR;
     }
 
+    function _isExtendLockSelector(bytes4 selector) internal pure returns (bool) {
+        return selector == IProofOfCapital.extendLock.selector;
+    }
+
     function _determineVotingType(ProposalCall[] calldata calls) internal pure returns (VotingType) {
         for (uint256 i = 0; i < calls.length; ++i) {
             if (calls[i].callData.length < 4) {
@@ -746,6 +797,9 @@ contract Multisig is IMultisig {
 
             if (_isOwnershipSelector(selector)) {
                 return VotingType.TRANSFER_OWNERSHIP;
+            }
+            if (_isExtendLockSelector(selector)) {
+                return VotingType.EXTEND_LOCK;
             }
         }
 
