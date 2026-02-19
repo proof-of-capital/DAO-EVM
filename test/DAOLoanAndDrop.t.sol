@@ -12,7 +12,7 @@ import "../src/libraries/Constants.sol";
 contract DAOLoanAndDropTest is DAOTestBase {
     function test_getLoanState_initialZero() public {
         _reachActiveStage();
-        (, , uint256 principal, uint256 interestAccrued,,) = dao.creatorLoanDrop();
+        (,, uint256 principal, uint256 interestAccrued,,) = dao.creatorLoanDrop();
         assertEq(principal, 0);
         assertEq(interestAccrued, 0);
     }
@@ -58,7 +58,7 @@ contract DAOLoanAndDropTest is DAOTestBase {
         vm.prank(admin);
         voting.execute(proposalId, callData);
 
-        (, , uint256 principal, uint256 interestAccrued,,) = dao.creatorLoanDrop();
+        (,, uint256 principal, uint256 interestAccrued,,) = dao.creatorLoanDrop();
         assertEq(principal, 10_000e18);
         assertEq(interestAccrued, 0);
         assertTrue(launchToken.balanceOf(creator) == balanceBefore + 10_000e18, "creator should receive launches");
@@ -106,11 +106,11 @@ contract DAOLoanAndDropTest is DAOTestBase {
         voting.execute(takeProposalId, takeCallData);
 
         uint256 creatorPercentAfterLoan = dao.getDaoState().creatorProfitPercent;
-        (, , uint256 principal,,,) = dao.creatorLoanDrop();
+        (,, uint256 principal,,,) = dao.creatorLoanDrop();
         assertEq(principal, 5_000e18);
 
         vm.warp(block.timestamp + 365 days);
-        (, , uint256 principalBeforeRepay,,,) = dao.creatorLoanDrop();
+        (,, uint256 principalBeforeRepay,,,) = dao.creatorLoanDrop();
         uint256 interestAccrued = (principalBeforeRepay * Constants.LOAN_APR_BPS * (365 days))
             / (Constants.BASIS_POINTS * Constants.SECONDS_PER_YEAR);
         uint256 totalOwed = principalBeforeRepay + interestAccrued;
@@ -120,7 +120,7 @@ contract DAOLoanAndDropTest is DAOTestBase {
         dao.repayLoanInLaunches(totalOwed);
         vm.stopPrank();
 
-        (, , uint256 principalAfter, uint256 interestAfter,,) = dao.creatorLoanDrop();
+        (,, uint256 principalAfter, uint256 interestAfter,,) = dao.creatorLoanDrop();
         assertEq(principalAfter, 0);
         assertEq(interestAfter, 0);
         assertTrue(dao.getDaoState().creatorProfitPercent > creatorPercentAfterLoan, "creator share should restore");
@@ -129,8 +129,8 @@ contract DAOLoanAndDropTest is DAOTestBase {
     function test_dropLaunchesAsProfit_success() public {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
-        uint256 dropAmount = (dao.accountedBalance(address(launchToken)) * Constants.DROP_MAX_PERCENT)
-            / Constants.BASIS_POINTS;
+        uint256 dropAmount =
+            (dao.accountedBalance(address(launchToken)) * Constants.DROP_MAX_PERCENT) / Constants.BASIS_POINTS;
         if (dropAmount == 0) return;
         launchToken.mint(creator, dropAmount);
         vm.prank(creator);
@@ -199,8 +199,8 @@ contract DAOLoanAndDropTest is DAOTestBase {
     function test_dropLaunchesAsProfit_revert_exceedsDropLimit() public {
         _reachActiveStage();
         vm.warp(block.timestamp + 1 days);
-        uint256 maxDrop = (dao.accountedBalance(address(launchToken)) * Constants.DROP_MAX_PERCENT)
-            / Constants.BASIS_POINTS;
+        uint256 maxDrop =
+            (dao.accountedBalance(address(launchToken)) * Constants.DROP_MAX_PERCENT) / Constants.BASIS_POINTS;
         if (maxDrop < 2) return;
         uint256 overAmount = maxDrop + 1;
         launchToken.mint(creator, overAmount);

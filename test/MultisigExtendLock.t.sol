@@ -46,17 +46,12 @@ contract MultisigExtendLockTest is Test {
         IMultisig.LPPoolConfig[] memory lpPoolConfigs = new IMultisig.LPPoolConfig[](1);
         lpPoolConfigs[0] = IMultisig.LPPoolConfig({
             params: IMultisig.LPPoolParams({
-                fee: 3000,
-                tickLower: -887220,
-                tickUpper: 887220,
-                amount0Min: 1,
-                amount1Min: 1
+                fee: 3000, tickLower: -887220, tickUpper: 887220, amount0Min: 1, amount1Min: 1
             }),
             shareBps: 10_000
         });
 
-        IMultisig.CollateralConstructorParams[] memory collateralParams =
-            new IMultisig.CollateralConstructorParams[](0);
+        IMultisig.CollateralConstructorParams[] memory collateralParams = new IMultisig.CollateralConstructorParams[](0);
 
         multisig = new Multisig(
             primaryAddrs,
@@ -72,11 +67,7 @@ contract MultisigExtendLockTest is Test {
             marketMaker
         );
 
-        vm.store(
-            address(multisig),
-            bytes32(uint256(16)),
-            bytes32((uint256(1) << 160) | uint256(uint160(marketMaker)))
-        );
+        vm.store(address(multisig), bytes32(uint256(16)), bytes32((uint256(1) << 160) | uint256(uint160(marketMaker))));
     }
 
     function test_submitTransaction_extendLock_hasVotingTypeExtendLock() public {

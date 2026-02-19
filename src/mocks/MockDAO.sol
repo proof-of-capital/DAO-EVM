@@ -301,7 +301,6 @@ contract MockDAO is IDAO {
         revert("MockDAO: not implemented");
     }
 
-
     function takeLoanInLaunches(uint256, bool) external pure override {
         revert("MockDAO: not implemented");
     }

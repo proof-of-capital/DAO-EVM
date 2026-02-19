@@ -66,9 +66,8 @@ library ExitQueueProcessingLibrary {
             return (remainingFunds, newTotalSharesSupply);
         }
 
-        uint256 tokenPriceUSD = OracleLibrary.getPrice(
-            oracle, sellableCollaterals, pocContracts, pricePathsStorage, launchToken, token
-        );
+        uint256 tokenPriceUSD =
+            OracleLibrary.getPrice(oracle, sellableCollaterals, pocContracts, pricePathsStorage, launchToken, token);
 
         for (
             uint256 i = exitQueueStorage.nextExitQueueIndex;

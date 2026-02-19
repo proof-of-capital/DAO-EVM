@@ -955,7 +955,6 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         return OracleLibrary.getLaunchPriceView(IPriceOracle(_coreConfig.priceOracle), pocContracts);
     }
 
-
     /// @notice Get DAO profit share percentage
     /// @return DAO profit share in basis points (10000 = 100%)
     function getDAOProfitShare() external view returns (uint256) {

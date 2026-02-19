@@ -344,18 +344,15 @@ library FundraisingLibrary {
         uint256 sharesToMint = Math.mulDiv(oldSupply, infraLaunches, launchBalance - infraLaunches);
         if (sharesToMint == 0) return waitingForLPStartedAt;
 
-        uint256 vaultId = _ensureCreatorVaultId(
-            creatorLoanDrop, vaultStorage, rewardsStorage, lpTokenStorage, coreConfig
-        );
+        uint256 vaultId =
+            _ensureCreatorVaultId(creatorLoanDrop, vaultStorage, rewardsStorage, lpTokenStorage, coreConfig);
 
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         vault.shares += sharesToMint;
         vaultStorage.vaults[vaultId] = vault;
 
         vaultStorage.totalSharesSupply = oldSupply + sharesToMint;
-        VaultLibrary.executeUpdateDelegateVotingShares(
-            vaultStorage, vaultId, int256(sharesToMint), votingContract
-        );
+        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(sharesToMint), votingContract);
 
         if (fundraisingConfig.sharePrice > 0) {
             fundraisingConfig.sharePrice =

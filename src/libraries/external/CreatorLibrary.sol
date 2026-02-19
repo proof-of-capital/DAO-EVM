@@ -160,16 +160,14 @@ library CreatorLibrary {
         uint256 launchAmount,
         bool reserveForExitQueue
     ) external {
-        require(
-            block.timestamp >= daoState.lastCreatorAllocation + Constants.ALLOCATION_PERIOD, AllocationTooSoon()
-        );
+        require(block.timestamp >= daoState.lastCreatorAllocation + Constants.ALLOCATION_PERIOD, AllocationTooSoon());
         require(launchAmount > 0, AmountMustBeGreaterThanZero());
 
         _accrueLoan(creatorLoanDrop);
 
         address launchToken = coreConfig.launchToken;
-        uint256 maxAllocation = (accountedBalance[launchToken] * Constants.MAX_CREATOR_ALLOCATION_PERCENT)
-            / Constants.BASIS_POINTS;
+        uint256 maxAllocation =
+            (accountedBalance[launchToken] * Constants.MAX_CREATOR_ALLOCATION_PERCENT) / Constants.BASIS_POINTS;
         require(launchAmount <= maxAllocation, ExceedsMaxAllocation());
 
         uint256 sharesSupply = vaultStorage.totalSharesSupply;
@@ -193,8 +191,7 @@ library CreatorLibrary {
             newDaoProfitPercent = maxDaoProfitPercent;
         }
 
-        uint256 newCreatorProfitPercent =
-            Constants.BASIS_POINTS - newDaoProfitPercent - daoState.royaltyPercent;
+        uint256 newCreatorProfitPercent = Constants.BASIS_POINTS - newDaoProfitPercent - daoState.royaltyPercent;
         require(daoState.creatorProfitPercent >= newCreatorProfitPercent, CreatorShareTooLow());
         daoState.creatorProfitPercent = newCreatorProfitPercent;
 
@@ -244,8 +241,7 @@ library CreatorLibrary {
 
         uint256 oldCreatorProfitPercent = daoState.creatorProfitPercent;
         uint256 daoProfitPercent = Constants.BASIS_POINTS - daoState.creatorProfitPercent - daoState.royaltyPercent;
-        uint256 sharesEquivalent =
-            (principalPaid * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
+        uint256 sharesEquivalent = (principalPaid * Constants.PRICE_DECIMALS_MULTIPLIER) / fundraisingConfig.sharePrice;
         uint256 profitPercentEquivalent = (sharesEquivalent * daoProfitPercent) / sharesSupply;
 
         uint256 newDaoProfitPercent =
@@ -255,8 +251,7 @@ library CreatorLibrary {
             newDaoProfitPercent = Constants.MIN_DAO_PROFIT_SHARE;
         }
 
-        uint256 newCreatorProfitPercent =
-            Constants.BASIS_POINTS - newDaoProfitPercent - daoState.royaltyPercent;
+        uint256 newCreatorProfitPercent = Constants.BASIS_POINTS - newDaoProfitPercent - daoState.royaltyPercent;
         daoState.creatorProfitPercent = newCreatorProfitPercent;
 
         uint256 profitPercentIncrease =
@@ -354,9 +349,7 @@ library CreatorLibrary {
 
         if (principalPaid > 0) {
             accountedBalance[launchToken] += principalPaid;
-            _restoreCreatorProfitShareByPrincipal(
-                daoState, vaultStorage, fundraisingConfig, principalPaid
-            );
+            _restoreCreatorProfitShareByPrincipal(daoState, vaultStorage, fundraisingConfig, principalPaid);
         }
 
         if (interestPaid > 0) {
@@ -412,12 +405,16 @@ library CreatorLibrary {
         require(amount > 0, AmountMustBeGreaterThanZero());
         require(creatorLoanDrop.loanPrincipal == 0 && creatorLoanDrop.loanInterestAccrued == 0, LoanActive());
 
-        if (creatorLoanDrop.dropPeriodStart == 0 || block.timestamp >= creatorLoanDrop.dropPeriodStart + Constants.DROP_PERIOD) {
+        if (
+            creatorLoanDrop.dropPeriodStart == 0
+                || block.timestamp >= creatorLoanDrop.dropPeriodStart + Constants.DROP_PERIOD
+        ) {
             creatorLoanDrop.dropPeriodStart = block.timestamp;
             creatorLoanDrop.dropUsedInPeriod = 0;
         }
 
-        uint256 maxDrop = (accountedBalance[coreConfig.launchToken] * Constants.DROP_MAX_PERCENT) / Constants.BASIS_POINTS;
+        uint256 maxDrop =
+            (accountedBalance[coreConfig.launchToken] * Constants.DROP_MAX_PERCENT) / Constants.BASIS_POINTS;
         require(creatorLoanDrop.dropUsedInPeriod + amount <= maxDrop, ExceedsDropLimit());
         creatorLoanDrop.dropUsedInPeriod += amount;
 
@@ -530,18 +527,15 @@ library CreatorLibrary {
         uint256 sharesToMint = Math.mulDiv(oldSupply, infraLaunches, launchBalance - infraLaunches);
         if (sharesToMint == 0) return;
 
-        uint256 vaultId = _ensureCreatorVaultId(
-            creatorLoanDrop, vaultStorage, rewardsStorage, lpTokenStorage, coreConfig
-        );
+        uint256 vaultId =
+            _ensureCreatorVaultId(creatorLoanDrop, vaultStorage, rewardsStorage, lpTokenStorage, coreConfig);
 
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         vault.shares += sharesToMint;
         vaultStorage.vaults[vaultId] = vault;
 
         vaultStorage.totalSharesSupply = oldSupply + sharesToMint;
-        VaultLibrary.executeUpdateDelegateVotingShares(
-            vaultStorage, vaultId, int256(sharesToMint), votingContract
-        );
+        VaultLibrary.executeUpdateDelegateVotingShares(vaultStorage, vaultId, int256(sharesToMint), votingContract);
 
         if (fundraisingConfig.sharePrice > 0) {
             fundraisingConfig.sharePrice =
