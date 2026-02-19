@@ -12,6 +12,7 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "../DataTypes.sol";
 import "../Constants.sol";
 import "./VaultLibrary.sol";
@@ -62,6 +63,7 @@ library FundraisingLibrary {
     event FundraisingExtended(uint256 newDeadline);
     event FundraisingCancelled(uint256 totalCollected);
     event FundraisingCollectionFinalized(uint256 totalCollected, uint256 totalShares);
+    event CreatorVaultSet(uint256 indexed vaultId, address indexed creator);
 
     /// @notice Initialize POC contracts during DAO initialization
     /// @param pocContracts Array of POC contracts
@@ -209,7 +211,7 @@ library FundraisingLibrary {
     /// @param coreConfig DAO core config (launchToken, creator, creatorInfraPercent)
     /// @param totalSharesSupply Total shares supply
     /// @param getOraclePrice Function pointer to get oracle price for a token
-    function executeFinalizeExchange(
+    function _executeFinalizeExchange(
         DataTypes.POCInfo[] storage pocContracts,
         DataTypes.DAOState storage daoState,
         DataTypes.FundraisingConfig storage fundraisingConfig,
@@ -217,7 +219,7 @@ library FundraisingLibrary {
         DataTypes.CoreConfig storage coreConfig,
         uint256 totalSharesSupply,
         function(address) external returns (uint256) getOraclePrice
-    ) external returns (uint256 waitingForLPStartedAt) {
+    ) internal returns (uint256 waitingForLPStartedAt) {
         for (uint256 i = 0; i < pocContracts.length; ++i) {
             require(pocContracts[i].exchanged, POCNotExchanged());
         }
@@ -231,10 +233,6 @@ library FundraisingLibrary {
 
         uint256 infraLaunches =
             (accountedBalance[coreConfig.launchToken] * coreConfig.creatorInfraPercent) / Constants.BASIS_POINTS;
-        if (infraLaunches > 0) {
-            IERC20(coreConfig.launchToken).safeTransfer(coreConfig.creator, infraLaunches);
-            accountedBalance[coreConfig.launchToken] -= infraLaunches;
-        }
 
         DataTypes.Stage oldStage = daoState.currentStage;
         daoState.currentStage = DataTypes.Stage.WaitingForLP;
@@ -245,6 +243,125 @@ library FundraisingLibrary {
 
         emit ExchangeFinalized(accountedBalance[coreConfig.launchToken], fundraisingConfig.sharePrice, infraLaunches);
         emit StageChanged(oldStage, daoState.currentStage);
+    }
+
+    function _ensureCreatorVaultId(
+        DataTypes.CreatorLoanDropStorage storage creatorLoanDrop,
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.RewardsStorage storage rewardsStorage,
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        DataTypes.CoreConfig storage coreConfig
+    ) internal returns (uint256 vaultId) {
+        address creator = coreConfig.creator;
+        require(creator != address(0), InvalidAddress());
+
+        uint256 existingVaultId = vaultStorage.addressToVaultId[creator];
+        if (existingVaultId != 0) {
+            if (creatorLoanDrop.creatorVaultId != existingVaultId) {
+                creatorLoanDrop.creatorVaultId = existingVaultId;
+                emit CreatorVaultSet(existingVaultId, creator);
+            }
+            return existingVaultId;
+        }
+
+        if (creatorLoanDrop.creatorVaultId != 0) {
+            return creatorLoanDrop.creatorVaultId;
+        }
+
+        vaultId = vaultStorage.nextVaultId++;
+
+        vaultStorage.vaults[vaultId] = DataTypes.Vault({
+            primary: creator,
+            backup: creator,
+            emergency: creator,
+            shares: 0,
+            votingPausedUntil: 0,
+            delegateId: 0,
+            delegateSetAt: block.timestamp,
+            votingShares: 0,
+            mainCollateralDeposit: 0,
+            depositedUSD: 0,
+            depositLimit: 0
+        });
+
+        vaultStorage.addressToVaultId[creator] = vaultId;
+
+        for (uint256 i = 0; i < rewardsStorage.rewardTokens.length; ++i) {
+            address rewardToken = rewardsStorage.rewardTokens[i];
+            if (rewardsStorage.rewardTokenInfo[rewardToken].active) {
+                rewardsStorage.vaultRewardIndex[vaultId][rewardToken] = rewardsStorage.rewardPerShareStored[rewardToken];
+            }
+        }
+
+        for (uint256 i = 0; i < lpTokenStorage.v2LPTokens.length; ++i) {
+            address token = lpTokenStorage.v2LPTokens[i];
+            rewardsStorage.vaultRewardIndex[vaultId][token] = rewardsStorage.rewardPerShareStored[token];
+        }
+
+        creatorLoanDrop.creatorVaultId = vaultId;
+        emit CreatorVaultSet(vaultId, creator);
+    }
+
+    /// @notice Finalize exchange then mint creator infra shares
+    function executeFinalizeExchange(
+        DataTypes.POCInfo[] storage pocContracts,
+        DataTypes.DAOState storage daoState,
+        DataTypes.FundraisingConfig storage fundraisingConfig,
+        mapping(address => uint256) storage accountedBalance,
+        DataTypes.CoreConfig storage coreConfig,
+        function(address) external returns (uint256) getOraclePrice,
+        DataTypes.CreatorLoanDropStorage storage creatorLoanDrop,
+        DataTypes.VaultStorage storage vaultStorage,
+        DataTypes.RewardsStorage storage rewardsStorage,
+        DataTypes.LPTokenStorage storage lpTokenStorage,
+        address votingContract
+    ) external returns (uint256 waitingForLPStartedAt) {
+        waitingForLPStartedAt = _executeFinalizeExchange(
+            pocContracts,
+            daoState,
+            fundraisingConfig,
+            accountedBalance,
+            coreConfig,
+            vaultStorage.totalSharesSupply,
+            getOraclePrice
+        );
+
+        uint256 infraPercent = coreConfig.creatorInfraPercent;
+        if (infraPercent == 0) return waitingForLPStartedAt;
+
+        address launchToken = coreConfig.launchToken;
+        uint256 launchBalance = accountedBalance[launchToken];
+        if (launchBalance == 0) return waitingForLPStartedAt;
+
+        uint256 infraLaunches = (launchBalance * infraPercent) / Constants.BASIS_POINTS;
+        if (infraLaunches == 0) return waitingForLPStartedAt;
+
+        require(launchBalance > infraLaunches, InvalidPercentage());
+
+        uint256 oldSupply = vaultStorage.totalSharesSupply;
+        require(oldSupply > 0, NoShares());
+
+        uint256 sharesToMint = Math.mulDiv(oldSupply, infraLaunches, launchBalance - infraLaunches);
+        if (sharesToMint == 0) return waitingForLPStartedAt;
+
+        uint256 vaultId = _ensureCreatorVaultId(
+            creatorLoanDrop, vaultStorage, rewardsStorage, lpTokenStorage, coreConfig
+        );
+
+        DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
+        vault.shares += sharesToMint;
+        vaultStorage.vaults[vaultId] = vault;
+
+        vaultStorage.totalSharesSupply = oldSupply + sharesToMint;
+        VaultLibrary.executeUpdateDelegateVotingShares(
+            vaultStorage, vaultId, int256(sharesToMint), votingContract
+        );
+
+        if (fundraisingConfig.sharePrice > 0) {
+            fundraisingConfig.sharePrice =
+                Math.mulDiv(fundraisingConfig.sharePrice, oldSupply, vaultStorage.totalSharesSupply);
+        }
+        fundraisingConfig.sharePriceStart = fundraisingConfig.sharePrice;
     }
 
     /// @notice Apply shares and USD deposit to vault and update delegate voting; caller must have already updated vault fields specific to deposit type.

@@ -520,5 +520,15 @@ library DataTypes {
         PricePathV3[] v3Paths; // Array of V3 paths
         uint256 minLiquidity; // Minimum liquidity threshold (in launch tokens)
     }
+
+    /// @notice Storage for creator vault, loan and drop state (library mutates via storage ref)
+    struct CreatorLoanDropStorage {
+        uint256 creatorVaultId;
+        uint256 loanLastUpdate;
+        uint256 loanPrincipal;
+        uint256 loanInterestAccrued;
+        uint256 dropPeriodStart;
+        uint256 dropUsedInPeriod;
+    }
 }
 

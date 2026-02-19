@@ -555,7 +555,7 @@ contract DAOVotingScenariosTest is DAOTestBase {
     function test_getProposalStatus_financial_defeatedQuorum() public {
         _reachActiveStage();
         vm.warp(block.timestamp + Constants.ALLOCATION_PERIOD + 1 days);
-        bytes memory callData = abi.encodeWithSelector(DAO.allocateLaunchesToCreator.selector, 1000e18);
+        bytes memory callData = abi.encodeWithSelector(DAO.takeLoanInLaunches.selector, 1000e18, true);
         vm.prank(admin);
         uint256 id = voting.createProposal(address(dao), callData);
         vm.warp(block.timestamp + 8 days);
@@ -565,7 +565,7 @@ contract DAOVotingScenariosTest is DAOTestBase {
     function test_getProposalStatus_financial_activeDuringVoting() public {
         _reachActiveStage();
         vm.warp(block.timestamp + Constants.ALLOCATION_PERIOD + 1 days);
-        bytes memory callData = abi.encodeWithSelector(DAO.allocateLaunchesToCreator.selector, 1000e18);
+        bytes memory callData = abi.encodeWithSelector(DAO.takeLoanInLaunches.selector, 1000e18, true);
         vm.prank(admin);
         uint256 id = voting.createProposal(address(dao), callData);
         assertEq(uint256(voting.getProposalStatus(id)), uint256(DataTypes.ProposalStatus.Active));
@@ -574,7 +574,7 @@ contract DAOVotingScenariosTest is DAOTestBase {
     function test_getProposalStatus_financial_expired() public {
         _reachActiveStage();
         vm.warp(block.timestamp + Constants.ALLOCATION_PERIOD + 1 days);
-        bytes memory callData = abi.encodeWithSelector(DAO.allocateLaunchesToCreator.selector, 1000e18);
+        bytes memory callData = abi.encodeWithSelector(DAO.takeLoanInLaunches.selector, 1000e18, true);
         vm.prank(admin);
         uint256 id = voting.createProposal(address(dao), callData);
         vm.prank(user1);
@@ -615,7 +615,7 @@ contract DAOVotingScenariosTest is DAOTestBase {
     }
 
     function test_determineCategory_financial_allocate() public view {
-        bytes memory callData = abi.encodeWithSelector(DAO.allocateLaunchesToCreator.selector, 1000e18);
+        bytes memory callData = abi.encodeWithSelector(DAO.takeLoanInLaunches.selector, 1000e18, true);
         assertEq(uint256(voting.determineCategory(address(dao), callData)), uint256(DataTypes.ProposalType.Financial));
     }
 
@@ -710,7 +710,7 @@ contract DAOVotingScenariosTest is DAOTestBase {
     function test_getProposalStatus_financial_defeatedApproval() public {
         _reachActiveStage();
         vm.warp(block.timestamp + Constants.ALLOCATION_PERIOD + 1 days);
-        bytes memory callData = abi.encodeWithSelector(DAO.allocateLaunchesToCreator.selector, 1000e18);
+        bytes memory callData = abi.encodeWithSelector(DAO.takeLoanInLaunches.selector, 1000e18, true);
         vm.prank(admin);
         uint256 id = voting.createProposal(address(dao), callData);
         vm.prank(user1);
@@ -895,6 +895,8 @@ contract DAOVotingScenariosTest is DAOTestBase {
         vm.prank(user2);
         voting.vote(id, true);
         vm.prank(user3);
+        voting.vote(id, true);
+        vm.prank(creator);
         voting.vote(id, true);
         vm.warp(block.timestamp + 7 days + Constants.PROPOSAL_EXPIRY_PERIOD + 1);
         assertEq(uint256(voting.getProposalStatus(id)), uint256(DataTypes.ProposalStatus.Expired));

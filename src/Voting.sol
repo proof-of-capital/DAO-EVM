@@ -700,7 +700,7 @@ contract Voting is IVoting {
             || selector == removePOCContractSelector;
     }
 
-    /// @notice Check if proposal is a financial proposal (calls allocateLaunchesToCreator or returnLaunchesToPOC)
+    /// @notice Check if proposal is a financial proposal (calls takeLoanInLaunches or returnLaunchesToPOC)
     /// @param callData Encoded call data
     /// @return True if proposal calls financial functions on DAO contract
     function _isFinancialProposal(bytes calldata callData) internal pure returns (bool) {
@@ -709,10 +709,10 @@ contract Voting is IVoting {
         }
 
         bytes4 selector = bytes4(callData);
-        bytes4 allocateLaunchesToCreatorSelector = IDAO.allocateLaunchesToCreator.selector;
+        bytes4 takeLoanInLaunchesSelector = IDAO.takeLoanInLaunches.selector;
         bytes4 returnLaunchesToPOCSelector = IDAO.returnLaunchesToPOC.selector;
 
-        return selector == allocateLaunchesToCreatorSelector || selector == returnLaunchesToPOCSelector;
+        return selector == takeLoanInLaunchesSelector || selector == returnLaunchesToPOCSelector;
     }
 
     function _onlyAdmin() internal view {

@@ -12,6 +12,7 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "../../interfaces/IPriceOracle.sol";
 import "../DataTypes.sol";
 import "../Constants.sol";
 import "../internal/ExitQueueValidationLibrary.sol";
@@ -47,7 +48,10 @@ library ProfitDistributionLibrary {
     /// @param fundraisingConfig Fundraising config
     /// @param accountedBalance Accounted balance mapping
     /// @param params totalSharesSupply, token, launchToken, amount (0 = distribute all unaccounted)
-    /// @param getOraclePrice Function to get token price in USD
+    /// @param oracle Price oracle for token prices
+    /// @param sellableCollaterals Collateral info mapping
+    /// @param pocContracts POC contracts array
+    /// @param pricePathsStorage Price paths storage
     /// @param allowedExitTokens Global mapping of allowed exit tokens
     /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
     /// @return newTotalSharesSupply Updated total shares supply
@@ -61,7 +65,10 @@ library ProfitDistributionLibrary {
         DataTypes.FundraisingConfig storage fundraisingConfig,
         mapping(address => uint256) storage accountedBalance,
         DistributeProfitParams memory params,
-        function(address) external returns (uint256) getOraclePrice,
+        IPriceOracle oracle,
+        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
+        DataTypes.POCInfo[] storage pocContracts,
+        DataTypes.PricePathsStorage storage pricePathsStorage,
         mapping(address => bool) storage allowedExitTokens,
         mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
     ) external returns (uint256 newTotalSharesSupply) {
@@ -103,7 +110,10 @@ library ProfitDistributionLibrary {
             params.token,
             participantsShare,
             params.launchToken,
-            getOraclePrice,
+            oracle,
+            sellableCollaterals,
+            pocContracts,
+            pricePathsStorage,
             allowedExitTokens,
             vaultAllowedExitTokens
         );
@@ -158,7 +168,10 @@ library ProfitDistributionLibrary {
     /// @param token Token address
     /// @param participantsShare Amount available for participants
     /// @param launchToken Launch token address
-    /// @param getOraclePrice Function to get token price in USD
+    /// @param oracle Price oracle
+    /// @param sellableCollaterals Collateral info mapping
+    /// @param pocContracts POC contracts array
+    /// @param pricePathsStorage Price paths storage
     /// @param allowedExitTokens Global mapping of allowed exit tokens
     /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
     /// @return remainingForParticipants Amount remaining after exit queue processing
@@ -175,7 +188,10 @@ library ProfitDistributionLibrary {
         address token,
         uint256 participantsShare,
         address launchToken,
-        function(address) external returns (uint256) getOraclePrice,
+        IPriceOracle oracle,
+        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
+        DataTypes.POCInfo[] storage pocContracts,
+        DataTypes.PricePathsStorage storage pricePathsStorage,
         mapping(address => bool) storage allowedExitTokens,
         mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
     ) internal returns (uint256 remainingForParticipants, uint256 newTotalSharesSupply) {
@@ -200,7 +216,10 @@ library ProfitDistributionLibrary {
                 availableFunds,
                 token,
                 launchToken,
-                getOraclePrice,
+                oracle,
+                sellableCollaterals,
+                pocContracts,
+                pricePathsStorage,
                 allowedExitTokens,
                 vaultAllowedExitTokens
             );

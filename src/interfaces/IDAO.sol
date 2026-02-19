@@ -93,6 +93,11 @@ interface IDAO {
     error LPDistributionTooSoon();
     error DepositLimitExceeded();
     error DepositLimitBelowCurrentShares();
+    error LoanNotActive();
+    error LoanActive();
+    error RepayAmountTooHigh();
+    error DropTooSoon();
+    error ExceedsDropLimit();
 
     // Fundraising errors
     error FundraisingDeadlinePassed();
@@ -226,6 +231,23 @@ interface IDAO {
         uint256 launchAmount, uint256 profitPercentReduction, uint256 newCreatorProfitPercent
     );
     event CreatorLaunchesReturned(uint256 launchAmount, uint256 profitPercentIncrease, uint256 newCreatorProfitPercent);
+    event LoanTaken(
+        uint256 launchAmount,
+        bool reservedForExitQueue,
+        uint256 newPrincipal,
+        uint256 newInterestAccrued,
+        uint256 newCreatorProfitPercent
+    );
+    event LoanRepaid(
+        uint256 paidAmount,
+        uint256 principalPaid,
+        uint256 interestPaid,
+        uint256 remainingPrincipal,
+        uint256 remainingInterestAccrued,
+        uint256 newCreatorProfitPercent
+    );
+    event CreatorVaultSet(uint256 indexed vaultId, address indexed creator);
+    event LaunchDropDistributed(uint256 amount);
     event LPProfitDistributed(address indexed lpToken, uint256 amount);
     event LaunchesReturnedToPOC(uint256 totalAmount, uint256 pocCount);
 
@@ -251,7 +273,9 @@ interface IDAO {
     function claimReward(address[] calldata tokens) external;
     function requestExit() external;
     function cancelExit() external;
-    function allocateLaunchesToCreator(uint256 launchAmount) external;
+    function takeLoanInLaunches(uint256 launchAmount, bool reserveForExitQueue) external;
+    function repayLoanInLaunches(uint256 amount) external;
+    function dropLaunchesAsProfit(uint256 amount) external;
     function upgradeOwnerShare(uint256 amount) external;
     function returnLaunchesToPOC(uint256 amount) external;
 

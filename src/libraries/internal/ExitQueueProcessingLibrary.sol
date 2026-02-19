@@ -12,8 +12,10 @@ pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "../../interfaces/IPriceOracle.sol";
 import "../DataTypes.sol";
 import "../Constants.sol";
+import "../external/OracleLibrary.sol";
 import "./ExitQueueValidationLibrary.sol";
 
 /// @title ExitQueueProcessingLibrary
@@ -32,7 +34,10 @@ library ExitQueueProcessingLibrary {
     /// @param availableFunds Amount of funds available for buyback (in tokens)
     /// @param token Token used for buyback
     /// @param launchToken Launch token address
-    /// @param getOraclePrice Function to get token price in USD
+    /// @param oracle Price oracle for token prices
+    /// @param sellableCollaterals Collateral info mapping
+    /// @param pocContracts POC contracts array
+    /// @param pricePathsStorage Price paths storage
     /// @param allowedExitTokens Global mapping of allowed exit tokens
     /// @param vaultAllowedExitTokens Vault-specific mapping of allowed exit tokens
     /// @return remainingFunds Remaining funds after processing (in tokens)
@@ -47,7 +52,10 @@ library ExitQueueProcessingLibrary {
         uint256 availableFunds,
         address token,
         address launchToken,
-        function(address) external returns (uint256) getOraclePrice,
+        IPriceOracle oracle,
+        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
+        DataTypes.POCInfo[] storage pocContracts,
+        DataTypes.PricePathsStorage storage pricePathsStorage,
         mapping(address => bool) storage allowedExitTokens,
         mapping(uint256 => mapping(address => bool)) storage vaultAllowedExitTokens
     ) internal returns (uint256 remainingFunds, uint256 newTotalSharesSupply) {
@@ -58,7 +66,9 @@ library ExitQueueProcessingLibrary {
             return (remainingFunds, newTotalSharesSupply);
         }
 
-        uint256 tokenPriceUSD = getOraclePrice(token);
+        uint256 tokenPriceUSD = OracleLibrary.getPrice(
+            oracle, sellableCollaterals, pocContracts, pricePathsStorage, launchToken, token
+        );
 
         for (
             uint256 i = exitQueueStorage.nextExitQueueIndex;
@@ -96,7 +106,10 @@ library ExitQueueProcessingLibrary {
                 request.vaultId,
                 shares,
                 launchToken,
-                getOraclePrice
+                oracle,
+                sellableCollaterals,
+                pocContracts,
+                pricePathsStorage
             );
             uint256 exitValueInTokens = _convertUSDToTokens(exitValueUSD, tokenPriceUSD);
 
@@ -143,7 +156,10 @@ library ExitQueueProcessingLibrary {
         uint256 vaultId,
         uint256 shares,
         address launchToken,
-        function(address) external returns (uint256) getOraclePrice
+        IPriceOracle oracle,
+        mapping(address => DataTypes.CollateralInfo) storage sellableCollaterals,
+        DataTypes.POCInfo[] storage pocContracts,
+        DataTypes.PricePathsStorage storage pricePathsStorage
     ) internal returns (uint256) {
         DataTypes.Vault memory vault = vaultStorage.vaults[vaultId];
         uint256 vaultTotalShares = vault.shares;
@@ -166,7 +182,9 @@ library ExitQueueProcessingLibrary {
         uint256 exitRequestIndex = exitQueueStorage.vaultExitRequestIndex[vaultId];
         if (exitRequestIndex > 0) {
             DataTypes.ExitRequest memory request = exitQueueStorage.exitQueue[exitRequestIndex - 1];
-            uint256 launchPriceNow = getOraclePrice(launchToken);
+            uint256 launchPriceNow = OracleLibrary.getPrice(
+                oracle, sellableCollaterals, pocContracts, pricePathsStorage, launchToken, launchToken
+            );
             if (launchPriceNow < request.fixedLaunchPriceAtRequest) {
                 exitValueUSD = (exitValueUSD * launchPriceNow) / request.fixedLaunchPriceAtRequest;
             }

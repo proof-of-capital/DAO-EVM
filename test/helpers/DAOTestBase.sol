@@ -233,6 +233,9 @@ abstract contract DAOTestBase is Test {
         voting.vote(proposalId, true);
         vm.prank(user3);
         voting.vote(proposalId, true);
+
+        vm.prank(creator);
+        voting.vote(proposalId, true);
     }
 
     function _executeUpgradeProposal(uint256 proposalId, bytes memory callData) internal {

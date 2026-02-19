@@ -98,7 +98,7 @@ contract DAOExitQueueSuccessTest is DAOTestBase {
 
     function _allocateLaunchesToCreatorViaGovernance(uint256 launchAmount) internal returns (uint256 proposalId) {
         vm.warp(block.timestamp + Constants.ALLOCATION_PERIOD);
-        bytes memory callData = abi.encodeWithSelector(DAO.allocateLaunchesToCreator.selector, launchAmount);
+        bytes memory callData = abi.encodeWithSelector(DAO.takeLoanInLaunches.selector, launchAmount, true);
         vm.warp(block.timestamp + 1 days);
 
         vm.prank(admin);
@@ -119,7 +119,7 @@ contract DAOExitQueueSuccessTest is DAOTestBase {
         returns (uint256 proposalId)
     {
         vm.warp(block.timestamp + Constants.ALLOCATION_PERIOD);
-        bytes memory callData = abi.encodeWithSelector(DAO.allocateLaunchesToCreator.selector, launchAmount);
+        bytes memory callData = abi.encodeWithSelector(DAO.takeLoanInLaunches.selector, launchAmount, true);
         vm.warp(block.timestamp + 1 days);
 
         vm.prank(admin);
@@ -330,7 +330,7 @@ contract DAOExitQueueSuccessTest is DAOTestBase {
             (launchToken.balanceOf(address(dao)) * Constants.MAX_CREATOR_ALLOCATION_PERCENT) / Constants.BASIS_POINTS;
         if (allocAmount2 == 0) allocAmount2 = 1e18;
 
-        bytes memory callData2 = abi.encodeWithSelector(DAO.allocateLaunchesToCreator.selector, allocAmount2);
+        bytes memory callData2 = abi.encodeWithSelector(DAO.takeLoanInLaunches.selector, allocAmount2, true);
         vm.warp(block.timestamp + 1 days);
         vm.prank(admin);
         uint256 proposalId2 = voting.createProposal(address(dao), callData2);

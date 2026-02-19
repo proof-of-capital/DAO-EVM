@@ -95,6 +95,8 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
 
     DataTypes.PricePathsStorage private pricePathsStorage;
 
+    DataTypes.CreatorLoanDropStorage public creatorLoanDrop;
+
     modifier onlyAdmin() {
         _onlyAdmin();
         _;
@@ -336,22 +338,79 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         ExitQueueLibrary.executeReturnToActiveStage(vaultStorage, daoState);
     }
 
-    /// @notice Allocate launch tokens to creator, reducing their profit share proportionally
-    /// @dev Can only be done once per ALLOCATION_PERIOD; max MAX_CREATOR_ALLOCATION_PERCENT per period
-    /// @param launchAmount Amount of launch tokens to allocate
-    function allocateLaunchesToCreator(uint256 launchAmount)
+    /// @notice Take a loan in launch tokens under collateralized profit share
+    /// @dev Governance-only execution; supports reserve-for-exit-queue mode
+    /// @param launchAmount Amount of launch tokens
+    /// @param reserveForExitQueue If true, do not transfer to creator when exit-queue is not empty; add to pendingExitQueuePayment instead
+    function takeLoanInLaunches(uint256 launchAmount, bool reserveForExitQueue)
         external
+        nonReentrant
         onlyViaGovernanceExecution
         atStage(DataTypes.Stage.Active)
     {
-        CreatorLibrary.executeAllocateLaunchesToCreator(
+        CreatorLibrary.executeTakeLoanInLaunches(
+            creatorLoanDrop,
             daoState,
             exitQueueStorage,
             fundraisingConfig,
             accountedBalance,
             _coreConfig,
-            vaultStorage.totalSharesSupply,
-            launchAmount
+            vaultStorage,
+            launchAmount,
+            reserveForExitQueue
+        );
+    }
+
+    /// @notice Repay loan in launch tokens and restore profit share proportionally
+    /// @dev Caller must be creator multisig and must have approved launch tokens to DAO
+    /// @param amount Amount of launch tokens to repay (principal + interest)
+    function repayLoanInLaunches(uint256 amount) external nonReentrant onlyCreator atActiveOrClosingStage {
+        CreatorLibrary.executeRepayLoanInLaunches(
+            creatorLoanDrop,
+            daoState,
+            rewardsStorage,
+            exitQueueStorage,
+            lpTokenStorage,
+            vaultStorage,
+            participantEntries,
+            fundraisingConfig,
+            accountedBalance,
+            _coreConfig,
+            allowedExitTokens,
+            IPriceOracle(_coreConfig.priceOracle),
+            sellableCollaterals,
+            pocContracts,
+            pricePathsStorage,
+            amount
+        );
+    }
+
+    /// @notice Distribute creator-provided launches as profit (governance-limited drop)
+    /// @dev Creator must have no active loan and must have approved launch tokens to DAO
+    /// @param amount Amount of launch tokens to drop
+    function dropLaunchesAsProfit(uint256 amount)
+        external
+        nonReentrant
+        onlyViaGovernanceExecution
+        atStage(DataTypes.Stage.Active)
+    {
+        CreatorLibrary.executeDropLaunchesAsProfit(
+            creatorLoanDrop,
+            daoState,
+            rewardsStorage,
+            exitQueueStorage,
+            lpTokenStorage,
+            vaultStorage,
+            participantEntries,
+            fundraisingConfig,
+            accountedBalance,
+            _coreConfig,
+            allowedExitTokens,
+            IPriceOracle(_coreConfig.priceOracle),
+            sellableCollaterals,
+            pocContracts,
+            pricePathsStorage,
+            amount
         );
     }
 
@@ -524,8 +583,12 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
             fundraisingConfig,
             accountedBalance,
             _coreConfig,
-            vaultStorage.totalSharesSupply,
-            this.getOraclePrice
+            this.getOraclePrice,
+            creatorLoanDrop,
+            vaultStorage,
+            rewardsStorage,
+            lpTokenStorage,
+            _coreConfig.votingContract
         );
     }
 
@@ -838,7 +901,10 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
                 launchToken: _coreConfig.launchToken,
                 amount: amount
             }),
-            this.getOraclePrice,
+            IPriceOracle(_coreConfig.priceOracle),
+            sellableCollaterals,
+            pocContracts,
+            pricePathsStorage,
             allowedExitTokens,
             vaultStorage.vaultAllowedExitTokens
         );
@@ -888,6 +954,7 @@ contract DAO is IDAO, Initializable, UUPSUpgradeable, ReentrancyGuard {
         _requirePriceOracleSet();
         return OracleLibrary.getLaunchPriceView(IPriceOracle(_coreConfig.priceOracle), pocContracts);
     }
+
 
     /// @notice Get DAO profit share percentage
     /// @return DAO profit share in basis points (10000 = 100%)

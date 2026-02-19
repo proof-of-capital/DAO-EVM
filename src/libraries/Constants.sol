@@ -60,10 +60,20 @@ library Constants {
     uint256 public constant CANCEL_AFTER_ACTIVE_PERIOD = 100 days;
     uint256 public constant CLOSING_EXIT_QUEUE_THRESHOLD = 5000; // 50% in basis points
     uint256 public constant MIN_DAO_PROFIT_SHARE = 2500; // 25% in basis points
+    uint256 public constant MAX_DAO_PROFIT_SHARE = 8000; // 80% in basis points
     uint256 public constant CLOSING_EXIT_QUEUE_MIN_THRESHOLD = 3000; // 30% in basis points
     uint256 public constant MAX_POC_CONTRACTS = 30;
     uint256 public constant POC_RETURN_PERIOD = 30 days;
     uint256 public constant POC_RETURN_MAX_PERCENT = 200; // 2% in basis points
+
+    // ============================================
+    // LOAN & DROP CONSTANTS
+    // ============================================
+
+    uint256 public constant SECONDS_PER_YEAR = 365 days;
+    uint256 public constant LOAN_APR_BPS = 4500; // 45% APR in basis points
+    uint256 public constant DROP_PERIOD = 30 days;
+    uint256 public constant DROP_MAX_PERCENT = 500; // 5% in basis points per DROP_PERIOD
 
     // ============================================
     // PRICE VALIDATION CONSTANTS
