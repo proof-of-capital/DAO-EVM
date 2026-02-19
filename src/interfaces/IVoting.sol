@@ -29,7 +29,7 @@
 
 pragma solidity ^0.8.33;
 
-import "../utils/DataTypes.sol";
+import "../libraries/DataTypes.sol";
 
 /// @title IVoting Interface
 /// @notice Interface for the voting contract managing proposals and votes
@@ -54,27 +54,14 @@ interface IVoting {
     function createProposal(address targetContract, bytes calldata callData) external returns (uint256 proposalId);
 
     function vote(uint256 proposalId, bool support) external;
-    function execute(uint256 proposalId) external;
+    function execute(uint256 proposalId, bytes calldata callData) external;
     function updateVotesForVault(uint256 vaultId, int256 votingSharesDelta) external;
 
     // Admin Functions
     // Note: Category thresholds are set only in constructor and cannot be changed
 
     // View functions
-    function getProposal(uint256 proposalId) external view returns (DataTypes.ProposalCore memory);
     function getProposalStatus(uint256 proposalId) external view returns (DataTypes.ProposalStatus);
-    function hasVoted(uint256 proposalId, uint256 vaultId) external view returns (bool);
-    function getVotingParameters()
-        external
-        view
-        returns (uint256 votingPeriod, uint256 quorumPercentage, uint256 approvalThreshold);
-
-    function getCategoryThresholds(DataTypes.ProposalType proposalType)
-        external
-        view
-        returns (uint256 quorumPct, uint256 approvalPct);
-
-    function getProposalCategory(uint256 proposalId) external view returns (DataTypes.ProposalType);
 
     function determineCategory(address targetContract, bytes calldata callData)
         external

@@ -15,8 +15,8 @@ import {IMultisig} from "./interfaces/IMultisig.sol";
 import {IDAO} from "./interfaces/IDAO.sol";
 import {INonfungiblePositionManager} from "./interfaces/INonfungiblePositionManager.sol";
 import {IProofOfCapital} from "./interfaces/IProofOfCapital.sol";
-import {Constants} from "./utils/Constants.sol";
-import {DataTypes} from "./utils/DataTypes.sol";
+import {Constants} from "./libraries/Constants.sol";
+import {DataTypes} from "./libraries/DataTypes.sol";
 import {ISwapRouter} from "./interfaces/ISwapRouter.sol";
 import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -49,7 +49,7 @@ contract Multisig is IMultisig {
     uint256 public currentCollateralAmount;
     address public uniswapV3Router;
     address public uniswapV3PositionManager;
-    LPPoolParams public lpPoolParams;
+    LPPoolConfig[] private lpPools;
     mapping(address => CollateralInfo) public collaterals;
 
     modifier onlyPrimaryOwner() {
@@ -113,7 +113,7 @@ contract Multisig is IMultisig {
         uint256 _targetCollateralAmount,
         address _uniswapV3Router,
         address _uniswapV3PositionManager,
-        LPPoolParams memory _lpPoolParams,
+        LPPoolConfig[] memory _lpPoolConfigs,
         CollateralConstructorParams[] memory _collateralParams,
         address _newMarketMaker
     ) {
@@ -130,11 +130,15 @@ contract Multisig is IMultisig {
             require(_backupAddrs[i] != address(0), InvalidBackupAddress());
             require(_emergencyAddrs[i] != address(0), InvalidEmergencyAddress());
 
-            require(
-                _primaryAddrs[i] != _backupAddrs[i] && _primaryAddrs[i] != _emergencyAddrs[i]
-                    && _backupAddrs[i] != _emergencyAddrs[i],
-                AddressesMustBeUnique()
-            );
+            bool isContractOwner = _primaryAddrs[i] == _backupAddrs[i] && _backupAddrs[i] == _emergencyAddrs[i];
+
+            if (!isContractOwner) {
+                require(
+                    _primaryAddrs[i] != _backupAddrs[i] && _primaryAddrs[i] != _emergencyAddrs[i]
+                        && _backupAddrs[i] != _emergencyAddrs[i],
+                    AddressesMustBeUnique()
+                );
+            }
 
             owners.push(
                 Owner({
@@ -160,15 +164,22 @@ contract Multisig is IMultisig {
         require(_targetCollateralAmount > 0, InvalidAddress());
         require(_uniswapV3Router != address(0), InvalidAddress());
         require(_uniswapV3PositionManager != address(0), InvalidAddress());
-        require(_lpPoolParams.fee > 0, InvalidLPPoolParams());
-        require(_lpPoolParams.amount0Min > 0, InvalidLPPoolParams());
-        require(_lpPoolParams.amount1Min > 0, InvalidLPPoolParams());
+        require(_lpPoolConfigs.length > 0, InvalidLPPoolConfigs());
+        uint256 totalShareBps;
+        for (uint256 i = 0; i < _lpPoolConfigs.length; ++i) {
+            require(_lpPoolConfigs[i].params.fee > 0, InvalidLPPoolParams());
+            require(_lpPoolConfigs[i].params.amount0Min > 0, InvalidLPPoolParams());
+            require(_lpPoolConfigs[i].params.amount1Min > 0, InvalidLPPoolParams());
+            require(_lpPoolConfigs[i].shareBps > 0, InvalidLPPoolConfigs());
+            totalShareBps += _lpPoolConfigs[i].shareBps;
+            lpPools.push(_lpPoolConfigs[i]);
+        }
+        require(totalShareBps == 10_000, InvalidLPPoolConfigs());
         require(_newMarketMaker != address(0), InvalidAddress());
 
         targetCollateralAmount = _targetCollateralAmount;
         uniswapV3Router = _uniswapV3Router;
         uniswapV3PositionManager = _uniswapV3PositionManager;
-        lpPoolParams = _lpPoolParams;
         multisigStage = MultisigStage.Inactive;
         newMarketMaker = _newMarketMaker;
 
@@ -276,6 +287,18 @@ contract Multisig is IMultisig {
                     return;
                 }
             }
+        } else if (transactions[txId].votingType == VotingType.EXTEND_LOCK) {
+            if (voteOption == VoteOption.FOR) {
+                transactions[txId].confirmationsFor += share;
+            } else {
+                transactions[txId].confirmationsAgainst += share;
+
+                if (transactions[txId].confirmationsAgainst > 20) {
+                    transactions[txId].status = TransactionStatus.CANCELLED;
+                    emit TransactionCancelled(txId, "More than 20% voted against");
+                    return;
+                }
+            }
         }
 
         emit VoteCast(txId, msg.sender, voteOption, share);
@@ -314,6 +337,9 @@ contract Multisig is IMultisig {
                 }
             }
         }
+        if (txn.votingType == VotingType.EXTEND_LOCK) {
+            require(!dao.coreConfig().isVetoToCreator, ExtendLockNotAllowedWhenVeto());
+        }
 
         bytes32 computedHash = _computeCallDataHash(calls, txId);
         require(txn.callDataHash == computedHash, CallDataHashMismatch());
@@ -343,6 +369,23 @@ contract Multisig is IMultisig {
             if (!canExecute) {
                 txn.status = TransactionStatus.CANCELLED;
                 emit TransactionFailed(txId, "Less than 7 out of 8 owners confirmed");
+                return;
+            }
+        } else if (txn.votingType == VotingType.EXTEND_LOCK) {
+            uint256 totalParticipation = txn.confirmationsFor + txn.confirmationsAgainst;
+
+            if (totalParticipation < Constants.MULTISIG_GENERAL_PARTICIPATION_THRESHOLD) {
+                txn.status = TransactionStatus.CANCELLED;
+                emit TransactionFailed(txId, "Less than 60% participation");
+                return;
+            }
+
+            uint256 approvalPercentage = (txn.confirmationsFor * Constants.PERCENTAGE_MULTIPLIER) / totalParticipation;
+            canExecute = approvalPercentage >= Constants.MULTISIG_GENERAL_APPROVAL_THRESHOLD;
+
+            if (!canExecute) {
+                txn.status = TransactionStatus.CANCELLED;
+                emit TransactionFailed(txId, "Less than 80% approval among participants");
                 return;
             }
         }
@@ -385,6 +428,12 @@ contract Multisig is IMultisig {
                 transactions[txId].confirmationsFor -= 1;
             } else {
                 transactions[txId].confirmationsAgainst -= 1;
+            }
+        } else if (transactions[txId].votingType == VotingType.EXTEND_LOCK) {
+            if (previousVote == VoteOption.FOR) {
+                transactions[txId].confirmationsFor -= share;
+            } else {
+                transactions[txId].confirmationsAgainst -= share;
             }
         }
 
@@ -462,10 +511,25 @@ contract Multisig is IMultisig {
         _changeEmergencyAddress(idx, newEmergencyAddr);
     }
 
+    /// @notice Change all three addresses (primary, backup, emergency) in one transaction
+    /// @param newPrimaryAddr New primary address
+    /// @param newBackupAddr New backup address
+    /// @param newEmergencyAddr New emergency address
+    function changeAllAddresses(address newPrimaryAddr, address newBackupAddr, address newEmergencyAddr)
+        external
+        onlyPrimaryOwner
+    {
+        uint256 idx = ownerIndex[msg.sender];
+        _changePrimaryAddress(idx, newPrimaryAddr);
+        _changeBackupAddress(idx, newBackupAddr);
+        _changeEmergencyAddress(idx, newEmergencyAddr);
+    }
+
     /// @inheritdoc IMultisig
     function changeOwnerEmergencyAddress(uint256 ownerIdx, address newEmergencyAddr) external {
         require(msg.sender == address(this), CanOnlyBeCalledThroughMultisig());
         require(ownerIdx < owners.length, OwnerIndexOutOfBounds());
+        require(!_isContractOwner(ownerIdx), CannotReplaceContractOwner());
         _changeEmergencyAddress(ownerIdx, newEmergencyAddr);
     }
 
@@ -553,6 +617,15 @@ contract Multisig is IMultisig {
         return (owner.primaryAddr, owner.backupAddr, owner.emergencyAddr, owner.share);
     }
 
+    function getLPPoolsCount() external view returns (uint256) {
+        return lpPools.length;
+    }
+
+    function getLPPoolConfig(uint256 index) external view returns (LPPoolConfig memory) {
+        require(index < lpPools.length, OwnerIndexOutOfBounds());
+        return lpPools[index];
+    }
+
     /// @inheritdoc IMultisig
     function getTransaction(uint256 txId) external view returns (Transaction memory) {
         require(txId < transactions.length, TransactionDoesNotExist());
@@ -589,6 +662,15 @@ contract Multisig is IMultisig {
             totalParticipation = votesFor;
             participationPercentage = (votesFor * Constants.PERCENTAGE_MULTIPLIER) / owners.length;
             approvalPercentage = Constants.PERCENTAGE_MULTIPLIER;
+        } else if (txn.votingType == VotingType.EXTEND_LOCK) {
+            votesFor = txn.confirmationsFor;
+            votesAgainst = txn.confirmationsAgainst;
+            totalParticipation = votesFor + votesAgainst;
+
+            if (totalParticipation > 0) {
+                participationPercentage = totalParticipation;
+                approvalPercentage = (votesFor * Constants.PERCENTAGE_MULTIPLIER) / totalParticipation;
+            }
         }
     }
 
@@ -632,6 +714,11 @@ contract Multisig is IMultisig {
     /// @inheritdoc IMultisig
     function isAnyOwner(address addr) public view returns (bool) {
         return isPrimaryOwner[addr] || isBackupOwner[addr] || isEmergencyOwner[addr];
+    }
+
+    function _isContractOwner(uint256 idx) internal view returns (bool) {
+        Owner storage owner = owners[idx];
+        return owner.primaryAddr == owner.backupAddr && owner.backupAddr == owner.emergencyAddr;
     }
 
     function _changePrimaryAddress(uint256 idx, address newPrimaryAddr) internal {
@@ -692,6 +779,10 @@ contract Multisig is IMultisig {
             || selector == Constants.SET_MAX_COUNT_VOTE_PER_PERIOD_SELECTOR;
     }
 
+    function _isExtendLockSelector(bytes4 selector) internal pure returns (bool) {
+        return selector == IProofOfCapital.extendLock.selector;
+    }
+
     function _determineVotingType(ProposalCall[] calldata calls) internal pure returns (VotingType) {
         for (uint256 i = 0; i < calls.length; ++i) {
             if (calls[i].callData.length < 4) {
@@ -706,6 +797,9 @@ contract Multisig is IMultisig {
 
             if (_isOwnershipSelector(selector)) {
                 return VotingType.TRANSFER_OWNERSHIP;
+            }
+            if (_isExtendLockSelector(selector)) {
+                return VotingType.EXTEND_LOCK;
             }
         }
 
@@ -729,7 +823,7 @@ contract Multisig is IMultisig {
         }
 
         if (hasVetoContract) {
-            require(!dao.isVetoToCreator(), InvalidDAOStage());
+            require(!dao.coreConfig().isVetoToCreator, InvalidDAOStage());
             DataTypes.DAOState memory daoState = dao.getDaoState();
             require(
                 daoState.currentStage == DataTypes.Stage.Active || daoState.currentStage == DataTypes.Stage.Dissolved,
@@ -755,7 +849,7 @@ contract Multisig is IMultisig {
         IERC20 collateralToken = IERC20(collateral);
         require(collateralToken.balanceOf(address(this)) >= collateralBalance, InsufficientBalance());
 
-        address mainCollateral = dao.mainCollateral();
+        address mainCollateral = dao.coreConfig().mainCollateral;
 
         uint256 collateralPrice = _getChainlinkPrice(collateralInfo.priceFeed);
 
@@ -790,45 +884,62 @@ contract Multisig is IMultisig {
         uint256 mainCollateralBalance = IERC20(mainCollateral).balanceOf(address(this));
 
         if (mainCollateralBalance >= targetCollateralAmount) {
-            address launchToken = address(dao.launchToken());
+            address launchToken = dao.coreConfig().launchToken;
             uint256 launchBalance = IERC20(launchToken).balanceOf(address(this));
             _createUniswapV3LPInternal(launchBalance, targetCollateralAmount);
         }
     }
 
     function _createUniswapV3LPInternal(uint256 amount0Desired, uint256 amount1Desired) internal {
-        address token0 = address(dao.launchToken());
-        address token1 = dao.mainCollateral();
+        address token0 = dao.coreConfig().launchToken;
+        address token1 = dao.coreConfig().mainCollateral;
 
         IERC20(token0).approve(uniswapV3PositionManager, amount0Desired);
         IERC20(token1).approve(uniswapV3PositionManager, amount1Desired);
 
-        INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
-            token0: token0,
-            token1: token1,
-            fee: lpPoolParams.fee,
-            tickLower: lpPoolParams.tickLower,
-            tickUpper: lpPoolParams.tickUpper,
-            amount0Desired: amount0Desired,
-            amount1Desired: amount1Desired,
-            amount0Min: lpPoolParams.amount0Min,
-            amount1Min: lpPoolParams.amount1Min,
-            recipient: address(this),
-            deadline: block.timestamp + 1 hours
-        });
+        uint256 poolsCount = lpPools.length;
+        uint256[] memory v3TokenIds = new uint256[](poolsCount);
+        uint256 amount0Used;
+        uint256 amount1Used;
 
-        (uint256 tokenId,, uint256 amount0, uint256 amount1) =
-            INonfungiblePositionManager(uniswapV3PositionManager).mint(params);
+        for (uint256 i = 0; i < poolsCount; ++i) {
+            LPPoolConfig memory config = lpPools[i];
+            uint256 amount0;
+            uint256 amount1;
+            if (i == poolsCount - 1) {
+                amount0 = amount0Desired - amount0Used;
+                amount1 = amount1Desired - amount1Used;
+            } else {
+                amount0 = (amount0Desired * config.shareBps) / 10_000;
+                amount1 = (amount1Desired * config.shareBps) / 10_000;
+                amount0Used += amount0;
+                amount1Used += amount1;
+            }
 
-        emit LPCreated(tokenId, amount0, amount1);
+            INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
+                token0: token0,
+                token1: token1,
+                fee: config.params.fee,
+                tickLower: config.params.tickLower,
+                tickUpper: config.params.tickUpper,
+                amount0Desired: amount0,
+                amount1Desired: amount1,
+                amount0Min: config.params.amount0Min,
+                amount1Min: config.params.amount1Min,
+                recipient: address(this),
+                deadline: block.timestamp + 1 hours
+            });
 
-        IERC721(uniswapV3PositionManager).safeTransferFrom(address(this), address(dao), tokenId);
+            (uint256 tokenId,, uint256 amount0Minted, uint256 amount1Minted) =
+                INonfungiblePositionManager(uniswapV3PositionManager).mint(params);
+
+            emit LPCreated(tokenId, amount0Minted, amount1Minted);
+            IERC721(uniswapV3PositionManager).safeTransferFrom(address(this), address(dao), tokenId);
+            v3TokenIds[i] = tokenId;
+        }
 
         address[] memory emptyV2Addresses = new address[](0);
         uint256[] memory emptyV2Amounts = new uint256[](0);
-        uint256[] memory v3TokenIds = new uint256[](1);
-        v3TokenIds[0] = tokenId;
-
         DataTypes.PricePathV2Params[] memory emptyV2Paths = new DataTypes.PricePathV2Params[](0);
         DataTypes.PricePathV3Params[] memory emptyV3Paths = new DataTypes.PricePathV3Params[](0);
 
@@ -842,8 +953,6 @@ contract Multisig is IMultisig {
             if (pocInfo.active) {
                 IProofOfCapital pocContract = IProofOfCapital(pocInfo.pocContract);
                 pocContract.extendLock(newLockTimestamp);
-                pocContract.setMarketMaker(address(dao), false);
-                pocContract.setMarketMaker(newMarketMaker, true);
             }
         }
     }

@@ -32,7 +32,8 @@ pragma solidity ^0.8.20;
 import "forge-std/Script.sol";
 import "../src/DAO.sol";
 import "../src/Voting.sol";
-import "../src/utils/DataTypes.sol";
+import "../src/RoyaltyWallet.sol";
+import "../src/libraries/DataTypes.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /// @title Deploy script for DAO system
@@ -44,12 +45,15 @@ contract DeployDAO is Script {
         // Required parameters
         address launchTokenAddress = vm.envAddress("LAUNCH_TOKEN_ADDRESS");
         address mainCollateralAddress = vm.envAddress("MAIN_COLLATERAL_ADDRESS"); // USDT
-        address creatorAddress = vm.envAddress("CREATOR_ADDRESS");
+        address creatorAddress = address(0); // Will be set later via setCreator
 
         // Fundraising parameters (with defaults)
         uint256 creatorProfitPercent = vm.envOr("CREATOR_PROFIT_PERCENT", uint256(4000)); // 40%
         uint256 creatorInfraPercent = vm.envOr("CREATOR_INFRA_PERCENT", uint256(1000)); // 10%
-        address royaltyRecipient = vm.envOr("ROYALTY_RECIPIENT", address(0)); // Royalty recipient (e.g., POC1)
+        address royaltyRecipient = vm.envOr("ROYALTY_RECIPIENT", address(0)); // Royalty recipient (e.g., POC1); if DEPLOY_ROYALTY_WALLET and zero, deployer is used so they can set RoyaltyWallet later
+        if (vm.envOr("DEPLOY_ROYALTY_WALLET", false) && royaltyRecipient == address(0)) {
+            royaltyRecipient = vm.addr(deployerPrivateKey);
+        }
         uint256 royaltyPercent = vm.envOr("ROYALTY_PERCENT", uint256(1000)); // 10% royalty
         uint256 minDeposit = vm.envOr("MIN_DEPOSIT_USD", uint256(1000e18)); // $1000
         uint256 minLaunchDeposit = vm.envOr("MIN_LAUNCH_DEPOSIT", uint256(10000e18)); // 10k launches minimum
@@ -61,17 +65,7 @@ contract DeployDAO is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // Prepare collaterals for constructor
-        address[] memory collateralTokens;
-        address[] memory priceFeeds;
-
-        // Optional: Load collaterals if configured
-        if (vm.envOr("ADD_COLLATERALS", false)) {
-            collateralTokens = vm.envAddress("COLLATERAL_ADDRESSES", ",");
-            priceFeeds = vm.envAddress("PRICE_FEED_ADDRESSES", ",");
-
-            require(collateralTokens.length == priceFeeds.length, "Collaterals and price feeds length mismatch");
-        }
+        address[] memory collateralTokens = new address[](0);
 
         // Prepare routers and reward tokens for constructor
         address[] memory routers;
@@ -84,17 +78,11 @@ contract DeployDAO is Script {
         }
 
         // Optional: Load additional reward tokens if configured
-        // Format: REWARD_TOKEN_ADDRESSES=token1,token2,... REWARD_TOKEN_PRICE_FEEDS=feed1,feed2,...
         if (vm.envOr("ADD_REWARD_TOKENS", false)) {
             address[] memory rewardTokens = vm.envAddress("REWARD_TOKEN_ADDRESSES", ",");
-            address[] memory rewardPriceFeeds = vm.envAddress("REWARD_TOKEN_PRICE_FEEDS", ",");
-
-            require(rewardTokens.length == rewardPriceFeeds.length, "Reward tokens and price feeds length mismatch");
-
             rewardTokenParams = new DataTypes.RewardTokenConstructorParams[](rewardTokens.length);
             for (uint256 i = 0; i < rewardTokens.length; i++) {
-                rewardTokenParams[i] =
-                    DataTypes.RewardTokenConstructorParams({token: rewardTokens[i], priceFeed: rewardPriceFeeds[i]});
+                rewardTokenParams[i] = DataTypes.RewardTokenConstructorParams({token: rewardTokens[i]});
             }
         }
 
@@ -115,6 +103,31 @@ contract DeployDAO is Script {
             totalSupply: vm.envOr("ORDERBOOK_TOTAL_SUPPLY", uint256(1e27)) // 1 billion = 1e27 (1e9 * 1e18)
         });
 
+        // Deploy Voting contract first (before DAO)
+        Voting voting = new Voting();
+        console.log("Voting deployed at:", address(voting));
+
+        address priceOracleAddress = vm.envOr("PRICE_ORACLE_ADDRESS", address(0));
+
+        DataTypes.LPTokenDepegParams[] memory lpDepegParams;
+        if (vm.envOr("ADD_LP_DEPEG_PARAMS", false)) {
+            address[] memory depegTokens = vm.envAddress("LP_DEPEG_TOKENS", ",");
+            uint256[] memory depegRatiosBps = vm.envUint("LP_DEPEG_RATIOS_BPS", ",");
+            uint256[] memory depegThresholds = vm.envUint("LP_DEPEG_THRESHOLDS", ",");
+            require(
+                depegTokens.length == depegRatiosBps.length && depegTokens.length == depegThresholds.length,
+                "LP_DEPEG array length mismatch"
+            );
+            lpDepegParams = new DataTypes.LPTokenDepegParams[](depegTokens.length);
+            for (uint256 i = 0; i < depegTokens.length; i++) {
+                lpDepegParams[i] = DataTypes.LPTokenDepegParams({
+                    token: depegTokens[i], ratioBps: depegRatiosBps[i], depegThresholdMinPrice: depegThresholds[i]
+                });
+            }
+        } else {
+            lpDepegParams = new DataTypes.LPTokenDepegParams[](0);
+        }
+
         // Build constructor params
         DataTypes.ConstructorParams memory params = DataTypes.ConstructorParams({
             launchToken: launchTokenAddress,
@@ -132,7 +145,6 @@ contract DeployDAO is Script {
             fundraisingDuration: fundraisingDuration,
             extensionPeriod: extensionPeriod,
             collateralTokens: collateralTokens,
-            priceFeeds: priceFeeds,
             routers: routers,
             tokens: tokens, // Deprecated: kept for backward compatibility
             pocParams: pocParams,
@@ -146,7 +158,10 @@ contract DeployDAO is Script {
                 v3Paths: new DataTypes.PricePathV3Params[](0),
                 minLiquidity: 1000e18
             }),
-            votingContract: address(0) // Will be set later via setVotingContract
+            priceOracle: priceOracleAddress,
+            votingContract: address(voting), // Set Voting address
+            marketMaker: vm.envOr("MARKET_MAKER", address(0)), // Market maker address
+            lpDepegParams: lpDepegParams
         });
 
         // Deploy DAO implementation contract (upgradeable pattern)
@@ -161,13 +176,18 @@ contract DeployDAO is Script {
         DAO dao = DAO(payable(address(proxy)));
         console.log("DAO proxy deployed at:", address(dao));
 
-        // Deploy Voting contract
-        Voting voting = new Voting(address(dao));
-        console.log("Voting deployed at:", address(voting));
+        // Set DAO in Voting contract (only deployer, only once)
+        voting.setDAO(address(dao));
+        console.log("DAO set in Voting contract");
 
-        // Set voting contract in DAO
-        dao.setVotingContract(address(voting));
-        console.log("Voting contract set in DAO");
+        if (vm.envOr("DEPLOY_ROYALTY_WALLET", false)) {
+            address royaltyAdminDAO = vm.envAddress("ROYALTY_ADMIN_DAO");
+            address royaltyAdmin = vm.envOr("ROYALTY_ADMIN", address(0));
+            RoyaltyWallet royaltyWallet =
+                new RoyaltyWallet(royaltyAdminDAO, royaltyAdmin, address(dao), priceOracleAddress, launchTokenAddress);
+            console.log("RoyaltyWallet deployed at:", address(royaltyWallet));
+            dao.setRoyaltyRecipient(address(royaltyWallet));
+        }
 
         // Log configuration
         if (collateralTokens.length > 0) {
@@ -182,6 +202,15 @@ contract DeployDAO is Script {
 
         vm.stopBroadcast();
 
+        writeDeploymentAddresses(
+            address(daoImplementation),
+            address(dao),
+            address(voting),
+            launchTokenAddress,
+            mainCollateralAddress,
+            dao.coreConfig().admin
+        );
+
         console.log("\n=== Deployment Summary ===");
         console.log("DAO Implementation:", address(daoImplementation));
         console.log("DAO Proxy:", address(dao));
@@ -189,7 +218,7 @@ contract DeployDAO is Script {
         console.log("Launch Token:", launchTokenAddress);
         console.log("Main Collateral (USDT):", mainCollateralAddress);
         console.log("Creator:", creatorAddress);
-        console.log("Admin:", dao.admin());
+        console.log("Admin:", dao.coreConfig().admin);
         console.log("\n=== Fundraising Config ===");
         console.log("Min Deposit:", minDeposit);
         console.log("Share Price:", sharePrice);
@@ -198,5 +227,68 @@ contract DeployDAO is Script {
         console.log("Creator Infra %:", creatorInfraPercent);
         console.log("Royalty Recipient:", royaltyRecipient);
         console.log("Royalty %:", royaltyPercent);
+    }
+
+    function writeDeploymentAddresses(
+        address daoImplementation,
+        address dao,
+        address voting,
+        address launchToken,
+        address mainCollateral,
+        address admin
+    ) internal {
+        string memory DEPLOYMENT_ADDRESSES_FILE = "./.deployment_addresses";
+        string memory ENV_FILE = "./.deployment_addresses.env";
+
+        string memory addressesJson = string(
+            abi.encodePacked(
+                '{"daoImplementation":"',
+                vm.toString(daoImplementation),
+                '",',
+                '"dao":"',
+                vm.toString(dao),
+                '",',
+                '"voting":"',
+                vm.toString(voting),
+                '",',
+                '"launchToken":"',
+                vm.toString(launchToken),
+                '",',
+                '"mainCollateral":"',
+                vm.toString(mainCollateral),
+                '",',
+                '"admin":"',
+                vm.toString(admin),
+                '"}'
+            )
+        );
+        vm.writeFile(DEPLOYMENT_ADDRESSES_FILE, addressesJson);
+        console.log("Deployment addresses saved to", DEPLOYMENT_ADDRESSES_FILE);
+
+        string memory envContent = string(
+            abi.encodePacked(
+                "DAO_IMPLEMENTATION=",
+                vm.toString(daoImplementation),
+                "\n",
+                "DAO=",
+                vm.toString(dao),
+                "\n",
+                "VOTING=",
+                vm.toString(voting),
+                "\n",
+                "LAUNCH_TOKEN=",
+                vm.toString(launchToken),
+                "\n",
+                "MAIN_COLLATERAL=",
+                vm.toString(mainCollateral),
+                "\n",
+                "ADMIN=",
+                vm.toString(admin),
+                "\n"
+            )
+        );
+
+        vm.writeFile(ENV_FILE, envContent);
+        console.log("Environment variables saved to", ENV_FILE);
     }
 }

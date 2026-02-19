@@ -30,7 +30,7 @@
 pragma solidity ^0.8.33;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../utils/DataTypes.sol";
+import "../libraries/DataTypes.sol";
 import "./IMultisig.sol";
 
 /// @title IDAO Interface
@@ -93,6 +93,11 @@ interface IDAO {
     error LPDistributionTooSoon();
     error DepositLimitExceeded();
     error DepositLimitBelowCurrentShares();
+    error LoanNotActive();
+    error LoanActive();
+    error RepayAmountTooHigh();
+    error DropTooSoon();
+    error ExceedsDropLimit();
 
     // Fundraising errors
     error FundraisingDeadlinePassed();
@@ -137,6 +142,10 @@ interface IDAO {
     error POCReturnTooSoon();
     error POCReturnExceedsMaxAmount();
     error NoPOCContractsActive();
+    error NoDepegCondition();
+
+    error PriceOracleNotSet();
+    error PriceOracleAlreadySet();
 
     // ============================================
     // EVENTS
@@ -157,8 +166,8 @@ interface IDAO {
     event LaunchTokenSold(
         address indexed seller, address indexed collateral, uint256 launchAmount, uint256 collateralAmount
     );
-    event SellableCollateralAdded(address indexed token, address indexed priceFeed);
-    event RewardTokenAdded(address indexed token, address indexed priceFeed);
+    event SellableCollateralAdded(address indexed token);
+    event RewardTokenAdded(address indexed token);
     event ProfitDistributed(address indexed token, uint256 amount);
     event RoyaltyDistributed(address indexed token, address indexed recipient, uint256 amount);
     event CreatorProfitDistributed(address indexed token, address indexed creator, uint256 amount);
@@ -173,6 +182,7 @@ interface IDAO {
     event RouterAvailabilityChanged(address indexed router, bool isAvailable);
     event TokenAvailabilityChanged(address indexed token, bool isAvailable);
     event MultisigExecutionPushed(uint256 indexed proposalId, address indexed pusher);
+    event MarketMakerSet(address indexed marketMaker);
     event OrderbookParamsUpdated(
         uint256 initialPrice,
         uint256 initialVolume,
@@ -196,6 +206,7 @@ interface IDAO {
     event FundraisingCollectionFinalized(uint256 totalCollected, uint256 totalShares);
     event POCContractAdded(address indexed pocContract, address indexed collateralToken, uint256 sharePercent);
     event POCContractRemoved(address indexed pocContract);
+    event PrivateSaleRegistered(address indexed privateSaleContract);
     event POCExchangeCompleted(
         uint256 indexed pocIndex,
         address indexed pocContract,
@@ -220,6 +231,23 @@ interface IDAO {
         uint256 launchAmount, uint256 profitPercentReduction, uint256 newCreatorProfitPercent
     );
     event CreatorLaunchesReturned(uint256 launchAmount, uint256 profitPercentIncrease, uint256 newCreatorProfitPercent);
+    event LoanTaken(
+        uint256 launchAmount,
+        bool reservedForExitQueue,
+        uint256 newPrincipal,
+        uint256 newInterestAccrued,
+        uint256 newCreatorProfitPercent
+    );
+    event LoanRepaid(
+        uint256 paidAmount,
+        uint256 principalPaid,
+        uint256 interestPaid,
+        uint256 remainingPrincipal,
+        uint256 remainingInterestAccrued,
+        uint256 newCreatorProfitPercent
+    );
+    event CreatorVaultSet(uint256 indexed vaultId, address indexed creator);
+    event LaunchDropDistributed(uint256 amount);
     event LPProfitDistributed(address indexed lpToken, uint256 amount);
     event LaunchesReturnedToPOC(uint256 totalAmount, uint256 pocCount);
 
@@ -245,7 +273,9 @@ interface IDAO {
     function claimReward(address[] calldata tokens) external;
     function requestExit() external;
     function cancelExit() external;
-    function allocateLaunchesToCreator(uint256 launchAmount) external;
+    function takeLoanInLaunches(uint256 launchAmount, bool reserveForExitQueue) external;
+    function repayLoanInLaunches(uint256 amount) external;
+    function dropLaunchesAsProfit(uint256 amount) external;
     function upgradeOwnerShare(uint256 amount) external;
     function returnLaunchesToPOC(uint256 amount) external;
 
@@ -267,8 +297,7 @@ interface IDAO {
     // FUNDRAISING MANAGEMENT
     // ============================================
 
-    function addPOCContract(address pocContract, address collateralToken, address priceFeed, uint256 sharePercent)
-        external;
+    function addPOCContract(address pocContract, address collateralToken, uint256 sharePercent) external;
     function removePOCContract(address pocContract) external;
     function withdrawFundraising() external;
     function extendFundraising() external;
@@ -295,6 +324,32 @@ interface IDAO {
     function dissolveIfLocksEnded() external;
     function claimDissolution(address[] calldata tokens) external;
     function claimCreatorDissolution() external;
+    function declareDepeg(address lpToken, uint256 tokenId, DataTypes.LPTokenType lpType) external;
+    function addLiquidityBackV2(
+        address lpToken,
+        address router,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 amount0Min,
+        uint256 amount1Min
+    ) external;
+    function addLiquidityBackV3(
+        uint256 tokenId,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 amount0Min,
+        uint256 amount1Min
+    ) external;
+    function rebalance(
+        address collateral,
+        address router,
+        DataTypes.SwapType swapType,
+        bytes calldata swapData,
+        DataTypes.RebalanceDirection direction,
+        uint256 amountIn,
+        uint256 minOut
+    ) external;
+    function finalizeDepegAfterGracePeriod(address lpToken, uint256 tokenId, DataTypes.LPTokenType lpType) external;
     function executeProposal(address targetContract, bytes calldata callData) external;
     function provideLPTokens(
         address[] calldata v2LPTokenAddresses,
@@ -312,6 +367,7 @@ interface IDAO {
     function setAdmin(address newAdmin) external;
     function setIsVetoToCreator(bool value) external;
     function setRoyaltyRecipient(address newRoyaltyRecipient) external;
+    function setPriceOracle(address newPriceOracle) external;
     function setPendingUpgradeFromVoting(address newImplementation) external;
     function pushMultisigExecution(uint256 proposalId, IMultisig.ProposalCall[] calldata calls) external;
 
@@ -329,20 +385,13 @@ interface IDAO {
     // These are declared here for interface compatibility
 
     // Core state
-    function admin() external view returns (address);
-    function votingContract() external view returns (address);
-    function launchToken() external view returns (IERC20);
-    function mainCollateral() external view returns (address);
-    function creator() external view returns (address);
-    function creatorInfraPercent() external view returns (uint256);
-    function isVetoToCreator() external view returns (bool);
+    function coreConfig() external view returns (DataTypes.CoreConfig memory);
     function getDaoState() external view returns (DataTypes.DAOState memory);
     function waitingForLPStartedAt() external view returns (uint256);
 
     // Shares and supply
     function totalSharesSupply() external view returns (uint256);
     function nextVaultId() external view returns (uint256);
-    function totalLaunchTokensSold() external view returns (uint256);
 
     // Fundraising
     // Note: fundraisingConfig, participantEntries, pocContracts, orderbookParams, vaults, sellableCollaterals
@@ -361,7 +410,10 @@ interface IDAO {
 
     // Routers and tokens
     function availableRouterByAdmin(address) external view returns (bool);
-    function sellableCollaterals(address) external view returns (address token, address priceFeed, bool active);
+    function sellableCollaterals(address)
+        external
+        view
+        returns (address token, bool active, uint256 ratioBps, uint256 depegThresholdMinPrice);
     function rewardTokens(uint256) external view returns (address);
     function rewardTokenInfo(address) external view returns (DataTypes.RewardTokenInfo memory);
 
@@ -377,11 +429,14 @@ interface IDAO {
     function lastLPDistribution(address) external view returns (uint256);
     function lpTokenAddedAt(address) external view returns (uint256);
 
+    // Depeg
+    function depegInfoV2(address) external view returns (DataTypes.DepegInfo memory);
+    function depegInfoV3(uint256) external view returns (DataTypes.DepegInfo memory);
+
     // V3 LP positions
     function v3LPPositions(uint256) external view returns (DataTypes.V3LPPositionInfo memory);
     function v3TokenIdToIndex(uint256) external view returns (uint256);
     function v3PositionManager() external view returns (address);
-    function primaryLPTokenType() external view returns (DataTypes.LPTokenType);
     function v3LastLPDistribution(uint256) external view returns (uint256);
     function v3LPTokenAddedAt(uint256) external view returns (uint256);
 
@@ -393,4 +448,5 @@ interface IDAO {
     function getDAOProfitShare() external view returns (uint256);
     function getVetoThreshold() external view returns (uint256);
     function getClosingThreshold() external view returns (uint256);
+    function getLaunchPriceFromDAO() external view returns (uint256);
 }

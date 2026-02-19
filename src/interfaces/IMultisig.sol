@@ -67,7 +67,8 @@ interface IMultisig {
     /// @notice Voting type
     enum VotingType {
         GENERAL,
-        TRANSFER_OWNERSHIP
+        TRANSFER_OWNERSHIP,
+        EXTEND_LOCK
     }
 
     /// @notice Transaction status
@@ -92,6 +93,12 @@ interface IMultisig {
         int24 tickUpper;
         uint256 amount0Min;
         uint256 amount1Min;
+    }
+
+    /// @notice LP pool config: params and share in basis points (10000 = 100%)
+    struct LPPoolConfig {
+        LPPoolParams params;
+        uint256 shareBps;
     }
 
     /// @notice Collateral information
@@ -154,6 +161,7 @@ interface IMultisig {
     error InvalidMultisigStage();
     error MultisigStageNotActive();
     error InvalidLPPoolParams();
+    error InvalidLPPoolConfigs();
     error InvalidCollateralAddress();
     error InvalidRouterAddress();
     error InsufficientCollateralAmount();
@@ -162,9 +170,11 @@ interface IMultisig {
     error InvalidTokenAddress();
     error InsufficientBalance();
     error TransferOwnershipNotAllowedForVetoContract();
+    error ExtendLockNotAllowedWhenVeto();
     error PriceDeviationTooHigh();
     error InvalidPrice();
     error StalePrice();
+    error CannotReplaceContractOwner();
 
     /// @notice Events
     event TransactionSubmitted(
@@ -248,6 +258,12 @@ interface IMultisig {
     /// @notice Change emergency address by emergency owner
     /// @param newEmergencyAddr New emergency address
     function changeEmergencyAddressByEmergency(address newEmergencyAddr) external;
+
+    /// @notice Change all three addresses (primary, backup, emergency) in one transaction
+    /// @param newPrimaryAddr New primary address
+    /// @param newBackupAddr New backup address
+    /// @param newEmergencyAddr New emergency address
+    function changeAllAddresses(address newPrimaryAddr, address newBackupAddr, address newEmergencyAddr) external;
 
     /// @notice Change owner emergency address (only through multisig)
     /// @param ownerIdx Owner index
