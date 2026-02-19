@@ -8,7 +8,7 @@
 
 // https://github.com/proof-of-capital/DAO-EVM
 
-pragma solidity ^0.8.33;
+pragma solidity 0.8.34;
 
 /// @title IPriceOracle
 /// @notice Interface for Price Oracle contract

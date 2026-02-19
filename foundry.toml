@@ -1,5 +1,6 @@
 [profile.default]
 src = "src"
+solc = "0.8.34"
 out = "out"
 libs = ["lib"]
 via_ir = true

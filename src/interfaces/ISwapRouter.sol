@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.7.5;
+pragma solidity 0.8.34;
 pragma abicoder v2;
 
 import "./IUniswapV3SwapCallback.sol";

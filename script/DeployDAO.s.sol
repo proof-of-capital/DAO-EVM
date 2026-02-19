@@ -27,7 +27,7 @@
 // All royalties collected are automatically used to repurchase the project's core token, as
 // specified on the website, and are returned to the contract.
 
-pragma solidity ^0.8.20;
+pragma solidity 0.8.34;
 
 import "forge-std/Script.sol";
 import "../src/DAO.sol";

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 // All rights reserved.
 
-pragma solidity ^0.8.33;
+pragma solidity 0.8.34;
 
 import "../libraries/DataTypes.sol";
 

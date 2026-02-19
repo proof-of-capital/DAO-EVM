@@ -8,7 +8,7 @@
 
 // https://github.com/proof-of-capital/DAO-EVM
 
-pragma solidity ^0.8.33;
+pragma solidity 0.8.34;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../DataTypes.sol";

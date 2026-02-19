@@ -4,7 +4,7 @@
 // (c) 2025 https://proofofcapital.org/
 // https://github.com/proof-of-capital/DAO-EVM
 
-pragma solidity ^0.8.33;
+pragma solidity 0.8.34;
 
 /// @title IERC20Burnable
 /// @notice Interface for ERC20 tokens that support burning from the caller's balance

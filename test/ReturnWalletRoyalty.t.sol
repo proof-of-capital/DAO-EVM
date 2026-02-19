@@ -2,7 +2,7 @@
 // (c) 2025 https://proofofcapital.org/
 // https://github.com/proof-of-capital/DAO-EVM
 
-pragma solidity ^0.8.33;
+pragma solidity 0.8.34;
 
 import "forge-std/Test.sol";
 import "../src/ReturnWallet.sol";

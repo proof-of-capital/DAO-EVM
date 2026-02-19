@@ -27,7 +27,7 @@
 // All royalties collected are automatically used to repurchase the project's core token, as
 // specified on the website, and are returned to the contract.
 
-pragma solidity ^0.8.29;
+pragma solidity 0.8.34;
 
 /// @title IMultisig Interface
 /// @notice Interface for multisig contract to execute proposals

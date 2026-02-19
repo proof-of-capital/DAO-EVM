@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.33;
+pragma solidity 0.8.34;
 
 import "./interfaces/IDAO.sol";
 import "./interfaces/IAggregatorV3.sol";

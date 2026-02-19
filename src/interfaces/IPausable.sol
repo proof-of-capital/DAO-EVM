@@ -7,7 +7,7 @@
 // (c) 2025 fundmera.com
 
 // https://github.com/merafund
-pragma solidity ^0.8.29;
+pragma solidity 0.8.34;
 
 /// @title IPausable Interface
 /// @notice Minimal interface for pausable contracts

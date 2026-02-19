@@ -7,7 +7,7 @@
 // (c) 2025 fundmera.com
 
 // https://github.com/merafund
-pragma solidity ^0.8.29;
+pragma solidity 0.8.34;
 
 /// @title IMultiAdminSingleHolderAccessControl Interface
 /// @notice Minimal interface for access control with grantRole function
