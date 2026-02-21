@@ -17,8 +17,8 @@ import {INonfungiblePositionManager} from "./interfaces/INonfungiblePositionMana
 import {IProofOfCapital} from "./interfaces/IProofOfCapital.sol";
 import {Constants} from "./libraries/Constants.sol";
 import {DataTypes} from "./libraries/DataTypes.sol";
+import {MultisigLPLibrary} from "./libraries/external/MultisigLPLibrary.sol";
 import {ISwapRouter} from "./interfaces/ISwapRouter.sol";
-import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -851,123 +851,17 @@ contract Multisig is IMultisig {
         onlyPrimaryOwnerOrAdmin
         onlyInactiveStage
     {
-        require(collateral != address(0), InvalidCollateralAddress());
-        require(collateralBalance > 0, InvalidAddress());
-
-        CollateralInfo storage collateralInfo = collaterals[collateral];
-        require(collateralInfo.active, InvalidCollateralAddress());
-        require(collateralInfo.router != address(0), InvalidRouterAddress());
-        require(collateralInfo.swapPath.length > 0, InvalidAddress());
-
-        IERC20 collateralToken = IERC20(collateral);
-        require(collateralToken.balanceOf(address(this)) >= collateralBalance, InsufficientBalance());
-
         address mainCollateral = dao.coreConfig().mainCollateral;
-
-        uint256 collateralPrice = _getChainlinkPrice(collateralInfo.priceFeed);
-
-        CollateralInfo storage mainCollateralInfo = collaterals[mainCollateral];
-        require(mainCollateralInfo.active, InvalidCollateralAddress());
-        uint256 mainCollateralPrice = _getChainlinkPrice(mainCollateralInfo.priceFeed);
-
-        uint256 expectedMainCollateral = (collateralBalance * collateralPrice) / mainCollateralPrice;
-
-        uint256 mainCollateralBalanceBefore = IERC20(mainCollateral).balanceOf(address(this));
-
-        collateralToken.safeIncreaseAllowance(collateralInfo.router, collateralBalance);
-
-        ISwapRouter.ExactInputParams memory params = ISwapRouter.ExactInputParams({
-            path: collateralInfo.swapPath,
-            recipient: address(this),
-            deadline: block.timestamp + 1 hours,
-            amountIn: collateralBalance,
-            amountOutMinimum: 0
-        });
-
-        ISwapRouter(collateralInfo.router).exactInput(params);
-
-        uint256 mainCollateralBalanceAfter = IERC20(mainCollateral).balanceOf(address(this));
-        uint256 actualMainCollateral = mainCollateralBalanceAfter - mainCollateralBalanceBefore;
-
-        uint256 deviation = _calculateDeviation(expectedMainCollateral, actualMainCollateral);
-        require(deviation <= Constants.PRICE_DEVIATION_MAX, PriceDeviationTooHigh());
-
-        emit CollateralChanged(collateral, collateralInfo.router);
-
-        uint256 mainCollateralBalance = IERC20(mainCollateral).balanceOf(address(this));
-
-        if (mainCollateralBalance >= targetCollateralAmount) {
-            address launchToken = dao.coreConfig().launchToken;
-            uint256 launchBalance = IERC20(launchToken).balanceOf(address(this));
-            _createUniswapV3LPInternal(launchBalance, targetCollateralAmount);
-        }
-    }
-
-    function _createUniswapV3LPInternal(uint256 amount0Desired, uint256 amount1Desired) internal {
-        address token0 = dao.coreConfig().launchToken;
-        address token1 = dao.coreConfig().mainCollateral;
-
-        IERC20(token0).approve(_uniswapV3PositionManager, amount0Desired);
-        IERC20(token1).approve(_uniswapV3PositionManager, amount1Desired);
-
-        uint256 poolsCount = lpPools.length;
-        uint256[] memory v3TokenIds = new uint256[](poolsCount);
-        uint256 amount0Used;
-        uint256 amount1Used;
-
-        for (uint256 i = 0; i < poolsCount; ++i) {
-            LPPoolConfig memory config = lpPools[i];
-            uint256 amount0;
-            uint256 amount1;
-            if (i == poolsCount - 1) {
-                amount0 = amount0Desired - amount0Used;
-                amount1 = amount1Desired - amount1Used;
-            } else {
-                amount0 = (amount0Desired * config.shareBps) / 10_000;
-                amount1 = (amount1Desired * config.shareBps) / 10_000;
-                amount0Used += amount0;
-                amount1Used += amount1;
-            }
-
-            INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
-                token0: token0,
-                token1: token1,
-                fee: config.params.fee,
-                tickLower: config.params.tickLower,
-                tickUpper: config.params.tickUpper,
-                amount0Desired: amount0,
-                amount1Desired: amount1,
-                amount0Min: config.params.amount0Min,
-                amount1Min: config.params.amount1Min,
-                recipient: address(this),
-                deadline: block.timestamp + 1 hours
-            });
-
-            (uint256 tokenId,, uint256 amount0Minted, uint256 amount1Minted) =
-                INonfungiblePositionManager(_uniswapV3PositionManager).mint(params);
-
-            emit LPCreated(tokenId, amount0Minted, amount1Minted);
-            IERC721(_uniswapV3PositionManager).safeTransferFrom(address(this), address(dao), tokenId);
-            v3TokenIds[i] = tokenId;
-        }
-
-        address[] memory emptyV2Addresses = new address[](0);
-        uint256[] memory emptyV2Amounts = new uint256[](0);
-        DataTypes.PricePathV2Params[] memory emptyV2Paths = new DataTypes.PricePathV2Params[](0);
-        DataTypes.PricePathV3Params[] memory emptyV3Paths = new DataTypes.PricePathV3Params[](0);
-
-        dao.provideLPTokens(emptyV2Addresses, emptyV2Amounts, v3TokenIds, emptyV2Paths, emptyV3Paths);
-
-        uint256 pocContractsCount = dao.getPOCContractsCount();
-        uint256 newLockTimestamp = block.timestamp + Constants.LP_EXTEND_LOCK_PERIOD;
-
-        for (uint256 i = 0; i < pocContractsCount; ++i) {
-            DataTypes.POCInfo memory pocInfo = dao.getPOCContract(i);
-            if (pocInfo.active) {
-                IProofOfCapital pocContract = IProofOfCapital(pocInfo.pocContract);
-                pocContract.extendLock(newLockTimestamp);
-            }
-        }
+        MultisigLPLibrary.executeSwapCollateralToMainAndCreateLPIfReady(
+            collaterals,
+            collateral,
+            collateralBalance,
+            mainCollateral,
+            targetCollateralAmount,
+            dao,
+            _uniswapV3PositionManager,
+            lpPools
+        );
     }
 
     /// @inheritdoc IMultisig
@@ -998,39 +892,6 @@ contract Multisig is IMultisig {
 
         tokenContract.safeTransfer(address(dao), amount);
         emit TokensWithdrawnToDAO(token, amount);
-    }
-
-    /// @notice Get price from Chainlink aggregator and normalize to 18 decimals
-    /// @param priceFeed Address of Chainlink price feed aggregator
-    /// @return Price in USD (18 decimals)
-    function _getChainlinkPrice(address priceFeed) internal view returns (uint256) {
-        IAggregatorV3 aggregator = IAggregatorV3(priceFeed);
-        (, int256 price,, uint256 updatedAt,) = aggregator.latestRoundData();
-        require(price > 0, InvalidPrice());
-        require(block.timestamp - updatedAt <= Constants.ORACLE_MAX_AGE, StalePrice());
-
-        uint8 decimals = aggregator.decimals();
-
-        if (decimals < 18) {
-            return uint256(price) * (10 ** (18 - decimals));
-        } else if (decimals > 18) {
-            return uint256(price) / (10 ** (decimals - 18));
-        }
-        return uint256(price);
-    }
-
-    /// @notice Calculate price deviation in basis points
-    /// @dev Only checks deviation when actual < expected (unfavorable rate)
-    /// @param expected Expected amount
-    /// @param actual Actual amount
-    /// @return Deviation in basis points (0 if actual >= expected)
-    function _calculateDeviation(uint256 expected, uint256 actual) internal pure returns (uint256) {
-        if (expected == 0) return Constants.BASIS_POINTS;
-        if (actual >= expected) {
-            return 0;
-        } else {
-            return ((expected - actual) * Constants.BASIS_POINTS) / expected;
-        }
     }
 }
 

@@ -224,18 +224,21 @@ deploy-dao-local:
 
 deploy-multisig-local:
 	@echo "Deploying Multisig to local network..."
-	@if [ -f ./.deployment_addresses.env ]; then \
+	@if [ -f ./.deployment_addresses.env ] && [ -f ./.library_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \
+		. ./.library_addresses.env; \
 		set +a; \
 		forge script ${MULTISIG_SCRIPT} \
 			--rpc-url ${LOCAL_RPC_URL} \
 			--private-key ${PRIVATE_KEY} \
 			--broadcast \
 			--ffi \
+			--libraries src/libraries/external/MultisigSwapLibrary.sol:MultisigSwapLibrary:$${multisigSwapLibrary} \
+			--libraries src/libraries/external/MultisigLPLibrary.sol:MultisigLPLibrary:$${multisigLPLibrary} \
 			-vvv; \
 	else \
-		echo "Error: ./.deployment_addresses.env not found. Run deploy-dao-local first."; \
+		echo "Error: ./.deployment_addresses.env or ./.library_addresses.env not found. Run deploy-dao-local and deploy-libraries-step1-local first."; \
 		exit 1; \
 	fi
 	@if [ -f ./.deployment_addresses.env ]; then \
@@ -522,20 +525,26 @@ deploy-dao-polygon:
 
 deploy-multisig-polygon:
 	@echo "Deploying Multisig to Polygon network..."
-	@if [ -f ./.deployment_addresses.env ]; then \
+	@if [ -f ./.library_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \
+		. ./.library_addresses.env; \
 		set +a; \
+		forge script ${MULTISIG_SCRIPT} \
+			--rpc-url ${POLYGON_RPC} \
+			--private-key ${PRIVATE_KEY} \
+			--broadcast \
+			--verify \
+			--etherscan-api-key ${POLYGONSCAN_API_KEY} \
+			--verifier etherscan \
+			--legacy \
+			--libraries src/libraries/external/MultisigSwapLibrary.sol:MultisigSwapLibrary:$${multisigSwapLibrary} \
+			--libraries src/libraries/external/MultisigLPLibrary.sol:MultisigLPLibrary:$${multisigLPLibrary} \
+			-vvv; \
+	else \
+		echo "Error: ./.library_addresses.env not found. Run deploy-libraries-step1-polygon first."; \
+		exit 1; \
 	fi
-	forge script ${MULTISIG_SCRIPT} \
-		--rpc-url ${POLYGON_RPC} \
-		--private-key ${PRIVATE_KEY} \
-		--broadcast \
-		--verify \
-		--etherscan-api-key ${POLYGONSCAN_API_KEY} \
-		--verifier etherscan \
-		--legacy \
-		-vvv
 	@if [ -f ./.deployment_addresses.env ]; then \
 		echo "Deployment addresses successfully saved. Contents:"; \
 		cat ./.deployment_addresses.env; \
@@ -820,20 +829,26 @@ deploy-dao-bsc:
 
 deploy-multisig-bsc:
 	@echo "Deploying Multisig to BSC network..."
-	@if [ -f ./.deployment_addresses.env ]; then \
+	@if [ -f ./.library_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \
+		. ./.library_addresses.env; \
 		set +a; \
+		forge script ${MULTISIG_SCRIPT} \
+			--rpc-url ${BSC_RPC} \
+			--private-key ${PRIVATE_KEY} \
+			--broadcast \
+			--verify \
+			--etherscan-api-key ${BSCSCAN_API_KEY} \
+			--verifier etherscan \
+			--legacy \
+			--libraries src/libraries/external/MultisigSwapLibrary.sol:MultisigSwapLibrary:$${multisigSwapLibrary} \
+			--libraries src/libraries/external/MultisigLPLibrary.sol:MultisigLPLibrary:$${multisigLPLibrary} \
+			-vvv; \
+	else \
+		echo "Error: ./.library_addresses.env not found. Run deploy-libraries-step1-bsc first."; \
+		exit 1; \
 	fi
-	forge script ${MULTISIG_SCRIPT} \
-		--rpc-url ${BSC_RPC} \
-		--private-key ${PRIVATE_KEY} \
-		--broadcast \
-		--verify \
-		--etherscan-api-key ${BSCSCAN_API_KEY} \
-		--verifier etherscan \
-		--legacy \
-		-vvv
 	@if [ -f ./.deployment_addresses.env ]; then \
 		echo "Deployment addresses successfully saved. Contents:"; \
 		cat ./.deployment_addresses.env; \
@@ -1118,20 +1133,26 @@ deploy-dao-bsc-testnet:
 
 deploy-multisig-bsc-testnet:
 	@echo "Deploying Multisig to BSC testnet..."
-	@if [ -f ./.deployment_addresses.env ]; then \
+	@if [ -f ./.library_addresses.env ]; then \
 		set -a; \
 		. ./.deployment_addresses.env; \
+		. ./.library_addresses.env; \
 		set +a; \
+		forge script ${MULTISIG_SCRIPT} \
+			--rpc-url ${BSC_TESTNET_RPC} \
+			--private-key ${PRIVATE_KEY} \
+			--broadcast \
+			--verify \
+			--etherscan-api-key ${BSCSCAN_API_KEY} \
+			--verifier etherscan \
+			--legacy \
+			--libraries src/libraries/external/MultisigSwapLibrary.sol:MultisigSwapLibrary:$${multisigSwapLibrary} \
+			--libraries src/libraries/external/MultisigLPLibrary.sol:MultisigLPLibrary:$${multisigLPLibrary} \
+			-vvv; \
+	else \
+		echo "Error: ./.library_addresses.env not found. Run deploy-libraries-step1-bsc-testnet first."; \
+		exit 1; \
 	fi
-	forge script ${MULTISIG_SCRIPT} \
-		--rpc-url ${BSC_TESTNET_RPC} \
-		--private-key ${PRIVATE_KEY} \
-		--broadcast \
-		--verify \
-		--etherscan-api-key ${BSCSCAN_API_KEY} \
-		--verifier etherscan \
-		--legacy \
-		-vvv
 	@if [ -f ./.deployment_addresses.env ]; then \
 		echo "Deployment addresses successfully saved. Contents:"; \
 		cat ./.deployment_addresses.env; \

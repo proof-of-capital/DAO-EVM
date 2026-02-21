@@ -24,23 +24,35 @@ contract DeployLibrariesStep1Script is Script {
         address vaultLibrary = deployCode("src/libraries/external/VaultLibrary.sol:VaultLibrary");
         address orderbook = deployCode("src/libraries/external/Orderbook.sol:Orderbook");
         address oracleLibrary = deployCode("src/libraries/external/OracleLibrary.sol:OracleLibrary");
+        address multisigSwapLibrary = deployCode("src/libraries/external/MultisigSwapLibrary.sol:MultisigSwapLibrary");
+        address multisigLPLibrary = deployCode("src/libraries/external/MultisigLPLibrary.sol:MultisigLPLibrary");
 
         require(vaultLibrary != address(0), "Failed to deploy VaultLibrary");
         require(orderbook != address(0), "Failed to deploy Orderbook");
         require(oracleLibrary != address(0), "Failed to deploy OracleLibrary");
+        require(multisigSwapLibrary != address(0), "Failed to deploy MultisigSwapLibrary");
+        require(multisigLPLibrary != address(0), "Failed to deploy MultisigLPLibrary");
 
         console.log("VaultLibrary deployed at:", vaultLibrary);
         console.log("Orderbook deployed at:", orderbook);
         console.log("OracleLibrary deployed at:", oracleLibrary);
+        console.log("MultisigSwapLibrary deployed at:", multisigSwapLibrary);
+        console.log("MultisigLPLibrary deployed at:", multisigLPLibrary);
 
         vm.sleep(5000);
         vm.stopBroadcast();
 
-        writeLibraryAddresses(vaultLibrary, orderbook, oracleLibrary);
+        writeLibraryAddresses(vaultLibrary, orderbook, oracleLibrary, multisigSwapLibrary, multisigLPLibrary);
         console.log("Library addresses successfully saved");
     }
 
-    function writeLibraryAddresses(address vaultLibrary, address orderbook, address oracleLibrary) internal {
+    function writeLibraryAddresses(
+        address vaultLibrary,
+        address orderbook,
+        address oracleLibrary,
+        address multisigSwapLibrary,
+        address multisigLPLibrary
+    ) internal {
         string memory addressesJson = string(
             abi.encodePacked(
                 '{"vaultLibrary":"',
@@ -51,6 +63,12 @@ contract DeployLibrariesStep1Script is Script {
                 '",',
                 '"oracleLibrary":"',
                 vm.toString(oracleLibrary),
+                '",',
+                '"multisigSwapLibrary":"',
+                vm.toString(multisigSwapLibrary),
+                '",',
+                '"multisigLPLibrary":"',
+                vm.toString(multisigLPLibrary),
                 '"}'
             )
         );
@@ -67,6 +85,12 @@ contract DeployLibrariesStep1Script is Script {
                 "\n",
                 "oracleLibrary=",
                 vm.toString(oracleLibrary),
+                "\n",
+                "multisigSwapLibrary=",
+                vm.toString(multisigSwapLibrary),
+                "\n",
+                "multisigLPLibrary=",
+                vm.toString(multisigLPLibrary),
                 "\n"
             )
         );
