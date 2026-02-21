@@ -118,6 +118,12 @@ interface IMultisig {
         bytes swapPath;
     }
 
+    /// @notice Uniswap V3 router and position manager addresses
+    struct UniswapV3Addresses {
+        address router;
+        address positionManager;
+    }
+
     /// @notice Custom errors
     error NotAPrimaryOwner();
     error NotABackupOwner();
@@ -184,7 +190,9 @@ interface IMultisig {
     event TransactionExecuted(uint256 indexed txId);
     event TransactionCancelled(uint256 indexed txId, string reason);
     event TransactionFailed(uint256 indexed txId, string reason);
-    event OwnerAddressChanged(uint256 indexed ownerIdx, string addressType, address oldAddress, address newAddress);
+    event OwnerPrimaryAddressChanged(uint256 indexed ownerIdx, address oldAddress, address newAddress);
+    event OwnerBackupAddressChanged(uint256 indexed ownerIdx, address oldAddress, address newAddress);
+    event OwnerEmergencyAddressChanged(uint256 indexed ownerIdx, address oldAddress, address newAddress);
     event EmergencyPause(address indexed target, address indexed caller);
     event EmergencyUnpause(address indexed target, address indexed caller);
     event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
@@ -234,6 +242,18 @@ interface IMultisig {
     /// @notice Change common emergency investor in user vault
     /// @param vault Vault address
     function changeCommonEmergencyInvestorInUserVault(address vault) external;
+
+    /// @notice Return common backup admin, emergency admin, and emergency investor addresses
+    /// @return backupAdmin Common backup admin address
+    /// @return emergencyAdmin Common emergency admin address
+    /// @return emergencyInvestor Common emergency investor address
+    function getCommonAdminAddresses()
+        external
+        view
+        returns (address backupAdmin, address emergencyAdmin, address emergencyInvestor);
+
+    /// @notice Returns Uniswap V3 router and position manager addresses
+    function uniswapV3() external view returns (UniswapV3Addresses memory);
 
     /// @notice Change primary address by primary owner
     /// @param newPrimaryAddr New primary address

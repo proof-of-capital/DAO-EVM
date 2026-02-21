@@ -73,6 +73,19 @@ contract MockMultisig is IMultisig {
 
     function changeCommonEmergencyInvestorInUserVault(address) external pure override {}
 
+    function getCommonAdminAddresses()
+        external
+        pure
+        override
+        returns (address backupAdmin, address emergencyAdmin, address emergencyInvestor)
+    {
+        return (address(0), address(0), address(0));
+    }
+
+    function uniswapV3() external pure override returns (UniswapV3Addresses memory) {
+        return UniswapV3Addresses({router: address(0), positionManager: address(0)});
+    }
+
     function changePrimaryAddressByPrimary(address) external pure override {}
 
     function changePrimaryAddressByBackup(address) external pure override {}

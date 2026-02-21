@@ -36,19 +36,18 @@ contract Multisig is IMultisig {
     Transaction[] private transactions;
 
     address public admin;
-    address public commonBackupAdmin;
-    address public commonEmergencyAdmin;
-    address public commonEmergencyInvestor;
+    address private commonBackupAdmin;
+    address private commonEmergencyAdmin;
+    address private commonEmergencyInvestor;
     IDAO public dao;
     uint256 public maxCountVotePerPeriod;
     mapping(address => bool) public isVetoListContract;
     address public newMarketMaker;
 
     MultisigStage public multisigStage = MultisigStage.Inactive;
-    uint256 public targetCollateralAmount;
-    uint256 public currentCollateralAmount;
-    address public uniswapV3Router;
-    address public uniswapV3PositionManager;
+    uint256 public immutable targetCollateralAmount;
+    address private immutable _uniswapV3Router;
+    address private immutable _uniswapV3PositionManager;
     LPPoolConfig[] private lpPools;
     mapping(address => CollateralInfo) public collaterals;
 
@@ -111,8 +110,8 @@ contract Multisig is IMultisig {
         address _admin,
         address _dao,
         uint256 _targetCollateralAmount,
-        address _uniswapV3Router,
-        address _uniswapV3PositionManager,
+        address uniswapV3Router_,
+        address uniswapV3PositionManager_,
         LPPoolConfig[] memory _lpPoolConfigs,
         CollateralConstructorParams[] memory _collateralParams,
         address _newMarketMaker
@@ -162,8 +161,8 @@ contract Multisig is IMultisig {
         maxCountVotePerPeriod = Constants.MULTISIG_DEFAULT_MAX_COUNT_VOTE_PER_PERIOD;
 
         require(_targetCollateralAmount > 0, InvalidAddress());
-        require(_uniswapV3Router != address(0), InvalidAddress());
-        require(_uniswapV3PositionManager != address(0), InvalidAddress());
+        require(uniswapV3Router_ != address(0), InvalidAddress());
+        require(uniswapV3PositionManager_ != address(0), InvalidAddress());
         require(_lpPoolConfigs.length > 0, InvalidLPPoolConfigs());
         uint256 totalShareBps;
         for (uint256 i = 0; i < _lpPoolConfigs.length; ++i) {
@@ -178,15 +177,15 @@ contract Multisig is IMultisig {
         require(_newMarketMaker != address(0), InvalidAddress());
 
         targetCollateralAmount = _targetCollateralAmount;
-        uniswapV3Router = _uniswapV3Router;
-        uniswapV3PositionManager = _uniswapV3PositionManager;
+        _uniswapV3Router = uniswapV3Router_;
+        _uniswapV3PositionManager = uniswapV3PositionManager_;
         multisigStage = MultisigStage.Inactive;
         newMarketMaker = _newMarketMaker;
 
         for (uint256 i = 0; i < _collateralParams.length; ++i) {
             require(_collateralParams[i].token != address(0), InvalidCollateralAddress());
             require(_collateralParams[i].router != address(0), InvalidRouterAddress());
-            require(_collateralParams[i].router == _uniswapV3Router, InvalidRouterAddress());
+            require(_collateralParams[i].router == uniswapV3Router_, InvalidRouterAddress());
             require(_collateralParams[i].swapPath.length > 0, InvalidAddress());
 
             address collateralToken = _collateralParams[i].token;
@@ -201,6 +200,20 @@ contract Multisig is IMultisig {
     }
 
     receive() external payable {}
+
+    /// @inheritdoc IMultisig
+    function getCommonAdminAddresses()
+        external
+        view
+        returns (address backupAdmin, address emergencyAdmin, address emergencyInvestor)
+    {
+        return (commonBackupAdmin, commonEmergencyAdmin, commonEmergencyInvestor);
+    }
+
+    /// @inheritdoc IMultisig
+    function uniswapV3() external view returns (UniswapV3Addresses memory) {
+        return UniswapV3Addresses({router: _uniswapV3Router, positionManager: _uniswapV3PositionManager});
+    }
 
     /// @inheritdoc IMultisig
     function submitTransaction(ProposalCall[] calldata calls)
@@ -734,7 +747,7 @@ contract Multisig is IMultisig {
 
         owners[idx].primaryAddr = newPrimaryAddr;
 
-        emit OwnerAddressChanged(idx, "primary", oldPrimaryAddr, newPrimaryAddr);
+        emit OwnerPrimaryAddressChanged(idx, oldPrimaryAddr, newPrimaryAddr);
     }
 
     function _changeBackupAddress(uint256 idx, address newBackupAddr) internal {
@@ -750,7 +763,7 @@ contract Multisig is IMultisig {
 
         owners[idx].backupAddr = newBackupAddr;
 
-        emit OwnerAddressChanged(idx, "backup", oldBackupAddr, newBackupAddr);
+        emit OwnerBackupAddressChanged(idx, oldBackupAddr, newBackupAddr);
     }
 
     function _changeEmergencyAddress(uint256 idx, address newEmergencyAddr) internal {
@@ -766,7 +779,7 @@ contract Multisig is IMultisig {
 
         owners[idx].emergencyAddr = newEmergencyAddr;
 
-        emit OwnerAddressChanged(idx, "emergency", oldEmergencyAddr, newEmergencyAddr);
+        emit OwnerEmergencyAddressChanged(idx, oldEmergencyAddr, newEmergencyAddr);
     }
 
     function _isOwnershipSelector(bytes4 selector) internal pure returns (bool) {
@@ -894,8 +907,8 @@ contract Multisig is IMultisig {
         address token0 = dao.coreConfig().launchToken;
         address token1 = dao.coreConfig().mainCollateral;
 
-        IERC20(token0).approve(uniswapV3PositionManager, amount0Desired);
-        IERC20(token1).approve(uniswapV3PositionManager, amount1Desired);
+        IERC20(token0).approve(_uniswapV3PositionManager, amount0Desired);
+        IERC20(token1).approve(_uniswapV3PositionManager, amount1Desired);
 
         uint256 poolsCount = lpPools.length;
         uint256[] memory v3TokenIds = new uint256[](poolsCount);
@@ -931,10 +944,10 @@ contract Multisig is IMultisig {
             });
 
             (uint256 tokenId,, uint256 amount0Minted, uint256 amount1Minted) =
-                INonfungiblePositionManager(uniswapV3PositionManager).mint(params);
+                INonfungiblePositionManager(_uniswapV3PositionManager).mint(params);
 
             emit LPCreated(tokenId, amount0Minted, amount1Minted);
-            IERC721(uniswapV3PositionManager).safeTransferFrom(address(this), address(dao), tokenId);
+            IERC721(_uniswapV3PositionManager).safeTransferFrom(address(this), address(dao), tokenId);
             v3TokenIds[i] = tokenId;
         }
 
